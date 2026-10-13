@@ -1,4 +1,4 @@
-# Device profile: one Sineng string inverter, read THROUGH the SAU-100 gateway (read-only).
+# Device profile: one Sineng string inverter, read THROUGH the SAU-300 gateway (read-only).
 #
 # All ten inverters share this profile; config/site.plant.yaml sets the unit_id per inverter.
 # Registers are PLACEHOLDERS until the SAU point table / Sineng Modbus protocol for the
@@ -11,7 +11,7 @@ vendor: Sineng
 model: "string inverter (model TBC)"
 profile_revision: 2
 profile_status: draft
-source_document: "SAU-100 point table / Sineng Modbus protocol — TO BE ATTACHED"
+source_document: "SAU-300 point table / Sineng Modbus protocol — TO BE ATTACHED"
 
 points:
   - {id: ac_power_kw,       unit: kW,  raw: {address: 0,  kind: uint32, scale: 0.001}}   # TODO

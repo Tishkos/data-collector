@@ -7,7 +7,7 @@ the InteliNeo; this adds one small block of reads per device, once an hour, and 
 ```
  plant LAN (192.168.0.x)                                   plant PC
  ───────────────────────                                   ────────
- Sineng SAU-100 ──┐  Modbus TCP, read-only,         ┌─ data\telemetry.sqlite  (every reading: value, quality, time)
+ Sineng SAU-300 ──┐  Modbus TCP, read-only,         ┌─ data\telemetry.sqlite  (every reading: value, quality, time)
  (10 inverters,   │  one block per device           │
   meter)          │  every poll_interval_s          │  dashboard   http://<pc>:8080
                   ├──► plantcollector ──────────────┤  Excel/CSV   /api/v1/local/export.xlsx
