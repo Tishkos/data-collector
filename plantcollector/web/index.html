@@ -17,7 +17,7 @@
                          lists, export form, points table, responsive breakpoints at 1100px and 760px.
     3. HTML              <nav class="rail">, .topwrap > .topbar, then one <section class="block"> per page section:
                          #overview, #trends, #devices, #alarms, #export, #points, #settings.
-    4. JS                helpers -> time (plant / local zone: parts, stamp, parseStamp) -> freshness (mark: the
+    4. JS                helpers -> time (this computer's clock: parts, stamp, parseStamp) -> freshness (mark: the
                          "updated" stamps and amber edges) -> theme/size/nav -> power flow (buildFlow) -> summary
                          (loadSummary, renderDevices) -> tab title + icon -> charts (timeTicks, baseOptions, legend
                          switches, loadSeries) -> alarms -> points -> device detail (the <dialog>) -> downloads
@@ -348,9 +348,6 @@
       <div class="seg" role="group" aria-label="Time range">
         <button data-h="6">6h</button><button data-h="24" aria-pressed="true">24h</button><button data-h="72">3d</button><button data-h="168">7d</button><button data-h="720">30d</button>
       </div>
-      <div class="seg" id="zoneSeg" role="group" aria-label="Times shown in" hidden>
-        <button data-zone="plant">Plant time</button><button data-zone="local">My time</button>
-      </div>
       <button class="iconbtn" id="sizeBtn" title="Larger text, for wall displays" aria-label="Larger text" aria-pressed="false"><b>Aa</b></button>
       <button class="iconbtn" id="themeBtn" title="Switch light / dark" aria-label="Switch theme">
         <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c-4 0-8-3-9-9z"/></svg>
@@ -578,24 +575,14 @@
   const zoomNow = () => Number(css("--zoom")) || 1;
 
   // ------------------------------------------------------------------ time
-  // Every time on the page (clock, charts, events, export fields) is shown in one zone: the plant's or this
-  // computer's, picked with the switch in the top bar. `parts` is the wall clock of an instant in that zone.
+  // Every time on the page (clock, charts, events, export fields) is this computer's local time: the
+  // collector runs on the plant PC, so that is plant time. `parts` is the wall clock of an instant.
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  let plantName = "", plantFmt = null, zone = saved("pc.zone") === "local" ? "local" : "plant";
-  const usePlant = () => zone === "plant" && !!plantFmt;
-  function setPlant(name) {
-    plantName = name;
-    try { plantFmt = new Intl.DateTimeFormat("en-US", { timeZone: name, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" }); }
-    catch (e) { plantFmt = null; }   // a zone name this browser does not know: stay on this computer's time
-  }
-  function partsOf(ms, plant) {
-    if (plant) { const o = {}; plantFmt.formatToParts(ms).forEach((p) => { o[p.type] = Number(p.value); }); return { y: o.year, mo: o.month, d: o.day, h: o.hour, mi: o.minute, s: o.second }; }
+  function parts(ms) {
     const d = new Date(ms); return { y: d.getFullYear(), mo: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds() };
   }
-  const parts = (ms) => partsOf(ms, usePlant());
   const wallMs = (p) => Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s || 0);
-  const offsetOf = (ms, plant) => wallMs(partsOf(ms, plant)) - Math.floor(ms / 1000) * 1000;   // the zone's UTC offset at that instant
-  const offsetAt = (ms) => offsetOf(ms, usePlant());
+  const offsetAt = (ms) => wallMs(parts(ms)) - Math.floor(ms / 1000) * 1000;   // this computer's UTC offset at that instant
   const ymd = (ms) => { const p = parts(ms); return `${p.y}-${p2(p.mo)}-${p2(p.d)}`; };
   const hm = (ms) => { const p = parts(ms); return `${p2(p.h)}:${p2(p.mi)}`; };
   const stamp = (ms) => `${ymd(ms)} ${hm(ms)}`;
@@ -608,7 +595,7 @@
     const [y, mo, d, h, mi] = m.slice(1).map((x) => Number(x || 0));
     return { y, mo, d, h, mi };
   }
-  // a typed time, read in the zone in use -> epoch ms, or null if it is not a real time
+  // a typed time, read in this computer's zone -> epoch ms, or null if it is not a real time
   function parseStamp(s) {
     const w = parseWall(s); if (!w) return null;
     const g = wallMs(w); let t = g - offsetAt(g); t = g - offsetAt(t);
@@ -621,25 +608,7 @@
     const d = new Date(Date.UTC(w.y, w.mo - 1, w.d));
     return d.getUTCFullYear() === w.y && d.getUTCMonth() === w.mo - 1 && d.getUTCDate() === w.d ? d.toISOString().slice(0, 10) : null;
   }
-  // change the zone in use (or learn the plant's); the export fields keep the instants they held
-  function switchZone(change) {
-    const keep = [exFrom, exTo].map((el) => parseStamp(el.value));
-    change();
-    [exFrom, exTo].forEach((el, i) => { if (keep[i] !== null) el.value = stamp(keep[i]); });
-    paintZone();
-  }
-  function paintZone() {
-    const now = Date.now(), lo = offsetOf(now, false), po = plantFmt ? offsetOf(now, true) : lo;
-    $("#zoneSeg").hidden = po === lo;   // same clock at the plant and here: nothing to choose
-    $$("#zoneSeg button").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.zone === "plant") === usePlant())));
-    $('#zoneSeg [data-zone="plant"]').title = `Plant time: ${plantName}, ${utcText(po)}`;
-    $('#zoneSeg [data-zone="local"]').title = `This computer's time: ${utcText(lo)}`;
-    $("#exZone").textContent = usePlant() ? `plant time (${plantName}, ${utcText(po)})` : `this computer's local time (${utcText(lo)})`;
-    renderClock(); renderEvents(); Object.keys(fresh).forEach(paintFresh);
-    Object.values(charts).forEach((c) => c.update("none"));
-    if (quick) setQuick(quick); else showWindow();
-  }
-  $$("#zoneSeg button").forEach((b) => b.addEventListener("click", () => { save("pc.zone", b.dataset.zone); switchZone(() => { zone = b.dataset.zone; }); }));
+  const paintZone = () => { $("#exZone").textContent = `this computer's time (${utcText(offsetAt(Date.now()))})`; };
 
   // ------------------------------------------------------------------ freshness
   // Each fetch is a "source" (summary, series, alarms, points). Boxes carry data-src; when a refresh of their
@@ -738,7 +707,6 @@
     }
     $("#liveDot").classList.remove("off"); $("#liveText").textContent = "live"; mark("summary", true);
     const s = summary, k = s.kpi;
-    if (s.timezone !== plantName) switchZone(() => setPlant(s.timezone));
     $("#siteName").textContent = s.site; $("#brandSite").textContent = s.site_id;
     $("#simBadge").hidden = !s.simulated;
     renderClock();
@@ -818,7 +786,7 @@
     return { grid: css("--grid-line"), gridDay: css("--hairline-strong"), tick: css("--tick"), day: css("--ink-muted"),
              ink: css("--ink"), surface: css("--surface-4"), hair: css("--hairline-strong") };
   }
-  // The x axis is real time. Ticks sit on round hours of the zone in use, as many as fit; a tick at midnight
+  // The x axis is real time. Ticks sit on round hours of this computer's clock, as many as fit; a tick at midnight
   // is "major": it shows the date instead of 00:00 and gets a stronger grid line.
   const TICK_STEPS = [0.25, 0.5, 1, 2, 3, 6, 12, 24, 48, 72, 168, 336].map((h) => h * 3600e3);
   function timeTicks(min, max, width) {
