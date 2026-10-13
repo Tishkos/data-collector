@@ -16,7 +16,8 @@ from .store import TelemetryStore
 
 
 class Collector:
-    def __init__(self, config_path: str, data_dir: str = "./data", *, seed_hours: float = 0.0, fresh: bool = False):
+    def __init__(self, config_path: str, data_dir: str = "./data", *, seed_hours: float = 0.0, fresh: bool = False,
+                 initial_poll: bool = True):
         self.config_path = config_path
         self.registry = load_registry(config_path)
         self.simulated = all(d.adapter == "simulator" for d in self.registry.devices.values())
@@ -37,11 +38,7 @@ class Collector:
         self.db_path = db
         self.store = TelemetryStore(db)
         self.adapters = {d.id: build_adapter(d, plant=self.plant) for d in self.registry.devices.values()}
-        for a in self.adapters.values():
-            try:
-                a.connect()
-            except Exception:
-                pass
+        # adapters connect on their first read (a connect to an unreachable device blocks for its timeout)
         self._comms_lost: set[str] = set()
         self._alarm_on: set[str] = set()
         self._grid_off: set[str] = set()
@@ -49,9 +46,12 @@ class Collector:
         self.started_at = datetime.now(timezone.utc)
         self.polls = 0
         self.last_poll_at: datetime | None = None
-        self.poll()
         if self.simulated and seed_hours > 0:
+            self.poll()
             self._seed_demo(seed_hours)
+        elif initial_poll:
+            self.poll()                      # `run` skips this and polls from its own thread, so the
+                                             # dashboard is up at once even when devices time out
 
     def _seed_demo(self, hours: float) -> None:
         """Generate demo history with a couple of scripted events so every panel has content."""

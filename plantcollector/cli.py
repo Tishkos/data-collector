@@ -20,8 +20,8 @@ from datetime import datetime, timedelta, timezone
 from .core import Collector, run_loop
 
 
-def _collector(a, *, seed: float = 0.0, fresh: bool = False) -> Collector:
-    return Collector(a.config, a.data, seed_hours=seed, fresh=fresh)
+def _collector(a, *, seed: float = 0.0, fresh: bool = False, initial_poll: bool = True) -> Collector:
+    return Collector(a.config, a.data, seed_hours=seed, fresh=fresh, initial_poll=initial_poll)
 
 
 def _log_to_file(path: str) -> None:
@@ -67,7 +67,7 @@ def cmd_run(a) -> int:
     if a.log:
         _log_to_file(a.log)
     try:
-        c = _collector(a, seed=a.seed_hours if not a.no_seed else 0.0, fresh=True)
+        c = _collector(a, seed=a.seed_hours if not a.no_seed else 0.0, fresh=True, initial_poll=False)
     except Exception as exc:
         print(f"[collector] cannot start: {exc}")
         raise
@@ -76,7 +76,10 @@ def cmd_run(a) -> int:
     if c.simulated:
         print(f"[collector] DEMO mode: simulated plant, {a.seed_hours:.0f} h of history generated")
     else:
-        print(f"[collector] READ-ONLY polling of {len(c.registry.devices)} devices every {a.interval:.0f} s; data in {c.db_path}")
+        n = len(c.registry.devices)
+        reqs = sum(len(getattr(ad, "_blocks", [])) or 1 for ad in c.adapters.values())
+        print(f"[collector] READ-ONLY polling of {n} devices every {a.interval:.0f} s "
+              f"({reqs} Modbus requests per cycle); data in {c.db_path}")
     stop = threading.Event()
     t = threading.Thread(target=run_loop, args=(c, a.interval, stop), daemon=True, name="poller")
     t.start()

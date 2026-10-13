@@ -137,6 +137,7 @@
   .pill.ok { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
   .pill.stale { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
   .pill.lost { background: color-mix(in srgb, var(--critical) 18%, transparent); color: var(--critical); }
+  .pill.reading { background: var(--surface-4); color: var(--ink-subtle); }
   .dev .model { color: var(--ink-subtle); font-size: 11.5px; margin: 2px 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dev dl { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; margin: 0; }
   .dev dt { color: var(--ink-subtle); font-size: 12px; }
@@ -480,9 +481,11 @@
     $("#kGridSub").textContent = k.grid_hours_today === null || k.grid_hours_today === undefined ? "" : `government supply ${fmt(k.grid_hours_today, 1)} h today` + (k.grid_available === false ? " · off right now" : "");
     const lost = s.devices.filter((d) => d.comms !== "ok").length;
     const faults = s.active_faults.filter((f) => !f.startsWith("GRID_OFF"));
-    $("#kFault").textContent = fmt(faults.length);
-    $("#kFaultPanel").classList.toggle("alert", faults.length > 0);
-    $("#kFaultSub").textContent = lost ? `${lost} device${lost > 1 ? "s" : ""} not answering` : `all ${s.devices.length} devices answering`;
+    const firstRead = s.collector.polls === 0;
+    $("#kFault").textContent = firstRead ? "…" : fmt(faults.length);
+    $("#kFaultPanel").classList.toggle("alert", !firstRead && faults.length > 0);
+    $("#kFaultSub").textContent = firstRead ? "first read of the devices in progress" : lost ? `${lost} device${lost > 1 ? "s" : ""} not answering` : `all ${s.devices.length} devices answering`;
+    if (firstRead) s.devices.forEach((d) => { d.comms = "reading"; });
     renderDevices(s.devices);
     renderActive(s.active_faults);
   }
@@ -500,7 +503,7 @@
         const p = d.points[k];
         return `<dt>${l}</dt><dd class="${p.q === "good" ? "" : p.q}">${p.q === "bad" ? "n/a" : fmt(p.v, typeof p.v === "number" && !Number.isInteger(p.v) ? 1 : 0)}${p.q === "bad" || !p.unit ? "" : " " + p.unit}</dd>`;
       }).join("");
-      return `<div class="panel dev"><div class="head"><b>${esc(d.id)}</b><span class="kind">${d.kind}</span><span class="pill ${d.comms}">${d.comms === "ok" ? "online" : d.comms === "stale" ? "stale" : "no data"}</span></div>
+      return `<div class="panel dev"><div class="head"><b>${esc(d.id)}</b><span class="kind">${d.kind}</span><span class="pill ${d.comms}">${d.comms === "ok" ? "online" : d.comms === "stale" ? "stale" : d.comms === "reading" ? "reading…" : "no data"}</span></div>
         <div class="model" title="${esc(d.vendor + " " + d.model)}">${esc(d.vendor)} ${esc(d.model)}</div><dl>${rows}</dl></div>`;
     }).join("");
   }
