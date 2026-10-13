@@ -11,7 +11,7 @@ into real ones. Each item names the file it goes into.
 - [ ] Names of the per-genset values exposed by the master (G1…G5 power, running, fuel) — if the master does
       not expose them, each genset controller is added as its own device with `profiles\genset_comap.yaml`
 
-## 2. Sineng inverters through the SAU-300
+## 2. Sineng inverters through the SAU-100
 - [ ] Inverter **model** (nameplate photo) and number of string inputs
 - [ ] SAU **point table** (SAU web page → communication / Modbus settings, or the Sineng Modbus
       protocol document for the model) → `profiles\inverter_sineng.yaml`

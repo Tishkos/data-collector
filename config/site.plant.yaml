@@ -26,7 +26,7 @@ devices:
     adapter: modbus_tcp
     connection: {host: 192.168.0.112, port: 502, unit_id: 1, timeout: 3}     # TODO unit_id from InteliNeo Modbus settings
 
-  # --- Sineng inverters through the SAU-300 gateway ----------------------------------------
+  # --- Sineng inverters through the SAU-100 gateway ----------------------------------------
   # unit_id = the inverter's Modbus address on the SAU (TODO from SAU point table)
   - {id: inv-01, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 1,  timeout: 5}}
   - {id: inv-02, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 2,  timeout: 5}}
