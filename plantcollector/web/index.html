@@ -5,6 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plant data collector</title>
 <meta name="description" content="Read-only live view, history and exports for the hybrid plant.">
+<!--
+  Plant data collector dashboard — one file, no build step.
+
+  How it is organised (for customising):
+    1. :root tokens      colours, fonts, radius for the dark theme; :root[data-theme="light"] overrides for light.
+                         Series colours: --c-load, --c-pv, --c-gen, --c-grid, --c-bess, --c-g1..5 (gensets per unit).
+    2. CSS by section    rail, topbar, content grid (12 columns, .span-4/.span-8 ...), hero, stats, devices,
+                         lists, export form, points table, responsive breakpoints at 1100px and 760px.
+    3. HTML              <nav class="rail">, .topbar, then one <section class="block"> per page section:
+                         #overview, #trends, #devices, #alarms, #export, #points.
+    4. JS                helpers -> theme/nav -> power flow (buildFlow) -> summary (loadSummary, renderDevices)
+                         -> charts (baseOptions, loadSeries) -> alarms -> points -> export -> read-now -> timers.
+
+  Data comes only from these endpoints (all served by plantcollector/api.py):
+    GET  /api/v1/local/summary          live values, KPIs (kpi.*), devices[], active_faults[], collector.*
+    GET  /api/v1/local/series?hours=    {t: [ms...], series: {load_kw, pv_kw, genset_kw, mains_kw, bess_kw,
+                                          soc_pct, frequency_hz, grid_available, "<genset>/power_kw", ...}}
+    GET  /api/v1/local/alarms?hours=    {active[], events[]}
+    GET  /api/v1/local/tags             every point with value/quality/age
+    GET  /api/v1/local/export.xlsx|csv  ?from=&to=&step=        GET /api/v1/local/report.xlsx?date=
+    GET  /api/v1/tags(.xlsx|.csv)       the DT Turkey tag list
+    POST /api/v1/local/poll             read every device now
+  Chart.js 4 and the fonts are local files under /static (no internet needed).
+-->
 <style>
   @font-face { font-family: "Inter"; font-weight: 400; src: url(/static/fonts/inter-latin-400-normal.woff2) format("woff2"); font-display: swap; }
   @font-face { font-family: "Inter"; font-weight: 500; src: url(/static/fonts/inter-latin-500-normal.woff2) format("woff2"); font-display: swap; }
@@ -17,10 +41,10 @@
     --hairline: #23252a; --hairline-strong: #34343a;
     --ink: #f7f8f8; --ink-muted: #d0d6e0; --ink-subtle: #8a8f98; --ink-tertiary: #62666d;
     --accent: #5e6ad2; --accent-hover: #828fff;
-    --good: #27a644; --warn: #fab219; --serious: #ec835a; --critical: #e66767;
+    --good: #27a644; --warn: #fab219; --critical: #e66767;
     --c-load: #3987e5; --c-pv: #d95926; --c-gen: #199e70; --c-bess: #9085e9; --c-grid: #c98500;
     --c-g1: #199e70; --c-g2: #3987e5; --c-g3: #c98500; --c-g4: #9085e9; --c-g5: #d95926;
-    --grid-line: rgba(255,255,255,.06); --tick: #8a8f98; --pulse: rgba(247,248,248,.9);
+    --grid-line: rgba(255,255,255,.06); --tick: #8a8f98;
     --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
     --radius: 6px; --rail: 184px;
@@ -30,10 +54,10 @@
     --hairline: #e4e5e8; --hairline-strong: #cfd1d6;
     --ink: #08090a; --ink-muted: #2b2d31; --ink-subtle: #5f646d; --ink-tertiary: #8a8f98;
     --accent: #5e6ad2; --accent-hover: #4a55c7;
-    --good: #0f8a35; --warn: #b07a00; --serious: #c9562d; --critical: #c83c3c;
+    --good: #0f8a35; --warn: #b07a00; --critical: #c83c3c;
     --c-load: #2b6fc4; --c-pv: #c24a1d; --c-gen: #15835c; --c-bess: #6f63d8; --c-grid: #a16d00;
     --c-g1: #15835c; --c-g2: #2b6fc4; --c-g3: #a16d00; --c-g4: #6f63d8; --c-g5: #c24a1d;
-    --grid-line: rgba(0,0,0,.07); --tick: #5f646d; --pulse: rgba(8,9,10,.85);
+    --grid-line: rgba(0,0,0,.07); --tick: #5f646d;
   }
 
   * { box-sizing: border-box; }

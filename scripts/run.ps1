@@ -116,7 +116,7 @@ if (-not $Elevated) {
     if ($Plant) { Write-Host "[collector] Waiting for the collector to answer on $url " -ForegroundColor Cyan -NoNewline }
     else { Write-Host "[collector] Waiting for the collector to answer on $url (the demo first generates 3 days of pretend history) " -ForegroundColor Cyan -NoNewline }
     for ($i = 0; $i -lt 90; $i++) {
-        try { Invoke-RestMethod "$url/api/v1/health" -TimeoutSec 2 -UseBasicParsing | Out-Null; $ok = $true; break } catch { Write-Host "." -NoNewline; Start-Sleep -Seconds 1 }
+        try { Invoke-RestMethod "$url/api/v1/health" -TimeoutSec 2 | Out-Null; $ok = $true; break } catch { Write-Host "." -NoNewline; Start-Sleep -Seconds 1 }
     }
     Write-Host ""
     if ($ok) {
