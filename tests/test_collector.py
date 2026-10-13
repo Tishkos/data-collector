@@ -123,3 +123,45 @@ def test_timezone_fallback_without_tz_database(monkeypatch):
     tz = views.local_tz(Registry(site=SiteConfig(site_id="x", timezone="Asia/Baghdad")))
     assert tz.utcoffset(None).total_seconds() == 3 * 3600
     assert views.local_tz(Registry(site=SiteConfig(site_id="x", timezone="Nowhere/Town"))).utcoffset(None).total_seconds() == 0
+
+
+def test_settings_endpoint_demo_is_locked(client):
+    st = client.get("/api/v1/local/settings").json()
+    assert [o["value"] for o in st["options"]] == [1800, 3600, 7200] and st["min_s"] == 1800
+    assert st["simulated"] is True
+    assert client.post("/api/v1/local/settings", json={"poll_interval_s": 3600}).status_code == 400
+
+
+def test_settings_persist_for_real_config(tmp_path):
+    """A non-simulated config: the dashboard setting is validated, applied at once and reloaded at start."""
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text("site: {site_id: t, poll_interval_s: 3600}\ndevices:\n"
+                   "  - {id: m, profile: meter_site.yaml, adapter: modbus_tcp, connection: {host: 127.0.0.1, port: 15999, timeout: 1}}\n")
+    c = Collector(str(cfg), str(tmp_path), initial_poll=False)
+    client = TestClient(create_app(c))
+    assert client.get("/api/v1/local/settings").json()["source"] == "config"
+    for bad in (60, 900, 1799, "x", None):
+        assert client.post("/api/v1/local/settings", json={"poll_interval_s": bad}).status_code == 400
+    r = client.post("/api/v1/local/settings", json={"poll_interval_s": 1800})
+    assert r.status_code == 200 and r.json()["poll_interval_s"] == 1800 and r.json()["source"] == "settings.json"
+    assert c.poll_interval_s == 1800 and (tmp_path / "settings.json").exists()
+    assert client.get("/api/v1/local/summary").json()["poll_interval_s"] == 1800
+    c2 = Collector(str(cfg), str(tmp_path), initial_poll=False)
+    assert c2.poll_interval_s == 1800 and c2.settings_source == "settings.json"
+
+
+def test_run_loop_follows_the_setting(tmp_path):
+    import threading, time
+    from plantcollector.core import run_loop
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text("site: {site_id: t, poll_interval_s: 3600}\ndevices:\n"
+                   "  - {id: m, profile: meter_site.yaml, adapter: modbus_tcp, connection: {host: 127.0.0.1, port: 15999, timeout: 1}}\n")
+    c = Collector(str(cfg), str(tmp_path), initial_poll=False)
+    stop = threading.Event()
+    t = threading.Thread(target=run_loop, args=(c, None, stop), daemon=True); t.start()
+    time.sleep(2.5)
+    assert c.polls == 1                      # first read at once, then nothing for an hour
+    c.registry.site.poll_interval_s = 1.0    # (what set_poll_interval does, below the public minimum, for the test)
+    time.sleep(3.5)
+    stop.set()
+    assert c.polls >= 3

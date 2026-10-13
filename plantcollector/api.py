@@ -5,6 +5,7 @@ HTTP API + dashboard. Nothing here can write to a device; the one POST triggers 
   /api/v1/health                  collector status
   /api/v1/local/summary           live values, KPIs, device comms, active faults
   POST /api/v1/local/poll         read every device now (a read, not a write)
+  GET/POST /api/v1/local/settings polling rate (30 min / 1 h / 2 h), saved in data/settings.json
   /api/v1/local/series            time series (hours= | from= to=, step=, keys=)
   /api/v1/local/alarms            event log (hours=)
   /api/v1/local/tags              every point with its latest value
@@ -28,7 +29,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import export, views
-from .core import Collector
+from . import __version__
+from .core import POLL_MIN_S, POLL_OPTIONS_S, Collector
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 MAX_EXPORT_DAYS = 62
@@ -65,6 +67,24 @@ def create_app(c: Collector) -> FastAPI:
     @app.get("/api/v1/local/summary")
     def summary():
         return views.summary(c)
+
+    @app.get("/api/v1/local/settings")
+    def get_settings():
+        return _settings()
+
+    @app.post("/api/v1/local/settings")
+    def set_settings(body: dict):
+        try:
+            c.set_poll_interval(int(body.get("poll_interval_s", 0)))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, str(exc))
+        return _settings()
+
+    def _settings():
+        return {"poll_interval_s": int(c.poll_interval_s), "min_s": POLL_MIN_S,
+                "options": [{"value": v, "label": f"{v // 3600} h" if v >= 3600 and v % 3600 == 0 else f"{v // 60} min"} for v in POLL_OPTIONS_S],
+                "source": c.settings_source, "simulated": c.simulated, "config": os.path.basename(c.config_path),
+                "settings_file": c.settings_path, "database": c.db_path, "version": __version__}
 
     @app.post("/api/v1/local/poll")
     def poll_now():

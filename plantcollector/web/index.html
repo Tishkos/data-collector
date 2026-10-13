@@ -16,7 +16,7 @@
     2. CSS by section    rail, topbar, content grid (12 columns, .span-4/.span-8 ...), hero, stats, devices,
                          lists, export form, points table, responsive breakpoints at 1100px and 760px.
     3. HTML              <nav class="rail">, .topwrap > .topbar, then one <section class="block"> per page section:
-                         #overview, #trends, #devices, #alarms, #export, #points.
+                         #overview, #trends, #devices, #alarms, #export, #points, #settings.
     4. JS                helpers -> time (plant / local zone: parts, stamp, parseStamp) -> freshness (mark: the
                          "updated" stamps and amber edges) -> theme/size/nav -> power flow (buildFlow) -> summary
                          (loadSummary, renderDevices) -> tab title + icon -> charts (timeTicks, baseOptions, legend
@@ -33,6 +33,7 @@
                                         (export.csv?hours=&step= is also the history behind the device detail)
     GET  /api/v1/tags(.xlsx|.csv)       the DT Turkey tag list
     POST /api/v1/local/poll             read every device now
+    GET/POST /api/v1/local/settings     polling rate: {poll_interval_s, options[], min_s, source}
   Chart.js 4 and the fonts are local files under /static (no internet needed).
 -->
 <style>
@@ -260,6 +261,8 @@
   .btn.busy svg { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .hint { color: var(--ink-tertiary); font-size: 11.5px; padding: 0 14px 12px; }
+  .about { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; padding: 12px 14px 14px; font-size: 12px; }
+  .about dt { color: var(--ink-subtle); } .about dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
   .hint code { font-family: var(--mono); font-size: 11px; color: var(--ink-subtle); }
 
   /* ---- points table ----------------------------------------------------------- */
@@ -325,6 +328,7 @@
     <a href="#alarms"><svg viewBox="0 0 24 24"><path d="M12 3l9 16H3zM12 10v4M12 17v.5"/></svg>Alarms</a>
     <a href="#export"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></svg>Export</a>
     <a href="#points"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>All points</a>
+    <a href="#settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
     <div class="spacer"></div>
     <div class="foot">Read-only. This program only reads; it never writes to any device.<br><code id="footInfo"></code></div>
   </nav>
@@ -484,6 +488,27 @@
             <thead><tr><th>Device</th><th>Point</th><th style="text-align:right">Value</th><th>Unit</th><th>Quality</th><th>Age</th><th>Register</th><th>Note</th></tr></thead>
             <tbody id="ptBody"></tbody>
           </table></div>
+        </div>
+      </section>
+
+      <!-- ============ settings ============ -->
+      <section class="block" id="settings">
+        <h2>Settings</h2>
+        <div class="panel span-6">
+          <header><h3>Polling</h3><span class="unit">how often every device is read</span></header>
+          <div class="form">
+            <label>Read the devices every <select id="setInterval"></select></label>
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="setSave">Save</button>
+            <span class="note" id="setNote" role="status"></span>
+          </div>
+          <div class="hint" id="setHint">Not more often than every 30 minutes, to keep the load on the SAU gateway small. For a one-off read at any time use "Read devices now" at the top. The setting is kept in <code>data\settings.json</code> and survives restarts.</div>
+        </div>
+        <div class="panel span-6">
+          <header><h3>About this collector</h3></header>
+          <dl class="about" id="aboutList"></dl>
+          <div class="hint">Read-only: this program has no code path that writes to a device. API documentation at <code>/api/docs</code>.</div>
         </div>
       </section>
     </div>
@@ -1124,6 +1149,30 @@
   });
   repDate.value = utcToday();
 
+  // ------------------------------------------------------------------ settings
+  const everyText = (s) => s >= 3600 ? (s / 3600) + " h" : s >= 60 ? (s / 60) + " min" : s + " s";
+  async function loadSettings() {
+    let st; try { st = await getJSON("/api/v1/local/settings"); } catch (e) { return; }
+    const sel = $("#setInterval");
+    sel.innerHTML = st.options.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
+    sel.value = String(st.poll_interval_s);
+    if (![...sel.options].some((o) => o.value === sel.value)) sel.add(new Option(everyText(st.poll_interval_s) + " (from config)", String(st.poll_interval_s), true, true));
+    sel.disabled = st.simulated; $("#setSave").disabled = st.simulated;
+    $("#setNote").textContent = st.simulated ? "demo: refreshes every 30 s regardless" : `now every ${everyText(st.poll_interval_s)} (${st.source === "settings.json" ? "saved from here" : "from " + st.config})`;
+    $("#aboutList").innerHTML = [["Config", st.config], ["Database", st.database], ["Settings file", st.settings_file], ["Version", st.version],
+      ["Polls since start", summary ? summary.collector.polls : "—"], ["Rows stored", summary ? summary.collector.rows.toLocaleString() : "—"],
+      ["Running since", summary ? stamp(Date.now() - summary.collector.uptime_s * 1000) : "—"]].map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+  }
+  $("#setSave").addEventListener("click", async () => {
+    const b = $("#setSave"); b.classList.add("busy");
+    try {
+      const st = await getJSON("/api/v1/local/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ poll_interval_s: Number($("#setInterval").value) }) });
+      toast(`Saved: devices are read every ${everyText(st.poll_interval_s)}.`);
+      await loadSummary(); loadSettings();
+    } catch (e) { toast(`Not saved: ${why(e)}.`, true); }
+    b.classList.remove("busy");
+  });
+
   // ------------------------------------------------------------------ read now
   $("#pollBtn").addEventListener("click", async () => {
     const b = $("#pollBtn"); b.classList.add("busy");
@@ -1137,8 +1186,9 @@
 
   // ------------------------------------------------------------------ run
   paintZone(); tabState();
-  loadSummary().then(loadSeries); loadAlarms(); loadPoints();
+  loadSummary().then(() => { loadSeries(); loadSettings(); }); loadAlarms(); loadPoints();
   setInterval(loadSummary, 10000);
+  setInterval(loadSettings, 60000);
   setInterval(loadSeries, 60000);
   setInterval(loadAlarms, 30000);
   setInterval(loadPoints, 30000);

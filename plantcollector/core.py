@@ -4,6 +4,7 @@ Collector core: registry + adapters + store + a few health checks + daily totals
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -13,6 +14,10 @@ from .adapters import build_adapter
 from .adapters.simulator import SimPlant
 from .registry import Quality, load_registry
 from .store import TelemetryStore
+
+
+POLL_MIN_S = 1800                                   # never read the plant more often than this
+POLL_OPTIONS_S = (1800, 3600, 7200)                 # what the dashboard offers: 30 min, 1 h, 2 h
 
 
 class Collector:
@@ -37,6 +42,14 @@ class Collector:
                     pass
         self.db_path = db
         self.store = TelemetryStore(db)
+        # polling rate: the config value, overridden by what was saved from the dashboard (real plant only)
+        self.settings_path = os.path.join(data_dir, "settings.json")
+        self.settings_source = "config"
+        if not self.simulated:
+            saved = self._load_settings()
+            if saved.get("poll_interval_s") in POLL_OPTIONS_S:
+                self.registry.site.poll_interval_s = float(saved["poll_interval_s"])
+                self.settings_source = "settings.json"
         self.adapters = {d.id: build_adapter(d, plant=self.plant) for d in self.registry.devices.values()}
         # adapters connect on their first read (a connect to an unreachable device blocks for its timeout)
         self._comms_lost: set[str] = set()
@@ -74,6 +87,38 @@ class Collector:
 
     def now(self) -> datetime:
         return self.plant.now if self.plant is not None else datetime.now(timezone.utc)
+
+    # --- settings ---------------------------------------------------------------------
+
+    @property
+    def poll_interval_s(self) -> float:
+        return float(self.registry.site.poll_interval_s)
+
+    def _load_settings(self) -> dict:
+        try:
+            with open(self.settings_path) as f:
+                return json.load(f) or {}
+        except (FileNotFoundError, ValueError):
+            return {}
+
+    def set_poll_interval(self, seconds: int) -> None:
+        """Change the polling rate at runtime and remember it. Only the fixed options are allowed;
+        never below POLL_MIN_S, to keep the load on the SAU gateway small."""
+        seconds = int(seconds)
+        if seconds not in POLL_OPTIONS_S:
+            raise ValueError(f"poll interval must be one of {sorted(POLL_OPTIONS_S)} seconds")
+        if self.simulated:
+            raise ValueError("the demo refreshes every 30 s; this setting applies to the real plant config")
+        self.registry.site.poll_interval_s = float(seconds)
+        data = self._load_settings()
+        data["poll_interval_s"] = seconds
+        data["changed_at"] = datetime.now(timezone.utc).isoformat()
+        tmp = self.settings_path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, self.settings_path)
+        self.settings_source = "settings.json"
+        self.store.event("settings", f"poll interval set to {seconds} s", severity="info", code="SETTINGS")
 
     def close(self) -> None:
         for a in self.adapters.values():
@@ -215,14 +260,20 @@ class Collector:
         }
 
 
-def run_loop(c: Collector, interval: float, stop=None) -> None:
+def run_loop(c: Collector, interval: float | None = None, stop=None) -> None:
+    """Poll whenever the last read is older than the current interval. The interval is read
+    every second, so a change from the dashboard takes effect at once; a manual "read now"
+    counts as a read and pushes the next scheduled one."""
+    fixed = float(interval) if interval else None
     while not (stop and stop.is_set()):
-        t0 = time.time()
-        try:
-            if c.simulated:
-                c.advance(interval, step=interval)
-            else:
-                c.poll()
-        except Exception as exc:
-            print(f"collector error: {exc}")
-        time.sleep(max(0.0, interval - (time.time() - t0)))
+        every = fixed if fixed else c.poll_interval_s
+        last = c.last_poll_at.timestamp() if c.last_poll_at else 0.0
+        if time.time() - last >= every:
+            try:
+                if c.simulated:
+                    c.advance(every, step=every)
+                else:
+                    c.poll()
+            except Exception as exc:
+                print(f"collector error: {exc}")
+        time.sleep(1.0)

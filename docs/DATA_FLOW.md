@@ -45,9 +45,11 @@ few hundred MB. Nothing is ever deleted automatically.
 | `GET /api/v1/local/export.xlsx?from=&to=&step=` | wide table: one column per device point |
 | `GET /api/v1/local/report.xlsx?date=` | daily report workbook |
 | `GET /api/v1/local/alarms`, `/local/tags`, `/local/daily` | event log, all points, daily totals |
+| `POST /api/v1/local/poll` | read every device now |
+| `GET/POST /api/v1/local/settings` | the polling rate (30 min / 1 h / 2 h) |
 | `GET /api/docs` | the interactive documentation |
 
-All endpoints are GET. There is no endpoint that changes anything.
+Nothing here reaches a device except the two reads: the hourly cycle and "read now". The settings endpoint changes only how often the collector reads.
 
 ## The DT Turkey tag list
 

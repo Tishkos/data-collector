@@ -16,7 +16,8 @@ site:
   name: "Erbil Coca-Cola hybrid plant"
   timezone: Asia/Baghdad
   fuel_price_per_l: 0.85            # TODO local diesel price
-  poll_interval_s: 3600             # read every device once an hour (change to 300 for every 5 min)
+  poll_interval_s: 3600             # once an hour. The dashboard's Settings page offers 30 min / 1 h / 2 h and
+                                    # saves its choice in data\settings.json, which overrides this value.
 
 devices:
   # --- ComAp master: gensets, mains, PV totals, breakers, alarms --------------------

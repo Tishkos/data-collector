@@ -71,6 +71,7 @@ def cmd_run(a) -> int:
     except Exception as exc:
         print(f"[collector] cannot start: {exc}")
         raise
+    forced = a.interval                       # --interval on the command line wins over the dashboard setting
     if a.interval is None:
         a.interval = float(c.registry.site.poll_interval_s)
     if c.simulated:
@@ -81,7 +82,7 @@ def cmd_run(a) -> int:
         print(f"[collector] READ-ONLY polling of {n} devices every {a.interval:.0f} s "
               f"({reqs} Modbus requests per cycle); data in {c.db_path}")
     stop = threading.Event()
-    t = threading.Thread(target=run_loop, args=(c, a.interval, stop), daemon=True, name="poller")
+    t = threading.Thread(target=run_loop, args=(c, forced, stop), daemon=True, name="poller")
     t.start()
     url = f"http://localhost:{a.port}"
     _wait_for_port(a.host, a.port)

@@ -31,7 +31,7 @@ window, until the window is closed.
   (grid lost/back, device not answering, controller alarms), all points with their register.
 - **Export**: pick a window and a step → **Excel** (Data + Summary + Points sheets) or **CSV**.
   One click for the **daily report** workbook and for the **DT Turkey tag list with live values**.
-- **API** (all GET, documented at `http://localhost:8080/api/docs`): `/api/v1/tags` serves the 305
+- **API** (documented at `http://localhost:8080/api/docs`): `/api/v1/tags` serves the 305
   Turkey tags with value, quality and timestamp; `/api/v1/local/series`, `/export.csv`, … serve the rest.
 - **Data** in `data\telemetry.sqlite`: every reading with timestamp and quality (good / stale / bad).
   A bad read is stored as bad, never as a zero.
@@ -55,7 +55,7 @@ window, until the window is closed.
    or sign in the profile, repeat until everything is `good`.
 4. `START-PLANT.bat`. Done. The Turkey side reads `http://<pc-ip>:8080/api/v1/tags` or the exported file.
 
-Changing the poll rate: one number, `poll_interval_s` in `config\site.plant.yaml` (3600 = hourly, 300 = every 5 min).
+Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, never more often, saved in `data\settings.json`), or `poll_interval_s` in `config\site.plant.yaml`. "Read devices now" in the top bar reads everything once, at any time.
 
 ## Folder map
 
