@@ -6,6 +6,7 @@ HTTP API + dashboard. Nothing here can write to a device; the one POST triggers 
   /api/v1/local/summary           live values, KPIs, device comms, active faults
   POST /api/v1/local/poll         read every device now (a read, not a write)
   GET/POST /api/v1/local/settings polling rate (30 min / 1 h / 2 h), saved in data/settings.json
+  /api/v1/tags/registers          the Modbus register map published for the Turkey platform
   /api/v1/local/series            time series (hours= | from= to=, step=, keys=)
   /api/v1/local/alarms            event log (hours=)
   /api/v1/local/tags              every point with its latest value
@@ -81,7 +82,11 @@ def create_app(c: Collector) -> FastAPI:
         return _settings()
 
     def _settings():
+        pub = getattr(c, "publisher", None)
+        pcfg = (c.registry.extra.get("publish") or {}).get("modbus_tcp") or {}
         return {"poll_interval_s": int(c.poll_interval_s), "min_s": POLL_MIN_S,
+                "publish": pub.status() if pub else {"enabled": bool(pcfg.get("enabled")), "running": False,
+                                                     "bind": pcfg.get("bind", "0.0.0.0"), "port": pcfg.get("port", 502), "unit_id": pcfg.get("unit_id", 1)},
                 "options": [{"value": v, "label": f"{v // 3600} h" if v >= 3600 and v % 3600 == 0 else f"{v // 60} min"} for v in POLL_OPTIONS_S],
                 "source": c.settings_source, "simulated": c.simulated, "config": os.path.basename(c.config_path),
                 "settings_file": c.settings_path, "database": c.db_path, "version": __version__}
@@ -136,6 +141,13 @@ def create_app(c: Collector) -> FastAPI:
         return _file(export.daily_report_xlsx(c, day), f"{c.registry.site.site_id}_daily_{day.strftime('%Y-%m-%d')}.xlsx", "xlsx")
 
     # --- the tag list DT Turkey asked for --------------------------------------------------------
+
+    @app.get("/api/v1/tags/registers")
+    def tag_registers():
+        """The Modbus register map published for the Turkey platform (same whether the server runs or not)."""
+        from .publish import MAP_VERSION, build_map
+        return {"map_version": MAP_VERSION, "unit_id": ((c.registry.extra.get("publish") or {}).get("modbus_tcp") or {}).get("unit_id", 1),
+                "encoding": "float32 ABCD (2 registers) / boolean uint16", "tags": build_map(catalog)}
 
     @app.get("/api/v1/tags")
     def tag_values():

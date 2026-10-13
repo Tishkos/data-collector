@@ -2,7 +2,7 @@
 
 import io
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -165,3 +165,49 @@ def test_run_loop_follows_the_setting(tmp_path):
     time.sleep(3.5)
     stop.set()
     assert c.polls >= 3
+
+
+def test_modbus_publisher_serves_catalog_read_only(tmp_path):
+    """The Turkey-facing Modbus server: header, float32 values, quality, booleans, writes refused."""
+    import struct, time
+    from pymodbus.client import ModbusTcpClient
+    from plantcollector.adapters import reading
+    from plantcollector.publish import ModbusPublisher, QUALITY_START, VALUES_START, build_map
+    from plantcollector.registry import PointDefinition
+
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text("site: {site_id: t, poll_interval_s: 3600}\ndevices:\n"
+                   "  - {id: inv-01, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 127.0.0.1, port: 15999, timeout: 1}}\n"
+                   "  - {id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {host: 127.0.0.1, port: 15999, timeout: 1}}\n")
+    c = Collector(str(cfg), str(tmp_path), initial_poll=False)
+    pub = ModbusPublisher(c, bind="127.0.0.1", port=15031, unit_id=1)
+    m = {t["name"]: t for t in pub.map}
+    assert m["INVERTER_1.INV1_AC_POWER"]["address"] == VALUES_START and m["INVERTER_1.INV1_AC_POWER"]["registers"] == 2
+    assert all(t["address"] < QUALITY_START for t in pub.map) and len(pub.map) == 305
+    assert build_map(pub.catalog) == pub.map          # deterministic
+    pub.start()
+    try:
+        c.store.ingest("inv-01", {"ac_power_kw": reading(PointDefinition(id="ac_power_kw", unit="kW"), 71.6)})
+        c.store.ingest("neo-01", {"pvcb_closed": reading(PointDefinition(id="pvcb_closed", type="boolean"), True)})
+        c.last_poll_at = datetime.now(timezone.utc)
+        pub.refresh()
+        cl = ModbusTcpClient("127.0.0.1", port=15031); assert cl.connect()
+        hdr = cl.read_holding_registers(address=0, count=7, device_id=1).registers
+        assert abs(((hdr[0] << 16) | hdr[1]) - time.time()) < 60 and hdr[2] == 0 and hdr[3] == 2 and hdr[4] == 305 and hdr[5] == 1
+        t = m["INVERTER_1.INV1_AC_POWER"]
+        regs = cl.read_holding_registers(address=t["address"], count=2, device_id=1).registers
+        assert abs(struct.unpack(">f", struct.pack(">HH", *regs))[0] - 71.6) < 1e-4
+        assert cl.read_holding_registers(address=t["quality_address"], count=1, device_id=1).registers == [1]
+        b = m["Thermal_Magnetic_Switch_On_(LV PANEL)"]
+        assert b["registers"] == 1 and cl.read_holding_registers(address=b["address"], count=1, device_id=1).registers == [1]
+        other = m["INVERTER_2.INV2_AC_POWER"]
+        assert cl.read_holding_registers(address=other["quality_address"], count=1, device_id=1).registers == [0]
+        assert cl.read_input_registers(address=t["address"], count=2, device_id=1).registers == regs
+        assert cl.write_register(address=t["address"], value=1, device_id=1).isError()
+        assert cl.write_registers(address=t["address"], values=[1, 2], device_id=1).isError()
+        assert cl.read_holding_registers(address=t["address"], count=2, device_id=1).registers == regs
+        assert cl.read_holding_registers(address=0, count=2, device_id=9).isError()
+        cl.close()
+        assert pub.status()["reads"] >= 6 and pub.status()["rejected_writes"] == 0   # refused by the library before our code
+    finally:
+        pub.stop()

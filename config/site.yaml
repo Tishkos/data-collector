@@ -26,3 +26,12 @@ devices:
 site_load:
   # simulator only — typical bottling plant profile, kW by hour (0..23, plant local time)
   profile_kw: [220,210,210,215,230,280,420,560,640,680,700,710,700,690,680,660,620,560,480,400,340,300,260,240]
+
+# Demo of the Modbus TCP server for the Turkey platform (read-only). Port 5020 so it needs no
+# administrator rights; the plant config uses 502. Test with any Modbus client, unit id 1.
+publish:
+  modbus_tcp:
+    enabled: true
+    bind: 127.0.0.1
+    port: 5020
+    unit_id: 1

@@ -33,6 +33,11 @@ window, until the window is closed.
   One click for the **daily report** workbook and for the **DT Turkey tag list with live values**.
 - **API** (documented at `http://localhost:8080/api/docs`): `/api/v1/tags` serves the 305
   Turkey tags with value, quality and timestamp; `/api/v1/local/series`, `/export.csv`, … serve the rest.
+- **Modbus TCP server for the CCI / DT Turkey platform**: the same 305 tags at fixed holding registers
+  (`docs\TURKEY_MODBUS.md`, also at `/api/v1/tags/registers`), refreshed after every site read, read-only.
+  Their platform polls this PC over the VPN; the field devices are never polled from outside.
+  Switched on with `publish.modbus_tcp.enabled: true` in `config\site.plant.yaml`; the filled-in tag
+  lists for Turkey are in `docs\turkey\` (regenerate with `python tools\turkey_register_map.py --host <vpn-ip>`).
 - **Data** in `data\telemetry.sqlite`: every reading with timestamp and quality (good / stale / bad).
   A bad read is stored as bad, never as a zero.
 - **Grafana** (optional, needs Docker Desktop): `grafana\docker-compose.yml` → `http://localhost:3000`.
@@ -68,9 +73,12 @@ config\site.plant.yaml              real plant (read-only Modbus)
 profiles\*.yaml                     device point maps (TODO = placeholder register)
 profiles\tag_catalog.yaml           the 305 DT Turkey tag names mapped to our device/point ids
 plantcollector\                     the program: adapters (modbus_tcp, inteliscada, simulator),
-                                    store (SQLite), views, export (xlsx/csv), api (FastAPI), web (dashboard)
+                                    store (SQLite), views, export (xlsx/csv), api (FastAPI), web (dashboard),
+                                    publish (the read-only Modbus TCP server for Turkey)
 docs\turkey\*.xlsx                  the two tag-list workbooks (Rev. 1.2) from DT Turkey
 docs\DATA_FLOW.md                   how the data moves and how Turkey gets it
+docs\TURKEY_MODBUS.md               the Modbus register map served to the Turkey platform
+tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks
 docs\SAFETY.md                      why it cannot touch the plant
 docs\INFO_NEEDED.md                 the open questions for the site
 grafana\                            optional Grafana (Docker) on the same database

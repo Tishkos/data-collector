@@ -84,6 +84,17 @@ def cmd_run(a) -> int:
     stop = threading.Event()
     t = threading.Thread(target=run_loop, args=(c, forced, stop), daemon=True, name="poller")
     t.start()
+    publisher = None
+    try:
+        from .publish import ModbusPublisher
+        publisher = ModbusPublisher.from_config(c)
+        if publisher:
+            publisher.start()
+            print(f"[collector] Modbus TCP publisher for the Turkey platform: {publisher.bind}:{publisher.port} unit {publisher.unit_id}, {len(publisher.map)} tags, read-only")
+    except Exception as exc:
+        print(f"[collector] Modbus publisher NOT started: {exc}")
+        publisher = None
+    c.publisher = publisher
     url = f"http://localhost:{a.port}"
     _wait_for_port(a.host, a.port)
     print(f"[collector] dashboard: {url}   api: {url}/api/docs   database: {c.db_path}")
@@ -93,6 +104,8 @@ def cmd_run(a) -> int:
         uvicorn.run(create_app(c), host=a.host, port=a.port, log_level="warning", log_config=None)
     finally:
         stop.set()
+        if publisher:
+            publisher.stop()
         c.close()
     return 0
 

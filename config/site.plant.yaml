@@ -45,6 +45,19 @@ devices:
     adapter: modbus_tcp
     connection: {host: 192.168.0.128, port: 502, unit_id: 100, timeout: 5}   # TODO meter address on SAU
 
+# --- Publishing for the DT Turkey / CCI monitoring platform ------------------------------------
+# A read-only Modbus TCP server on this PC with all tags of profiles/tag_catalog.yaml at fixed
+# registers (map: docs/TURKEY_MODBUS.md, or GET /api/v1/tags/registers). Their platform polls
+# this PC, never the SAU or the InteliNeo. Switch on when the VPN is in place and set `bind`
+# to the PC's VPN address so the port is not visible anywhere else.
+publish:
+  modbus_tcp:
+    enabled: false
+    bind: 0.0.0.0            # TODO the PC's VPN address, e.g. 10.8.0.12 (0.0.0.0 = every interface)
+    port: 502
+    unit_id: 1
+    bad_value: last          # what a tag shows while its device does not answer: last | zero | nan
+
 # When the InteliSCADA on the licensed laptop is on 24/7, this device can be added instead
 # of neo-01 to get the same values with zero load on the controller:
 # - id: neo-01

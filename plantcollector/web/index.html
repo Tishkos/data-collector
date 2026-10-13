@@ -33,7 +33,8 @@
                                         (export.csv?hours=&step= is also the history behind the device detail)
     GET  /api/v1/tags(.xlsx|.csv)       the DT Turkey tag list
     POST /api/v1/local/poll             read every device now
-    GET/POST /api/v1/local/settings     polling rate: {poll_interval_s, options[], min_s, source}
+    GET/POST /api/v1/local/settings     polling rate: {poll_interval_s, options[], min_s, source, publish{}}
+    GET  /api/v1/tags/registers         the Modbus register map served to the Turkey platform
   Chart.js 4 and the fonts are local files under /static (no internet needed).
 -->
 <style>
@@ -1127,7 +1128,10 @@
     if (![...sel.options].some((o) => o.value === sel.value)) sel.add(new Option(everyText(st.poll_interval_s) + " (from config)", String(st.poll_interval_s), true, true));
     sel.disabled = st.simulated; $("#setSave").disabled = st.simulated;
     $("#setNote").textContent = st.simulated ? "demo: refreshes every 30 s regardless" : `now every ${everyText(st.poll_interval_s)} (${st.source === "settings.json" ? "saved from here" : "from " + st.config})`;
-    $("#aboutList").innerHTML = [["Config", st.config], ["Database", st.database], ["Settings file", st.settings_file], ["Version", st.version],
+    const pb = st.publish || {};
+    const pubText = !pb.enabled ? "off (publish.modbus_tcp.enabled in the config)" : !pb.running ? "enabled but not running — see data\\collector.log"
+      : `on · ${pb.bind}:${pb.port} unit ${pb.unit_id} · ${pb.tags} tags · ${pb.reads} reads` + (pb.rejected_writes ? ` · ${pb.rejected_writes} writes refused` : "");
+    $("#aboutList").innerHTML = [["Modbus server for Turkey", pubText], ["Config", st.config], ["Database", st.database], ["Settings file", st.settings_file], ["Version", st.version],
       ["Polls since start", summary ? summary.collector.polls : "—"], ["Rows stored", summary ? summary.collector.rows.toLocaleString() : "—"],
       ["Running since", summary ? stamp(Date.now() - summary.collector.uptime_s * 1000) : "—"]].map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
   }

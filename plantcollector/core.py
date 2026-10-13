@@ -56,6 +56,7 @@ class Collector:
         self._alarm_on: set[str] = set()
         self._grid_off: set[str] = set()
         self._poll_lock = threading.RLock()
+        self.after_poll: list = []               # callbacks run after every poll (the Modbus publisher refreshes here)
         self.started_at = datetime.now(timezone.utc)
         self.polls = 0
         self.last_poll_at: datetime | None = None
@@ -146,6 +147,11 @@ class Collector:
             self._health(did, rows)
         self.polls += 1
         self.last_poll_at = datetime.now(timezone.utc)
+        for fn in list(self.after_poll):
+            try:
+                fn()
+            except Exception as exc:
+                print(f"after_poll callback failed: {exc}")
 
     def advance(self, seconds: float, step: float = 60.0) -> None:
         """Simulator only: move simulated time forward, polling every `step` seconds."""
