@@ -1,0 +1,16 @@
+# Device profile: site load meter (main LV board). Read-only.
+# On a real site this is the plant's main energy meter (Modbus) or a value ComAp
+# already computes (InteliNeo tracks total load in a load-sharing group).
+
+kind: meter
+vendor: "TBC"
+model: "site load meter"
+profile_revision: 1
+profile_status: draft
+
+points:
+  - {id: load_kw,       unit: kW,  raw: {address: 0, kind: int32, scale: 0.1}}   # TODO
+  - {id: frequency_hz,  unit: Hz,  raw: {address: 2, kind: uint16, scale: 0.01}} # TODO
+  - {id: voltage_v,     unit: V,   raw: {address: 3, kind: uint16, scale: 0.1}}  # TODO
+
+commands: []

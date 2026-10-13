@@ -1,0 +1,48 @@
+# Device profile: one Sineng string inverter, read THROUGH the SAU-100 gateway.
+#
+# All ten inverters share this profile; site.yaml sets the unit_id per inverter.
+# Registers are PLACEHOLDERS until the SAU point table / Sineng Modbus protocol for
+# the installed model is available. Read as ONE block per inverter (see collector).
+#
+# Point ids here are what profiles/tag_catalog.yaml maps Turkey's tag names onto.
+
+kind: pv
+vendor: Sineng
+model: "string inverter (model TBC)"
+profile_revision: 1
+profile_status: draft
+source_document: "SAU-100 point table / Sineng Modbus protocol — TO BE ATTACHED"
+
+points:
+  - {id: ac_power_kw,       unit: kW,  raw: {address: 0,  kind: uint32, scale: 0.001}}   # TODO
+  - {id: dc_power_kw,       unit: kW,  raw: {address: 2,  kind: uint32, scale: 0.001}}   # TODO
+  - {id: frequency_hz,      unit: Hz,  raw: {address: 4,  kind: uint16, scale: 0.01}}    # TODO
+  - {id: current_l1_a,      unit: A,   raw: {address: 5,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: current_l2_a,      unit: A,   raw: {address: 6,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: current_l3_a,      unit: A,   raw: {address: 7,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: voltage_l1_v,      unit: V,   raw: {address: 8,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: voltage_l2_v,      unit: V,   raw: {address: 9,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: voltage_l3_v,      unit: V,   raw: {address: 10, kind: uint16, scale: 0.1}}     # TODO
+  - {id: energy_today_kwh,  unit: kWh, raw: {address: 11, kind: uint32, scale: 0.1}}     # TODO
+  - {id: energy_total_kwh,  unit: kWh, raw: {address: 13, kind: uint32, scale: 1.0}}     # TODO
+  - {id: comm_error,        type: boolean, raw: {}}   # derived by the adapter: all reads BAD -> true
+  # string currents: confirm how many inputs the real model has (template assumes 17)
+  - {id: string_current_1_a,  unit: A, raw: {address: 20, kind: uint16, scale: 0.01}}  # TODO
+  - {id: string_current_2_a,  unit: A, raw: {address: 21, kind: uint16, scale: 0.01}}
+  - {id: string_current_3_a,  unit: A, raw: {address: 22, kind: uint16, scale: 0.01}}
+  - {id: string_current_4_a,  unit: A, raw: {address: 23, kind: uint16, scale: 0.01}}
+  - {id: string_current_5_a,  unit: A, raw: {address: 24, kind: uint16, scale: 0.01}}
+  - {id: string_current_6_a,  unit: A, raw: {address: 25, kind: uint16, scale: 0.01}}
+  - {id: string_current_7_a,  unit: A, raw: {address: 26, kind: uint16, scale: 0.01}}
+  - {id: string_current_8_a,  unit: A, raw: {address: 27, kind: uint16, scale: 0.01}}
+  - {id: string_current_9_a,  unit: A, raw: {address: 28, kind: uint16, scale: 0.01}}
+  - {id: string_current_10_a, unit: A, raw: {address: 29, kind: uint16, scale: 0.01}}
+  - {id: string_current_11_a, unit: A, raw: {address: 30, kind: uint16, scale: 0.01}}
+  - {id: string_current_12_a, unit: A, raw: {address: 31, kind: uint16, scale: 0.01}}
+  - {id: string_current_13_a, unit: A, raw: {address: 32, kind: uint16, scale: 0.01}}
+  - {id: string_current_14_a, unit: A, raw: {address: 33, kind: uint16, scale: 0.01}}
+  - {id: string_current_15_a, unit: A, raw: {address: 34, kind: uint16, scale: 0.01}}
+  - {id: string_current_16_a, unit: A, raw: {address: 35, kind: uint16, scale: 0.01}}
+  - {id: string_current_17_a, unit: A, raw: {address: 36, kind: uint16, scale: 0.01}}
+
+commands: []     # monitoring only; PV limiting stays with the InteliNeo

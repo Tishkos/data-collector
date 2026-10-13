@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plant Dashboard</title>
+<script src="/static/chart.umd.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f5f7; --surface: #fcfcfb; --surface-2: #eef0f3; --border: #dcdfe4;
+    --text: #0b0b0b; --text-2: #52514e; --text-3: #8a8985;
+    --s-load: #2a78d6; --s-pv: #eb6834; --s-gen: #1baf7a; --s-bess: #eda100;
+    --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --critical: #d03b3b;
+    --grid: #e6e8ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #121313; --surface: #1a1a19; --surface-2: #232423; --border: #30312f;
+      --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e88;
+      --s-load: #3987e5; --s-pv: #d95926; --s-gen: #199e70; --s-bess: #c98500;
+      --grid: #2a2b29;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121313; --surface: #1a1a19; --surface-2: #232423; --border: #30312f;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e88;
+    --s-load: #3987e5; --s-pv: #d95926; --s-gen: #199e70; --s-bess: #c98500;
+    --grid: #2a2b29;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  .badge { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+  .badge.live { color: var(--good); border-color: var(--good); }
+  .badge.lost { color: var(--critical); border-color: var(--critical); }
+  .spacer { flex: 1; }
+  header button, .panel button, .panel select, .panel input { font: inherit; }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .kpi .label { color: var(--text-2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 26px; font-weight: 650; margin-top: 2px; }
+  .kpi .value small { font-size: 13px; color: var(--text-2); font-weight: 500; margin-left: 4px; }
+  .kpi .sub { color: var(--text-3); font-size: 12px; }
+  .kpi .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: var(--text-2); font-weight: 600; }
+  .chart-wrap { position: relative; height: 300px; }
+  .chart-wrap.small { height: 160px; }
+  .devices { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .dev { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .dev .name { font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
+  .dev .kind { color: var(--text-3); font-size: 11px; text-transform: uppercase; }
+  .dev table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  .dev td { padding: 2px 0; }
+  .dev td:last-child { text-align: right; }
+  .q-good { color: var(--text); } .q-stale { color: var(--warn); } .q-bad { color: var(--critical); }
+  .pill { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); }
+  .pill.ok { color: var(--good); border-color: var(--good); } .pill.lost { color: var(--critical); border-color: var(--critical); } .pill.partial { color: var(--serious); border-color: var(--serious); }
+  .alarms li { list-style: none; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .alarms ul { margin: 0; padding: 0; max-height: 300px; overflow: auto; }
+  .sev { display: inline-block; min-width: 62px; font-size: 11px; text-transform: uppercase; font-weight: 650; }
+  .sev.critical, .sev.error { color: var(--critical); } .sev.warning { color: var(--serious); } .sev.info { color: var(--text-3); }
+  .export { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .export label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-2); gap: 4px; }
+  .export input, .export select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); color: var(--text); }
+  .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; font-weight: 600; }
+  .btn.primary { background: var(--s-load); border-color: var(--s-load); color: #fff; }
+  .btn:hover { filter: brightness(1.05); }
+  .tags input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); color: var(--text); margin-bottom: 8px; }
+  .tags table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tags th, .tags td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); }
+  .tags th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+  .tags .wrap { max-height: 420px; overflow: auto; }
+  footer { color: var(--text-3); font-size: 12px; text-align: center; padding: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="site">Plant dashboard</h1>
+  <span class="badge" id="mode">—</span>
+  <span class="badge" id="conn">connecting…</span>
+  <span class="badge" id="sim" style="display:none">simulation</span>
+  <span class="spacer"></span>
+  <span class="mono" id="clock" style="color:var(--text-2)">—</span>
+  <button class="btn" id="theme" title="toggle theme">◐</button>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="panel">
+      <h2>Power, last <span id="hoursLabel">24</span> h (kW)
+        <select id="hours" style="float:right;padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text)">
+          <option value="6">6 h</option><option value="24" selected>24 h</option><option value="72">3 d</option><option value="168">7 d</option>
+        </select>
+      </h2>
+      <div class="chart-wrap"><canvas id="powerChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Battery state of charge (%)</h2>
+      <div class="chart-wrap small"><canvas id="socChart"></canvas></div>
+      <h2 style="margin-top:14px">Active faults</h2>
+      <div class="alarms"><ul id="active"></ul></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-bottom:16px">
+    <h2>Devices</h2>
+    <div class="devices" id="devices"></div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <h2>Export data</h2>
+      <div class="export">
+        <label>From <input type="datetime-local" id="from"></label>
+        <label>To <input type="datetime-local" id="to"></label>
+        <label>Step
+          <select id="step"><option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option><option value="3600">1 hour</option></select>
+        </label>
+        <button class="btn primary" id="xlsx">Download Excel</button>
+        <button class="btn" id="csv">Download CSV</button>
+        <button class="btn" id="report">Daily report (Excel)</button>
+      </div>
+      <p style="color:var(--text-3);font-size:12px;margin:10px 0 0">Excel contains a Data sheet (one row per step, one column per point) and a Summary sheet with the day's totals.</p>
+    </div>
+    <div class="panel alarms">
+      <h2>Events, last 24 h</h2>
+      <ul id="events"></ul>
+    </div>
+  </section>
+
+  <section class="panel tags">
+    <h2>All points</h2>
+    <input id="filter" placeholder="filter by device or point…">
+    <div class="wrap"><table><thead><tr><th>Device</th><th>Point</th><th>Value</th><th>Unit</th><th>Quality</th><th>Time</th></tr></thead><tbody id="tagBody"></tbody></table></div>
+  </section>
+</main>
+<footer>Local plant dashboard · data from the on-site collector · refreshes every 10 s</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (v, d = 0) => (v === null || v === undefined) ? "—" : (typeof v === "string" ? v : Number.isNaN(Number(v)) ? String(v) : Number(v).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d }));
+const timeShort = (iso) => { const d = new Date(iso); return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
+
+// theme toggle (per-viewer convenience only)
+try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+$("theme").onclick = () => {
+  const cur = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = cur;
+  try { localStorage.setItem("theme", cur); } catch (e) {}
+  buildCharts(); refreshSeries();
+};
+
+// ---------- KPIs ----------
+function kpi(label, value, unit, sub, dotColor) {
+  return `<div class="kpi"><div class="label">${label}</div><div class="value mono">${dotColor ? `<span class="dot" style="background:${dotColor}"></span>` : ""}${value}<small>${unit || ""}</small></div><div class="sub">${sub || ""}</div></div>`;
+}
+async function refreshSummary() {
+  let s;
+  try { s = await (await fetch("/api/v1/local/summary")).json(); $("conn").textContent = "live"; $("conn").className = "badge live"; }
+  catch (e) { $("conn").textContent = "no connection"; $("conn").className = "badge lost"; return; }
+  $("site").textContent = s.site;
+  $("mode").textContent = s.mode;
+  $("sim").style.display = s.simulated ? "" : "none";
+  $("clock").textContent = new Date(s.time).toLocaleString();
+  const k = s.kpi;
+  $("kpis").innerHTML = [
+    kpi("Load", fmt(k.load_kw), "kW", `${fmt(k.load_kwh_today)} kWh today`, css("--s-load")),
+    kpi("Solar", fmt(k.pv_kw), "kW", `${fmt(k.pv_kwh_today)} kWh today`, css("--s-pv")),
+    kpi("Gensets", fmt(k.genset_kw), "kW", `${k.gensets_running}/${k.gensets_total} running · ${fmt(k.genset_kwh_today)} kWh`, css("--s-gen")),
+    kpi("Battery", fmt(k.soc_pct), "%", k.bess_kw === null ? "" : (k.bess_kw > 0 ? `discharging ${fmt(k.bess_kw)} kW` : k.bess_kw < 0 ? `charging ${fmt(-k.bess_kw)} kW` : "idle"), css("--s-bess")),
+    kpi("Solar share today", fmt(k.pv_share_pct_today), "%", "of load energy"),
+    kpi("Fuel today", fmt(k.fuel_l_today), "L", `saved vs diesel-only: ${fmt(k.fuel_saved_l_today)} L`),
+  ].join("");
+  $("active").innerHTML = s.active_faults.length
+    ? s.active_faults.map(f => { const [code, dev] = f.split(":"); return `<li><span class="sev critical">●</span> ${code} <span style="color:var(--text-3)">${dev === "None" ? "" : dev}</span></li>`; }).join("")
+    : `<li style="color:var(--good)">no active faults</li>`;
+  $("devices").innerHTML = s.devices.map(d => `
+    <div class="dev">
+      <div class="name"><span>${d.id}</span><span class="pill ${d.comms}">${d.comms === "ok" ? "online" : d.comms === "lost" ? "comms lost" : "partial"}</span></div>
+      <div class="kind">${d.kind} · ${d.model}</div>
+      <table>${Object.entries(d.points).map(([p, x]) => `<tr><td style="color:var(--text-2)">${p}</td><td class="mono q-${x.q}">${x.q === "good" ? (typeof x.v === "boolean" ? (x.v ? "yes" : "no") : fmt(x.v, typeof x.v === "number" && !Number.isInteger(x.v) ? 1 : 0)) : "<" + x.q + ">"} ${x.q === "good" && x.unit ? `<span style="color:var(--text-3)">${x.unit}</span>` : ""}</td></tr>`).join("")}</table>
+    </div>`).join("");
+}
+
+// ---------- charts ----------
+let powerChart, socChart;
+function baseOptions(unit) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { position: "top", labels: { color: css("--text"), boxWidth: 12, boxHeight: 12, usePointStyle: true, pointStyle: "line" } },
+      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y, 1)} ${unit}` } },
+    },
+    scales: {
+      x: { ticks: { color: css("--text-3"), maxTicksLimit: 8 }, grid: { color: css("--grid") } },
+      y: { ticks: { color: css("--text-3") }, grid: { color: css("--grid") }, title: { display: true, text: unit, color: css("--text-3") } },
+    },
+    elements: { line: { borderWidth: 2, tension: 0.2 }, point: { radius: 0, hitRadius: 8, hoverRadius: 4 } },
+  };
+}
+function buildCharts() {
+  if (powerChart) powerChart.destroy();
+  if (socChart) socChart.destroy();
+  powerChart = new Chart($("powerChart"), { type: "line", data: { labels: [], datasets: [
+    { label: "Load", data: [], borderColor: css("--s-load") },
+    { label: "Solar", data: [], borderColor: css("--s-pv") },
+    { label: "Gensets", data: [], borderColor: css("--s-gen") },
+    { label: "Battery (+discharge)", data: [], borderColor: css("--s-bess") },
+  ] }, options: baseOptions("kW") });
+  const so = baseOptions("%"); so.plugins.legend.display = false; so.scales.y.min = 0; so.scales.y.max = 100;
+  socChart = new Chart($("socChart"), { type: "line", data: { labels: [], datasets: [{ label: "SOC", data: [], borderColor: css("--s-bess") }] }, options: so });
+}
+async function refreshSeries() {
+  const hours = $("hours").value; $("hoursLabel").textContent = hours;
+  let r; try { r = await (await fetch(`/api/v1/local/series?hours=${hours}`)).json(); } catch (e) { return; }
+  const s = r.series;
+  const labels = (s.load_kw.length ? s.load_kw : s.pv_kw).map(p => timeShort(p[0]));
+  const byTs = (arr) => Object.fromEntries(arr.map(p => [p[0], p[1]]));
+  const keyTs = (s.load_kw.length ? s.load_kw : s.pv_kw).map(p => p[0]);
+  const pick = (name) => { const m = byTs(s[name] || []); return keyTs.map(t => m[t] ?? null); };
+  powerChart.data.labels = labels;
+  powerChart.data.datasets[0].data = pick("load_kw");
+  powerChart.data.datasets[1].data = pick("pv_kw");
+  powerChart.data.datasets[2].data = pick("genset_kw");
+  powerChart.data.datasets[3].data = pick("bess_kw");
+  powerChart.update();
+  socChart.data.labels = (s.soc_pct || []).map(p => timeShort(p[0]));
+  socChart.data.datasets[0].data = (s.soc_pct || []).map(p => p[1]);
+  socChart.update();
+}
+$("hours").onchange = refreshSeries;
+
+// ---------- events + tags ----------
+async function refreshEvents() {
+  let r; try { r = await (await fetch("/api/v1/local/alarms")).json(); } catch (e) { return; }
+  $("events").innerHTML = r.events.slice(0, 60).map(e => `<li><span class="sev ${e.severity || "info"}">${e.severity || e.kind}</span> <span class="mono" style="color:var(--text-3)">${timeShort(e.ts)}</span> ${e.message} <span style="color:var(--text-3)">${e.device_id || ""}</span></li>`).join("") || "<li>no events</li>";
+}
+let tagRows = [];
+async function refreshTags() {
+  try { tagRows = await (await fetch("/api/v1/local/tags")).json(); } catch (e) { return; }
+  renderTags();
+}
+function renderTags() {
+  const f = $("filter").value.toLowerCase();
+  $("tagBody").innerHTML = tagRows.filter(t => !f || (t.device + "/" + t.point).toLowerCase().includes(f)).map(t =>
+    `<tr><td>${t.device}</td><td>${t.point}</td><td class="mono q-${t.quality}">${t.quality === "good" ? (typeof t.value === "boolean" ? (t.value ? "true" : "false") : fmt(t.value, 2)) : "—"}</td><td style="color:var(--text-3)">${t.unit || ""}</td><td class="q-${t.quality}">${t.quality}${t.error ? " · " + t.error : ""}</td><td class="mono" style="color:var(--text-3)">${new Date(t.ts).toLocaleString()}</td></tr>`).join("");
+}
+$("filter").oninput = renderTags;
+
+// ---------- export ----------
+function isoLocal(v) { return v ? new Date(v).toISOString().slice(0, 19) : ""; }
+function exportUrl(kind) {
+  const q = new URLSearchParams();
+  if ($("from").value) q.set("from", isoLocal($("from").value));
+  if ($("to").value) q.set("to", isoLocal($("to").value));
+  q.set("step", $("step").value);
+  return `/api/v1/local/export.${kind}?${q}`;
+}
+$("xlsx").onclick = () => window.location = exportUrl("xlsx");
+$("csv").onclick = () => window.location = exportUrl("csv");
+$("report").onclick = () => window.location = "/api/v1/local/report.xlsx";
+(function presetRange() {
+  const to = new Date(), from = new Date(to.getTime() - 24 * 3600 * 1000);
+  const f = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  $("from").value = f(from); $("to").value = f(to);
+})();
+
+// ---------- loop ----------
+buildCharts();
+async function tick() { await refreshSummary(); await refreshSeries(); await refreshEvents(); await refreshTags(); }
+tick();
+setInterval(tick, 10000);
+</script>
+</body>
+</html>

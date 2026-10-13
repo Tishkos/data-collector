@@ -1,0 +1,19 @@
+# Optional: Grafana for long-horizon trends, reading the collector's SQLite database.
+# Needs Docker Desktop. Run from this folder:  docker compose up -d   -> http://localhost:3000 (admin / admin)
+services:
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports: ["3000:3000"]
+    environment:
+      GF_INSTALL_PLUGINS: frser-sqlite-datasource
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ../data:/data:ro
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+volumes:
+  grafana-data:

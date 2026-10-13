@@ -1,0 +1,103 @@
+# Device profile: ComAp genset controller (InteliNeo / InteliGen / InteliLite family).
+#
+# `raw:` blocks are adapter-specific mapping. For modbus_tcp they are register
+# addresses — EVERY ADDRESS HERE IS A PLACEHOLDER (marked TODO) until replaced
+# from the ComAp communication guide / register list for the exact model+firmware.
+# For the simulator adapter, raw is ignored and the point id is used directly.
+#
+# profile_status stays "draft" until commissioning tests pass on the real controller.
+
+kind: genset
+vendor: ComAp
+model: "InteliNeo (model TBC)"
+firmware: "TBC"
+profile_revision: 1
+profile_status: draft
+source_document: "ComAp communication guide — TO BE ATTACHED"
+
+limits:
+  rated_kw: 500            # TODO real nameplate
+  min_load_kw: 150         # ~30% — below this a diesel wet-stacks; EMS never dispatches under it
+  max_load_kw: 450         # 90% continuous
+  ramp_kw_per_min: 100
+  min_run_s: 1800          # 30 min minimum run once started
+  min_stop_s: 600          # 10 min minimum off
+  start_delay_s: 20
+  # (load fraction, litres per kWh) — typical diesel curve; replace with measured
+  fuel_l_per_kwh_curve: [[0.25, 0.42], [0.50, 0.30], [0.75, 0.27], [1.00, 0.26]]
+
+points:
+  - {id: power_kw,        unit: kW,   raw: {address: 0,  kind: int32,  scale: 0.1}}   # TODO
+  - {id: running,         type: boolean, raw: {address: 2, kind: uint16}}               # TODO
+  - {id: run_hours,       unit: h,    raw: {address: 3,  kind: uint32}}                 # TODO
+  - {id: fuel_level_pct,  unit: "%",  raw: {address: 5,  kind: uint16}}                 # TODO
+  - {id: fuel_rate_lph,   unit: L/h,  raw: {address: 6,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: coolant_temp_c,  unit: "°C", raw: {address: 7,  kind: int16}}                  # TODO
+  - {id: oil_pressure_bar, unit: bar, raw: {address: 8,  kind: uint16, scale: 0.01}}    # TODO
+  - {id: battery_v,       unit: V,    raw: {address: 9,  kind: uint16, scale: 0.1}}     # TODO
+  - {id: mode,            type: enum, raw: {address: 10, kind: uint16}}                 # OFF/MAN/AUT/TEST
+  - {id: power_target_kw, unit: kW, access: read_write, raw: {address: 11, kind: int32, scale: 0.1}}  # TODO
+  - {id: alarm_active,    type: boolean, raw: {address: 13, kind: uint16}}              # TODO
+  - {id: alarm_code,      type: enum, raw: {address: 14, kind: uint16}}                 # TODO
+
+commands:
+  - id: set_power_target
+    category: operational_setpoint
+    risk_class: C2
+    description: "Baseload / power target for the genset while running in parallel."
+    args: {target_kw: {type: number, unit: kW, min: 0, max: 450}}
+    preconditions: [device_healthy, telemetry_fresh, genset_running, within_commissioned_limits, mode_permits_write]
+    verification: {point: power_target_kw, strategy: readback_within, tolerance: 2.0, timeout_s: 20}
+    allowed_modes: [manual, supervised, autonomous]
+    requires_approval: false        # C2 inside the envelope may run from the autonomous allowlist
+    min_interval_s: 120
+    raw: {address: 11, kind: int32, scale: 0.1}      # TODO
+
+  - id: start
+    category: state_transition
+    risk_class: C3
+    description: "Start the genset (controller performs its own start sequence + sync)."
+    preconditions: [device_healthy, telemetry_fresh, genset_stopped, min_stop_time_elapsed, no_active_alarm, mode_permits_write]
+    verification: {point: running, strategy: state_equals, expected: true, timeout_s: 90}
+    allowed_modes: [manual, supervised, autonomous]
+    requires_approval: true
+    min_interval_s: 600
+    raw: {command_register: 100, code: 1}            # TODO ComAp command codes
+
+  - id: stop
+    category: state_transition
+    risk_class: C3
+    description: "Stop the genset (controller unloads, opens GCB itself, cools down)."
+    preconditions: [device_healthy, telemetry_fresh, genset_running, min_run_time_elapsed, site_has_reserve_without_genset, mode_permits_write]
+    verification: {point: running, strategy: state_equals, expected: false, timeout_s: 180}
+    allowed_modes: [manual, supervised, autonomous]
+    requires_approval: true
+    min_interval_s: 600
+    raw: {command_register: 100, code: 2}            # TODO
+
+  - id: fault_reset
+    category: state_transition
+    risk_class: C3
+    description: "Acknowledge/reset a non-protective alarm. Protective trips stay in the controller."
+    preconditions: [device_healthy, telemetry_fresh, mode_permits_write]
+    verification: {point: alarm_active, strategy: state_equals, expected: false, timeout_s: 10}
+    allowed_modes: [manual, supervised]
+    requires_approval: true
+    min_interval_s: 30
+    raw: {command_register: 100, code: 3}            # TODO
+
+  - id: set_mode
+    category: state_transition
+    risk_class: C3
+    description: "Change controller mode (MAN/AUT). OFF is excluded on purpose."
+    args: {mode: {type: enum, choices: [MAN, AUT]}}
+    preconditions: [device_healthy, telemetry_fresh, mode_permits_write]
+    verification: {point: mode, strategy: readback_equals, timeout_s: 10}
+    allowed_modes: [manual, supervised]
+    requires_approval: true
+    min_interval_s: 60
+    raw: {command_register: 100, code_map: {MAN: 10, AUT: 11}}   # TODO
+
+# Documented for completeness — NOT loadable as commands (C4 is rejected by the model):
+# - GCB/MCB open/close, synchronization, protection setpoints, emergency stop.
+# These stay in the InteliNeo. The platform can only observe them.
