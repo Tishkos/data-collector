@@ -110,3 +110,16 @@ def test_api(client):
 def test_no_write_endpoints(client):
     for path in ("/api/v1/local/summary", "/api/v1/tags"):
         assert client.post(path).status_code == 405
+
+
+def test_timezone_fallback_without_tz_database(monkeypatch):
+    """Windows has no tz database unless tzdata is installed; exports must still work."""
+    import zoneinfo
+
+    def broken(*a, **k):
+        raise zoneinfo.ZoneInfoNotFoundError("no tz database")
+    monkeypatch.setattr(views, "ZoneInfo", broken)
+    from plantcollector.registry import Registry, SiteConfig
+    tz = views.local_tz(Registry(site=SiteConfig(site_id="x", timezone="Asia/Baghdad")))
+    assert tz.utcoffset(None).total_seconds() == 3 * 3600
+    assert views.local_tz(Registry(site=SiteConfig(site_id="x", timezone="Nowhere/Town"))).utcoffset(None).total_seconds() == 0

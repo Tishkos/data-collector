@@ -17,11 +17,12 @@ HTTP API + dashboard. All GET. Nothing here can write to a device.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import export, views
@@ -40,6 +41,12 @@ def _file(data: bytes, name: str, kind: str) -> Response:
 def create_app(c: Collector) -> FastAPI:
     app = FastAPI(title="Plant data collector", version="1.0", docs_url="/api/docs", redoc_url=None)
     app.state.collector = c
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request, exc):
+        logging.getLogger("collector").exception("request failed: %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"error": f"{type(exc).__name__}: {exc}",
+                                                      "path": request.url.path, "hint": "details in data/collector.log"})
     catalog = views.load_tag_catalog()
     app.mount("/static", StaticFiles(directory=os.path.join(WEB_DIR, "static")), name="static")
 

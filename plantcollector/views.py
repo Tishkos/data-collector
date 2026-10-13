@@ -19,11 +19,19 @@ from .registry import PROFILES_DIR, Quality, Registry
 _G_RUNNING = re.compile(r"^g(\d+)_running$")
 
 
-def local_tz(reg: Registry) -> ZoneInfo:
+_FIXED_OFFSETS_H = {"Asia/Baghdad": 3, "Asia/Riyadh": 3, "Europe/Istanbul": 3, "Asia/Dubai": 4, "Europe/Budapest": 1, "UTC": 0}
+
+
+def local_tz(reg: Registry):
+    """Site time zone. Windows has no tz database unless the `tzdata` package is installed
+    (it is in requirements.txt); fall back to a fixed offset, then UTC, rather than fail."""
+    name = reg.site.timezone or "UTC"
     try:
-        return ZoneInfo(reg.site.timezone)
+        return ZoneInfo(name)
     except Exception:
-        return ZoneInfo("UTC")
+        if name in _FIXED_OFFSETS_H:
+            return timezone(timedelta(hours=_FIXED_OFFSETS_H[name]), name)
+        return timezone.utc
 
 
 # --- series definitions ------------------------------------------------------------------------
