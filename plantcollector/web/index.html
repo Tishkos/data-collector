@@ -1129,7 +1129,7 @@
     sel.disabled = st.simulated; $("#setSave").disabled = st.simulated;
     $("#setNote").textContent = st.simulated ? "demo: refreshes every 30 s regardless" : `now every ${everyText(st.poll_interval_s)} (${st.source === "settings.json" ? "saved from here" : "from " + st.config})`;
     const pb = st.publish || {};
-    const pubText = !pb.enabled ? "off (publish.modbus_tcp.enabled in the config)" : !pb.running ? "enabled but not running — see data\\collector.log"
+    const pubText = !pb.enabled ? "off (publish.modbus_tcp.enabled in the config)" : !pb.running ? `enabled but not running — ${pb.error || "see data\\collector.log"} (retrying every minute)`
       : `on · ${pb.bind}:${pb.port} unit ${pb.unit_id} · ${pb.tags} tags · ${pb.reads} reads` + (pb.rejected_writes ? ` · ${pb.rejected_writes} writes refused` : "");
     $("#aboutList").innerHTML = [["Modbus server for Turkey", pubText], ["Config", st.config], ["Database", st.database], ["Settings file", st.settings_file], ["Version", st.version],
       ["Polls since start", summary ? summary.collector.polls : "—"], ["Rows stored", summary ? summary.collector.rows.toLocaleString() : "—"],

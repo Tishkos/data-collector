@@ -112,10 +112,12 @@ if (-not $isAdmin) {
 # ---- 5. Wait for the dashboard, open it --------------------------------------------------
 if (-not $Elevated) {
     $url = "http://localhost:$Port"
+    $urlFile = Join-Path $root "data\dashboard.url"
     $ok = $false
     if ($Plant) { Write-Host "[collector] Waiting for the collector to answer on $url " -ForegroundColor Cyan -NoNewline }
     else { Write-Host "[collector] Waiting for the collector to answer on $url (the demo first generates 3 days of pretend history) " -ForegroundColor Cyan -NoNewline }
     for ($i = 0; $i -lt 90; $i++) {
+        if (Test-Path $urlFile) { $u = (Get-Content $urlFile -ErrorAction SilentlyContinue | Select-Object -First 1); if ($u) { $url = $u.Trim() } }
         try { Invoke-RestMethod "$url/api/v1/health" -TimeoutSec 2 | Out-Null; $ok = $true; break } catch { Write-Host "." -NoNewline; Start-Sleep -Seconds 1 }
     }
     Write-Host ""

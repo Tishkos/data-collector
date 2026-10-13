@@ -16,6 +16,11 @@ OPEN-DASHBOARD.bat   http://localhost:8080
 RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows every message; stops when closed)
 ```
 
+If port 8080 is taken by another program, the dashboard takes the next free port and writes its
+address to `data\dashboard.url`; the START script and `OPEN-DASHBOARD.bat` read it from there.
+The Modbus port for Turkey is never moved (it is what they were told); if it cannot start, the
+collector runs without it, says so on the Settings page, and retries every minute.
+
 The first start installs Python (if missing) and the packages, so it needs internet once.
 It then registers the collector as a Windows task that **starts with Windows and restarts
 itself if it fails**: shutting the PC down is fine, everything collected so far is in

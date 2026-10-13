@@ -44,20 +44,32 @@ def _log_to_file(path: str) -> None:
     sys.stdout = sys.stderr = _Stream()
 
 
-def _wait_for_port(host: str, port: int, seconds: int = 40) -> None:
-    """A previous instance may still be closing; wait for the port instead of failing."""
+def _port_free(host: str, port: int) -> bool:
     import socket
-    for i in range(seconds):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sk:
-            sk.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                sk.bind(("" if host == "0.0.0.0" else host, port))
-                return
-            except OSError:
-                if i == 0:
-                    print(f"[collector] port {port} is busy, waiting for it to free up...")
-                time.sleep(1)
-    print(f"[collector] port {port} still busy after {seconds} s; starting anyway")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sk:
+        sk.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sk.bind(("" if host == "0.0.0.0" else host, port))
+            return True
+        except OSError:
+            return False
+
+
+def _choose_port(host: str, wanted: int, wait_s: int = 15, tries: int = 10) -> int:
+    """Wait a little for a previous instance to release the wanted port; if something else
+    holds it, step to the next free one. The chosen address is written to data/dashboard.url."""
+    for i in range(wait_s):
+        if _port_free(host, wanted):
+            return wanted
+        if i == 0:
+            print(f"[collector] port {wanted} is busy, waiting for it to free up...")
+        time.sleep(1)
+    for p in range(wanted + 1, wanted + 1 + tries):
+        if _port_free(host, p):
+            print(f"[collector] port {wanted} is taken by another program; using port {p} instead")
+            return p
+    print(f"[collector] ports {wanted}-{wanted + tries} all busy; trying {wanted} anyway")
+    return wanted
 
 
 def cmd_run(a) -> int:
@@ -84,19 +96,45 @@ def cmd_run(a) -> int:
     stop = threading.Event()
     t = threading.Thread(target=run_loop, args=(c, forced, stop), daemon=True, name="poller")
     t.start()
+    # Modbus publisher for the Turkey platform: its port must stay what we told them, so if it
+    # cannot start (port taken, VPN address not up yet) it is retried every minute, not moved.
     publisher = None
-    try:
-        from .publish import ModbusPublisher
-        publisher = ModbusPublisher.from_config(c)
-        if publisher:
-            publisher.start()
-            print(f"[collector] Modbus TCP publisher for the Turkey platform: {publisher.bind}:{publisher.port} unit {publisher.unit_id}, {len(publisher.map)} tags, read-only")
-    except Exception as exc:
-        print(f"[collector] Modbus publisher NOT started: {exc}")
-        publisher = None
-    c.publisher = publisher
+    from .publish import ModbusPublisher
+    c.publisher_error = None
+
+    def start_publisher() -> bool:
+        nonlocal publisher
+        try:
+            pub = ModbusPublisher.from_config(c)
+            if pub is None:
+                return True
+            pub.start()
+            publisher = pub
+            c.publisher = pub
+            c.publisher_error = None
+            print(f"[collector] Modbus TCP publisher for the Turkey platform: {pub.bind}:{pub.port} unit {pub.unit_id}, {len(pub.map)} tags, read-only")
+            return True
+        except Exception as exc:
+            c.publisher_error = str(exc)
+            print(f"[collector] Modbus publisher not started ({exc}); retrying every minute")
+            return False
+
+    c.publisher = None
+    if not start_publisher():
+        def retry():
+            while not stop.is_set() and publisher is None:
+                stop.wait(60)
+                if not stop.is_set():
+                    start_publisher()
+        threading.Thread(target=retry, daemon=True, name="publisher-retry").start()
+
+    a.port = _choose_port(a.host, a.port)
     url = f"http://localhost:{a.port}"
-    _wait_for_port(a.host, a.port)
+    try:
+        with open(os.path.join(a.data, "dashboard.url"), "w") as f:
+            f.write(url + "\n")
+    except OSError:
+        pass
     print(f"[collector] dashboard: {url}   api: {url}/api/docs   database: {c.db_path}")
     if a.open:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()

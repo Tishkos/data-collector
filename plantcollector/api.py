@@ -86,7 +86,8 @@ def create_app(c: Collector) -> FastAPI:
         pcfg = (c.registry.extra.get("publish") or {}).get("modbus_tcp") or {}
         return {"poll_interval_s": int(c.poll_interval_s), "min_s": POLL_MIN_S,
                 "publish": pub.status() if pub else {"enabled": bool(pcfg.get("enabled")), "running": False,
-                                                     "bind": pcfg.get("bind", "0.0.0.0"), "port": pcfg.get("port", 502), "unit_id": pcfg.get("unit_id", 1)},
+                                                     "bind": pcfg.get("bind", "0.0.0.0"), "port": pcfg.get("port", 502), "unit_id": pcfg.get("unit_id", 1),
+                                                     "error": getattr(c, "publisher_error", None)},
                 "options": [{"value": v, "label": f"{v // 3600} h" if v >= 3600 and v % 3600 == 0 else f"{v // 60} min"} for v in POLL_OPTIONS_S],
                 "source": c.settings_source, "simulated": c.simulated, "config": os.path.basename(c.config_path),
                 "settings_file": c.settings_path, "database": c.db_path, "version": __version__}
