@@ -5,6 +5,10 @@ Points are grouped into contiguous blocks (max 100 registers) so one device cost
 handful of requests per poll, not one per point. That is what keeps the load on the
 SAU and the InteliNeo small.
 
+Connections are shared per host:port and closed after every poll (close_all): the SAU
+gateway allows only 5 Modbus TCP links in total, and the InteliNeo already uses some of
+them. Ten inverters behind one SAU therefore cost one connection, and none between polls.
+
 point.raw: {address, kind: uint16|int16|uint32|int32|float32, scale, fn: holding|input,
             word_order: big|little, bit: <n> (one bit of a status word)}
 """
@@ -13,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import struct
+import threading
 from datetime import datetime, timezone
 
 from pymodbus.client import ModbusTcpClient
@@ -24,6 +29,27 @@ from ..store import Reading
 from . import Adapter, reading
 
 MAX_BLOCK = 100
+
+_POOL: dict[tuple[str, int], ModbusTcpClient] = {}
+_POOL_LOCK = threading.RLock()
+
+
+def shared_client(host: str, port: int, timeout: float) -> ModbusTcpClient:
+    with _POOL_LOCK:
+        key = (host, port)
+        if key not in _POOL:
+            _POOL[key] = ModbusTcpClient(host=host, port=port, timeout=timeout)
+        return _POOL[key]
+
+
+def close_all() -> None:
+    """Drop every connection; called by the collector after each poll."""
+    with _POOL_LOCK:
+        for c in _POOL.values():
+            try:
+                c.close()
+            except Exception:
+                pass
 
 
 def _decode(regs: list[int], kind: str, scale: float, word_order: str) -> float | int:
@@ -49,7 +75,7 @@ class ModbusTcpAdapter(Adapter):
         super().__init__(device)
         c = device.connection
         self.unit_id = int(c.get("unit_id", 1))
-        self._client = ModbusTcpClient(host=c["host"], port=int(c.get("port", 502)), timeout=float(c.get("timeout", 3)))
+        self._client = shared_client(c["host"], int(c.get("port", 502)), float(c.get("timeout", 3)))
         self._blocks = self._plan_blocks(device.points)
 
     @staticmethod
@@ -82,6 +108,10 @@ class ModbusTcpAdapter(Adapter):
         self._client.close()
 
     def read(self) -> dict[str, Reading]:
+        with _POOL_LOCK:                    # one request at a time on a shared connection
+            return self._read()
+
+    def _read(self) -> dict[str, Reading]:
         out: dict[str, Reading] = {}
         now = datetime.now(timezone.utc)
         derived = []

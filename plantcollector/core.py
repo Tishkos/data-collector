@@ -145,6 +145,11 @@ class Collector:
                 rows = {p.id: reading(p, None, Quality.BAD, f"read failed: {exc}") for p in d.points}
             self.store.ingest(did, rows)
             self._health(did, rows)
+        try:                                     # free the gateway's connection slots between polls
+            from .adapters.modbus_tcp import close_all
+            close_all()
+        except Exception:
+            pass
         self.polls += 1
         self.last_poll_at = datetime.now(timezone.utc)
         for fn in list(self.after_poll):

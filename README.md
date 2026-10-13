@@ -78,6 +78,7 @@ plantcollector\                     the program: adapters (modbus_tcp, intelisca
 docs\turkey\*.xlsx                  the two tag-list workbooks (Rev. 1.2) from DT Turkey
 docs\DATA_FLOW.md                   how the data moves and how Turkey gets it
 docs\TURKEY_MODBUS.md               the Modbus register map served to the Turkey platform
+docs\DEVICES.md                     what the SAU and InteliConfig manuals say, and what it means for us
 tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks
 docs\SAFETY.md                      why it cannot touch the plant
 docs\INFO_NEEDED.md                 the open questions for the site
