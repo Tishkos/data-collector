@@ -34,8 +34,10 @@ def write_markdown(tags: list[dict], host: str, port: int, unit: int) -> str:
         f"Server: the plant data collector on the plant PC — `{host}:{port}`, unit id `{unit}`, Modbus TCP, "
         "**read-only** (FC03 Read Holding Registers; FC04 returns the same registers; every write is refused with an exception).",
         "",
-        "The values are the collector's last read of the site devices (once per hour by default, adjustable to 30 min). "
-        "The platform may poll as often as it likes; polling never reaches the SAU or the InteliNeo.",
+        "The values are the collector's last read of the site devices: **once per hour** (30 minutes at the fastest). "
+        "Please poll every 30–60 minutes; faster polling only returns the same values again. Registers 0–2 give the time "
+        "of the last site read, so a poll a few minutes after the full hour always gets fresh data. Polling never reaches "
+        "the SAU or the InteliNeo.",
         "",
         f"Register map version {MAP_VERSION}. Addresses are 0-based protocol addresses "
         "(address 100 = holding register 40101 in 1-based notation).",
