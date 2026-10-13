@@ -1,28 +1,40 @@
-# One-click: first run installs everything, every run starts the collector + dashboard.
-# Usage:  START.bat                 -> simulator (config\site.yaml) unless site.plant.yaml is activated
-#         START.bat -Plant          -> real plant config (config\site.plant.yaml)
-#         START.bat -NoBrowser      -> don't open the browser
+# One click: installs what is missing, registers the collector to start with Windows,
+# starts it now and opens the dashboard. Safe to run again any time.
+#
+#   START.bat            demo plant (config\site.yaml)
+#   START-PLANT.bat      real plant (config\site.plant.yaml), read-only polling
+#   CHECK-PLANT.bat      one poll of the real plant, every point printed (no background task)
+#   STOP.bat             stop the background collector
+#   UNINSTALL.bat        remove the Windows task (data stays in data\)
+#
+# The collector runs as a Windows scheduled task (at startup, as SYSTEM, restarts itself if it
+# fails). Shutting the computer down is fine: it starts again with Windows, and the database
+# in data\ keeps everything that was collected.
 param(
     [switch]$Plant,
+    [switch]$Check,
+    [switch]$Foreground,
     [switch]$NoBrowser,
-    [int]$Port = 8080,
-    [int]$Interval = 30
+    [switch]$Elevated,
+    [int]$Port = 8080
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+$TaskName = "PlantDataCollector"
 
 function Say($m) { Write-Host "[collector] $m" -ForegroundColor Cyan }
+function Warn($m) { Write-Host "[collector] $m" -ForegroundColor Yellow }
 
 # ---- 1. Python ---------------------------------------------------------------
 $py = Get-Command python -ErrorAction SilentlyContinue
-if (-not $py -or ((& python --version 2>&1) -notmatch "Python 3\.(1[0-9]|[9])")) {
-    Say "Python 3 not found. Installing from python.org (one time, ~1 minute)..."
+if (-not $py -or ((& python --version 2>&1) -notmatch "Python 3\.(1[0-9]|9)")) {
+    Say "Python 3 not found. Installing from python.org (one time, about a minute)..."
     $url = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
     $exe = Join-Path $env:TEMP "python-installer.exe"
     Invoke-WebRequest $url -OutFile $exe
-    Start-Process $exe -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0" -Wait
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "User") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    Start-Process $exe -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
     if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw "Python install failed - install it from python.org and tick 'Add to PATH'" }
 }
 Say ("Python: " + (& python --version))
@@ -32,7 +44,8 @@ if (-not (Test-Path ".venv")) {
     Say "Creating virtual environment..."
     & python -m venv .venv
 }
-$venvPy = Join-Path $root ".venv\Scripts\python.exe"
+$venvPy  = Join-Path $root ".venv\Scripts\python.exe"
+$venvPyw = Join-Path $root ".venv\Scripts\pythonw.exe"
 $stamp = Join-Path $root ".venv\.installed"
 if (-not (Test-Path $stamp) -or ((Get-Item requirements.txt).LastWriteTime -gt (Get-Item $stamp).LastWriteTime)) {
     Say "Installing packages (first run only)..."
@@ -43,13 +56,65 @@ if (-not (Test-Path $stamp) -or ((Get-Item requirements.txt).LastWriteTime -gt (
 
 # ---- 3. Config -------------------------------------------------------------------
 $cfg = "config\site.yaml"
-if ($Plant) { $cfg = "config\site.plant.yaml" }
+if ($Plant -or $Check) { $cfg = "config\site.plant.yaml" }
 if (-not (Test-Path $cfg)) { throw "config not found: $cfg" }
-Say "Config: $cfg"
 New-Item -ItemType Directory -Force "data" | Out-Null
+Say "Config: $cfg"
 
-# ---- 4. Run -----------------------------------------------------------------------
-$args = @("-m", "qs_hybrid.cli", "--config", $cfg, "--data", "data", "local", "--port", $Port, "--interval", $Interval)
-if (-not $NoBrowser) { $args += "--open" }
-Say "Starting collector + dashboard on http://localhost:$Port  (Ctrl+C to stop)"
-& $venvPy @args
+# ---- 4a. CHECK: one poll, printed, then exit ----------------------------------------
+if ($Check) {
+    & $venvPy -m plantcollector.cli --config $cfg --data data check
+    exit $LASTEXITCODE
+}
+
+# ---- 4b. FOREGROUND: run in this window (no Windows task) --------------------------------
+$runArgs = @("-m", "plantcollector.cli", "--config", $cfg, "--data", "data", "run", "--port", $Port, "--log", "data\collector.log")
+if ($Foreground) {
+    Say "Running in this window (Ctrl+C to stop). Dashboard: http://localhost:$Port"
+    if (-not $NoBrowser) { $runArgs += "--open" }
+    & $venvPy @runArgs
+    exit $LASTEXITCODE
+}
+
+# ---- 4c. BACKGROUND: Windows scheduled task, starts with Windows ------------------------------
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Say "Asking for administrator rights to register the collector as a Windows task..."
+    $flags = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"", "-Elevated", "-NoBrowser", "-Port", $Port)
+    if ($Plant) { $flags += "-Plant" }
+    try {
+        Start-Process powershell -Verb RunAs -ArgumentList $flags -Wait
+    } catch {
+        Warn "Administrator rights refused. Running in this window instead (will not restart with Windows)."
+        if (-not $NoBrowser) { $runArgs += "--open" }
+        & $venvPy @runArgs
+        exit $LASTEXITCODE
+    }
+} else {
+    $action = New-ScheduledTaskAction -Execute $venvPyw -Argument ($runArgs -join " ") -WorkingDirectory $root
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $settings = New-ScheduledTaskSettingsSet -RestartCount 100 -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*plantcollector.cli*run*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+    Start-ScheduledTask -TaskName $TaskName
+    Say "Windows task '$TaskName' registered: starts with Windows, restarts if it fails."
+    if ($Elevated) { Start-Sleep -Seconds 2 }
+}
+
+# ---- 5. Wait for the dashboard, open it --------------------------------------------------
+if (-not $Elevated) {
+    $url = "http://localhost:$Port"
+    $ok = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        try { Invoke-RestMethod "$url/api/v1/health" -TimeoutSec 2 | Out-Null; $ok = $true; break } catch { Start-Sleep -Seconds 1 }
+    }
+    if ($ok) {
+        Say "Collector is running. Dashboard: $url   (log: data\collector.log)"
+        if (-not $NoBrowser) { Start-Process $url }
+    } else {
+        Warn "The collector did not answer on $url within 60 s. See data\collector.log"
+    }
+}

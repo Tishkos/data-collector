@@ -1,77 +1,73 @@
-# Data flow: site collector → VPS → API
+# Data flow
 
-One collector on site reads the field devices gently and pushes to the VPS.
-Everyone who wants data (DT Turkey monitoring, dashboards, the AI, Excel users)
-reads it from the VPS API. **Nobody polls the SAU or the InteliNeo except the
-collector.** That is the whole point: the SAU is already overloaded.
-
-```
- plant LAN (192.168.0.x)                          internet                 VPS
- ───────────────────────                          ────────                 ───
- Sineng SAU-100 ──┐                                                   ┌─ TimescaleDB / SQLite
- (10 inverters,   │  Modbus TCP, one block read                       │
-  meter, sensors) │  per device every 30 s      HTTPS POST /ingest    │
-                  ├──► site collector ──────────────────────────────► │  FastAPI
- InteliNeo 5500 ──┘  (SCADA PC or mini PC)      outbound only,        │   ├─ GET /tags        ← DT Turkey
- (gensets, mains,    store-and-forward spool    X-API-Key             │   ├─ GET /tags/{x}/history
-  PV prod/req,       in local SQLite                                  │   ├─ GET /export.csv
-  PVCB, comm bits)                                                    │   ├─ Grafana, AI reports, HMI
-                                                                      └─ └─ command gateway (separate; see ARCHITECTURE)
-```
-
-## Site side: `qs_hybrid.collector.push`
-
-- Reads every device in `config/site.yaml` through the normal adapters (read-only).
-- Interval ≥ 10 s (default 30 s). One block read per device, not tag-by-tag.
-- Every reading carries value, quality (good/stale/bad) and timestamp. Bad is sent as bad, never as 0.
-- Spools batches in `data/spool.sqlite`; pushes oldest-first; keeps going for days without internet.
-- Runs as a Windows service / systemd unit. Needs only outbound HTTPS to the VPS.
+One program on the plant PC reads the field devices gently, stores everything locally, and
+serves it. **Nobody else polls the SAU or the InteliNeo.** The SAU is already busy serving
+the InteliNeo; this adds one small block of reads per device, once an hour, and nothing else.
 
 ```
-python -m qs_hybrid.collector.push --config config/site.yaml \
-    --vps https://<vps>/api/v1/ingest --key <COLLECTOR_KEY> --interval 30
+ plant LAN (192.168.0.x)                                   plant PC
+ ───────────────────────                                   ────────
+ Sineng SAU-100 ──┐  Modbus TCP, read-only,         ┌─ data\telemetry.sqlite  (every reading: value, quality, time)
+ (10 inverters,   │  one block per device           │
+  meter)          │  every poll_interval_s          │  dashboard   http://<pc>:8080
+                  ├──► plantcollector ──────────────┤  Excel/CSV   /api/v1/local/export.xlsx
+ InteliNeo 5500 ──┘                                 │  daily report /api/v1/local/report.xlsx
+ (gensets, mains,                                   │  Turkey tags /api/v1/tags  (+ tags.xlsx, tags.csv)
+  PV prod/req, PVCB,                                └─ Grafana (optional, same database)
+  comm-fail bits)
 ```
 
-## VPS side: `qs_hybrid.api.tags`
+## Reading
 
-| Endpoint | Who | What |
-|---|---|---|
-| `POST /api/v1/ingest` | collector (`X-API-Key: COLLECTOR_KEY`) | accepts batches, stores readings |
-| `GET /api/v1/tags` | readers (`X-API-Key: READ_KEY`) | all external tags, latest value + quality + timestamp |
-| `GET /api/v1/tags/{name}` | readers | one tag |
-| `GET /api/v1/tags/{name}/history?minutes=1440` | readers | time series, downsampled |
-| `GET /api/v1/export.csv` | readers | all tags as CSV |
+- Devices and their points are declared in `config\site.plant.yaml` + `profiles\*.yaml`.
+- The Modbus adapter groups a device's registers into contiguous blocks (max 100 registers) and
+  reads each block with one request. A 29-point inverter costs one or two requests per poll.
+- Every reading carries value, quality and timestamp:
+  `good` = the device answered; `bad` = it did not (value `null`, never 0);
+  `stale` = the last good value is older than twice the poll interval.
+- A device that answers nothing gets an event `COMMS_LOST`, and `COMMS_OK` when it is back.
+  Grid present / not present and controller alarms are logged the same way.
 
-Keys come from env: `QS_COLLECTOR_KEY`, `QS_READ_KEY`. Put the API behind HTTPS (Caddy/nginx).
+## Storing
 
-## The tag catalog: `profiles/tag_catalog.yaml`
+SQLite, WAL mode, in `data\`. ~300 points every hour is about 7,000 rows a day — years fit in a
+few hundred MB. Nothing is ever deleted automatically.
 
-The contract between external tag names and our internal `device/point` names.
-Generated from DT Turkey's Rev.1.2 workbooks by `scripts/build_tag_catalog.py`:
-305 tags = 10 inverters × 29 signals + 15 plant-level signals.
+## Serving
+
+| Endpoint | What |
+|---|---|
+| `GET /api/v1/tags` | the 305 DT Turkey tags: name, value, unit, quality, timestamp |
+| `GET /api/v1/tags/{name}` | one tag |
+| `GET /api/v1/tags.xlsx`, `tags.csv` | the same as a file |
+| `GET /api/v1/local/summary` | live values, KPIs, device status, active faults |
+| `GET /api/v1/local/series?hours=24` | time series, bucketed |
+| `GET /api/v1/local/export.xlsx?from=&to=&step=` | wide table: one column per device point |
+| `GET /api/v1/local/report.xlsx?date=` | daily report workbook |
+| `GET /api/v1/local/alarms`, `/local/tags`, `/local/daily` | event log, all points, daily totals |
+| `GET /api/docs` | the interactive documentation |
+
+All endpoints are GET. There is no endpoint that changes anything.
+
+## The DT Turkey tag list
+
+`profiles\tag_catalog.yaml` maps each of the 305 tag names from the Rev. 1.2 workbooks
+(10 inverters × 29 signals + 15 plant signals) to our `device` / `point`:
 
 ```yaml
 - name: INVERTER_3.INV3_AC_POWER      # what Turkey asked for
-  device: inv-03                      # our device id (site.yaml)
-  point: ac_power_kw                  # our point id (profiles/inverter_sineng.yaml)
+  device: inv-03                      # our device id (site.plant.yaml)
+  point: ac_power_kw                  # our point id (profiles\inverter_sineng.yaml)
   type: float
   unit: kW
 ```
 
-Register addresses are NOT in the catalog; they live in the device profiles and are
-filled from the SAU point table and the InteliConfig register export. Changing a
-register never changes the external API.
+Register addresses are **not** in the catalogue; they live in the device profiles and are
+filled from the SAU point table and the InteliConfig register export. Changing a register
+never changes a tag name. The "PLC Address" column of the Turkey workbooks is filled from
+the same profiles once the addresses are known.
 
-## Quality rules (what consumers see)
-
-- `good`: fresh reading from the device.
-- `stale`: last good reading older than 5 minutes (collector or link down).
-- `bad`: device did not answer / returned an error. `value` is `null`, never a stale number.
-- A tag with no data yet returns `value: null, quality: bad, note: "no data yet"`.
-
-## Still needed to go live
-
-1. SAU point table (unit IDs + registers for inverters, meter, sensors) → `profiles/inverter_sineng.yaml`, `meter`, `env`.
-2. InteliConfig Modbus register export → InteliNeo points (`pv_logger_comm_fail`, `pvcb_closed`, PV prod/req …).
-3. A PC on the plant LAN with outbound HTTPS, to run the collector.
-4. VPS with HTTPS, the two API keys, and the plant's written approval.
+How Turkey gets the data, in order of simplicity:
+1. the exported `tags.xlsx` / `export.xlsx` files, sent by hand or by a scheduled copy;
+2. `http://<pc-ip>:8080/api/v1/tags` from inside the plant network (or through a VPN the plant allows);
+3. later, if wanted, the same API published through a VPS — that is a separate step and needs the plant's approval.

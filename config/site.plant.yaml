@@ -1,8 +1,8 @@
 # REAL PLANT configuration — Erbil Coca-Cola hybrid plant.
-# Start with:  START.bat -Plant
+# Start with:  START.bat -Plant        (or CHECK.bat first: one poll, every point printed)
 #
 # Everything here is READ-ONLY polling. Gentle on purpose: the SAU gateway is already
-# overloaded by the InteliNeo. One block of reads per device every 30 s.
+# busy serving the InteliNeo. One block of reads per device, once an hour.
 #
 # Before first use, replace the TODO values:
 #   - InteliNeo unit id and the register addresses in profiles/intelineo_master.yaml
@@ -15,10 +15,8 @@ site:
   site_id: erbil-cc-01
   name: "Erbil Coca-Cola hybrid plant"
   timezone: Asia/Baghdad
-  mode: restricted                  # no writes, ever, from this installation
-  policy_revision: 1
   fuel_price_per_l: 0.85            # TODO local diesel price
-  autonomous_allowlist: []          # nothing may be written
+  poll_interval_s: 3600             # read every device once an hour (change to 300 for every 5 min)
 
 devices:
   # --- ComAp master: gensets, mains, PV totals, breakers, alarms --------------------

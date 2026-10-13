@@ -14,7 +14,7 @@ kind: genset                # it is a controller; 'genset' kind lets the dashboa
 vendor: ComAp
 model: "InteliNeo 5500 (site master)"
 firmware: "TBC"
-profile_revision: 1
+profile_revision: 2
 profile_status: draft
 source_document: "InteliConfig Modbus Registers export — TO BE ATTACHED"
 
@@ -23,18 +23,18 @@ limits: {}
 points:
   # --- site totals ---
   - {id: power_kw,            unit: kW,  raw: {address: 0,   kind: int32,  scale: 0.1},  description: "total genset power (sum)"}  # TODO
-  - {id: load_kw,             unit: kW,  raw: {address: 2,   kind: int32,  scale: 0.1}}   # TODO site load
+  - {id: load_kw,             unit: kW,  raw: {address: 2,   kind: int32,  scale: 0.1},  description: "site load"}                 # TODO
   - {id: mains_power_kw,      unit: kW,  raw: {address: 4,   kind: int32,  scale: 0.1}}   # TODO
-  - {id: pv_prod_kw,          unit: kW,  raw: {address: 6,   kind: int32,  scale: 0.1}}   # TODO "PV prod"
-  - {id: pv_req_kw,           unit: kW,  raw: {address: 8,   kind: int32,  scale: 0.1}}   # TODO "PV req" (limit sent to SAU)
+  - {id: pv_prod_kw,          unit: kW,  raw: {address: 6,   kind: int32,  scale: 0.1},  description: "PV prod (from SAU)"}        # TODO
+  - {id: pv_req_kw,           unit: kW,  raw: {address: 8,   kind: int32,  scale: 0.1},  description: "PV req (limit sent to SAU)"} # TODO
   - {id: bus_frequency_hz,    unit: Hz,  raw: {address: 10,  kind: uint16, scale: 0.01}}  # TODO
   - {id: bus_voltage_l1_v,    unit: V,   raw: {address: 11,  kind: uint16, scale: 0.1}}   # TODO
-  - {id: running,             type: boolean, raw: {address: 12, kind: uint16}}            # TODO any genset running
+  - {id: running,             type: boolean, raw: {address: 12, kind: uint16}, description: "any genset running"}  # TODO
   - {id: alarm_active,        type: boolean, raw: {address: 13, kind: uint16}}            # TODO
   # --- breakers / status bits (binary points: give register + bit) ---
   - {id: pvcb_closed,         type: boolean, raw: {address: 20, kind: uint16, bit: 0}}    # TODO
   - {id: pvcb_open,           type: boolean, raw: {address: 20, kind: uint16, bit: 1}}    # TODO
-  - {id: pv_logger_comm_fail, type: boolean, raw: {address: 21, kind: uint16, bit: 0}}    # TODO group1 OR group2
+  - {id: pv_logger_comm_fail, type: boolean, raw: {address: 21, kind: uint16, bit: 0}, description: "group 1 OR group 2"}  # TODO
   - {id: mains_available,     type: boolean, raw: {address: 21, kind: uint16, bit: 1}}    # TODO
   # --- per genset (repeat block for G1..G5) ---
   - {id: g1_power_kw,         unit: kW,  raw: {address: 100, kind: int32, scale: 0.1}}    # TODO
@@ -49,5 +49,3 @@ points:
   - {id: g4_running,          type: boolean, raw: {address: 132, kind: uint16}}           # TODO
   - {id: g5_power_kw,         unit: kW,  raw: {address: 140, kind: int32, scale: 0.1}}    # TODO
   - {id: g5_running,          type: boolean, raw: {address: 142, kind: uint16}}           # TODO
-
-commands: []     # monitoring only. Control stays in InteliNeo / PLC.

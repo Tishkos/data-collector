@@ -1,41 +1,25 @@
-# Device profile: Battery energy storage (PCS + BMS). Generic; replace with vendor map.
-# BMS protective limits are enforced by the BMS itself — we read them, never override them.
+# Device profile: battery energy storage (PCS + BMS), read-only. Generic placeholder map;
+# used by the demo simulator. Replace with the vendor's Modbus map if a BESS is installed.
 
 kind: bess
 vendor: "TBC"
-model: "PCS/BMS TBC"
-profile_revision: 1
+model: "PCS/BMS (TBC)"
+profile_revision: 2
 profile_status: draft
 source_document: "PCS/BMS Modbus map — TO BE ATTACHED"
 
 limits:
-  capacity_kwh: 1000       # TODO
+  capacity_kwh: 1000       # demo simulator only
   charge_kw_max: 300
   discharge_kw_max: 300
-  soc_min_pct: 10
-  soc_max_pct: 95
-  soc_reserve_pct: 30      # keep for evening — the "30% reserve" in "solar 60%, 30% reserve"
 
 points:
-  - {id: soc_pct,           unit: "%", raw: {address: 0, kind: uint16, scale: 0.1}}   # TODO
-  - {id: power_kw,          unit: kW,  raw: {address: 1, kind: int32, scale: 0.1}}    # +discharge / -charge  TODO
-  - {id: soh_pct,           unit: "%", raw: {address: 3, kind: uint16, scale: 0.1}}   # TODO
-  - {id: max_charge_kw,     unit: kW,  raw: {address: 4, kind: uint16}}               # BMS-derived live limit TODO
-  - {id: max_discharge_kw,  unit: kW,  raw: {address: 5, kind: uint16}}               # TODO
-  - {id: cell_temp_max_c,   unit: "°C", raw: {address: 6, kind: int16}}               # TODO
-  - {id: status,            type: enum, raw: {address: 7, kind: uint16}}              # TODO
-  - {id: alarm_active,      type: boolean, raw: {address: 8, kind: uint16}}           # TODO
-  - {id: power_target_kw,   unit: kW, access: read_write, raw: {address: 10, kind: int32, scale: 0.1}}  # TODO
-
-commands:
-  - id: set_active_power_target
-    category: operational_setpoint
-    risk_class: C2
-    description: "Charge (-) / discharge (+) target in kW. Clamped to BMS live limits and SOC window."
-    args: {target_kw: {type: number, unit: kW, min: -300, max: 300}}
-    preconditions: [device_healthy, telemetry_fresh, bess_soc_window, bess_within_bms_limits, within_commissioned_limits]
-    verification: {point: power_target_kw, strategy: readback_within, tolerance: 2.0, timeout_s: 15}
-    allowed_modes: [manual, supervised, autonomous]
-    requires_approval: false
-    min_interval_s: 60
-    raw: {address: 10, kind: int32, scale: 0.1}      # TODO
+  - {id: soc_pct,           unit: "%",  raw: {address: 0,  kind: uint16, scale: 0.1}}   # TODO
+  - {id: power_kw,          unit: kW,   raw: {address: 1,  kind: int32,  scale: 0.1}}   # +discharge / -charge  TODO
+  - {id: soh_pct,           unit: "%",  raw: {address: 3,  kind: uint16, scale: 0.1}}   # TODO
+  - {id: max_charge_kw,     unit: kW,   raw: {address: 4,  kind: uint16}}               # TODO
+  - {id: max_discharge_kw,  unit: kW,   raw: {address: 5,  kind: uint16}}               # TODO
+  - {id: cell_temp_max_c,   unit: "°C", raw: {address: 6,  kind: int16}}                # TODO
+  - {id: status,            type: enum, raw: {address: 7,  kind: uint16}}               # TODO
+  - {id: alarm_active,      type: boolean, raw: {address: 8, kind: uint16}}             # TODO
+  - {id: power_target_kw,   unit: kW,   raw: {address: 10, kind: int32,  scale: 0.1}}   # TODO (read back only)

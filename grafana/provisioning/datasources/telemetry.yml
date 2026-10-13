@@ -5,4 +5,4 @@ datasources:
     uid: plant-sqlite
     isDefault: true
     jsonData:
-      path: /data/telemetry.sqlite
+      path: /data/telemetry.sqlite   # the demo writes data/demo.sqlite instead
