@@ -99,6 +99,10 @@ if (-not $isAdmin) {
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*plantcollector.cli*run*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    for ($i = 0; $i -lt 20; $i++) {       # wait until the previous instance has released the port
+        if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Seconds 1
+    }
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
     Say "Windows task '$TaskName' registered: starts with Windows, restarts if it fails."

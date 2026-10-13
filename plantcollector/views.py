@@ -203,6 +203,7 @@ def summary(c: Collector) -> dict:
         "mode": "read-only", "simulated": c.simulated, "time": now.isoformat(),
         "poll_interval_s": c.registry.site.poll_interval_s,
         "collector": {"polls": c.polls, "last_poll": c.last_poll_at.isoformat() if c.last_poll_at else None,
+                      "next_poll": (c.last_poll_at + timedelta(seconds=c.registry.site.poll_interval_s)).isoformat() if c.last_poll_at else None,
                       "uptime_s": int((datetime.now(timezone.utc) - c.started_at).total_seconds()),
                       "rows": st.count(), "first_sample": st.first_ts(), "config": os.path.basename(c.config_path),
                       "database": c.db_path},

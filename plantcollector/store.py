@@ -27,7 +27,9 @@ class TelemetryStore:
         os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         self._db = sqlite3.connect(db_path, check_same_thread=False)
         self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=NORMAL")      # WAL + NORMAL: safe on power loss, far fewer fsyncs
         self._lock = threading.Lock()
+        self._bulk = 0
         self._db.execute("""CREATE TABLE IF NOT EXISTS readings (
             ts TEXT NOT NULL, device_id TEXT NOT NULL, point_id TEXT NOT NULL,
             value REAL, text_value TEXT, quality TEXT NOT NULL, error TEXT)""")
@@ -47,14 +49,31 @@ class TelemetryStore:
                 txt = None if num is not None or r.value is None else str(r.value)
                 rows.append((r.source_ts.isoformat(), device_id, r.point_id, num, txt, r.quality.value, r.error))
             self._db.executemany("INSERT INTO readings VALUES (?,?,?,?,?,?,?)", rows)
-            self._db.commit()
+            if not self._bulk:
+                self._db.commit()
 
     def event(self, kind: str, message: str, *, device_id: str | None = None, severity: str = "info",
               code: str | None = None, ts: datetime | None = None) -> None:
         ts = ts or datetime.now(timezone.utc)
         with self._lock:
             self._db.execute("INSERT INTO events VALUES (?,?,?,?,?,?)", (ts.isoformat(), kind, device_id, severity, code, message))
-            self._db.commit()
+            if not self._bulk:
+                self._db.commit()
+
+    class _Bulk:
+        def __init__(self, store): self.store = store
+        def __enter__(self):
+            with self.store._lock:
+                self.store._bulk += 1
+        def __exit__(self, *exc):
+            with self.store._lock:
+                self.store._bulk -= 1
+                if not self.store._bulk:
+                    self.store._db.commit()
+
+    def bulk(self):
+        """with store.bulk(): ...  -> one commit at the end instead of one per device per poll."""
+        return TelemetryStore._Bulk(self)
 
     def latest(self, device_id: str) -> dict[str, Reading]:
         return dict(self._latest.get(device_id, {}))

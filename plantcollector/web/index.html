@@ -145,11 +145,11 @@
 
   /* ---- lists ---------------------------------------------------------------- */
   .list { list-style: none; margin: 0; padding: 0 4px; max-height: 300px; overflow: auto; }
-  .list li { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: baseline; padding: 6px 8px; border-top: 1px solid var(--hairline); }
+  .list li { display: grid; grid-template-columns: 10px 1fr 112px; gap: 10px; align-items: baseline; padding: 6px 8px; border-top: 1px solid var(--hairline); }
   .list li:first-child { border-top: 0; }
   .list .sev { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-tertiary); align-self: center; }
   .list .sev.error { background: var(--critical); } .list .sev.warning { background: var(--warn); } .list .sev.info { background: var(--good); }
-  .list time { font-family: var(--mono); color: var(--ink-tertiary); font-size: 11px; white-space: nowrap; }
+  .list time { font-family: var(--mono); color: var(--ink-tertiary); font-size: 11px; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
   .list li.empty { display: block; color: var(--ink-tertiary); padding: 14px 8px; }
 
   /* ---- export form ---------------------------------------------------------- */
@@ -163,6 +163,9 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
   .btn.quiet { background: transparent; }
+  .btn.busy { opacity: .6; pointer-events: none; }
+  .btn.busy svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .hint { color: var(--ink-tertiary); font-size: 11.5px; padding: 0 14px 12px; }
   .hint code { font-family: var(--mono); font-size: 11px; color: var(--ink-subtle); }
 
@@ -217,6 +220,9 @@
       <span class="badge">read-only</span>
       <span class="badge sim" id="simBadge" hidden>demo data</span>
       <div class="grow"></div>
+      <button class="btn" id="pollBtn" title="Read every device now">
+        <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;vertical-align:-2px;margin-right:6px"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>Read devices now
+      </button>
       <div class="seg" role="group" aria-label="Time range">
         <button data-h="6">6h</button><button data-h="24" aria-pressed="true">24h</button><button data-h="72">3d</button><button data-h="168">7d</button><button data-h="720">30d</button>
       </div>
@@ -459,7 +465,9 @@
     $("#clock").textContent = new Date(s.time).toLocaleString();
     $("#flowTime").textContent = "last read " + new Date(s.collector.last_poll || s.time).toLocaleTimeString();
     const pi = s.poll_interval_s;
-    $("#flowNote").textContent = `kW · devices read every ${pi >= 3600 ? (pi / 3600) + " h" : pi >= 60 ? (pi / 60) + " min" : pi + " s"}`;
+    const every = pi >= 3600 ? (pi / 3600) + " h" : pi >= 60 ? (pi / 60) + " min" : pi + " s";
+    const nx = s.collector.next_poll ? Math.max(0, Math.round((new Date(s.collector.next_poll) - new Date(s.time)) / 60000)) : null;
+    $("#flowNote").textContent = `kW · devices read every ${every}` + (nx !== null && pi >= 120 ? ` · next read in ${nx < 1 ? "under a minute" : nx + " min"}` : "");
     if (!stepSet) { stepSet = true; const sel = $("#exStep"); const want = pi >= 3600 ? "3600" : pi >= 900 ? "900" : pi >= 300 ? "300" : "60"; if ([...sel.options].some((o) => o.value === want)) sel.value = want; }
     $("#footInfo").textContent = `${s.collector.polls} polls · ${s.collector.rows.toLocaleString()} rows · ${s.collector.config}`;
     buildFlow(k);
@@ -516,10 +524,10 @@
         legend: { display: false },
         tooltip: { backgroundColor: t.surface, titleColor: t.ink, bodyColor: t.ink, borderColor: t.hair, borderWidth: 1, padding: 8,
                    titleFont: { family: css("--sans"), size: 11 }, bodyFont: { family: css("--mono"), size: 11 },
-                   callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y, unit === "Hz" ? 2 : 1)} ${unit}` } },
+                   callbacks: { title: (items) => items.length ? [].concat(items[0].label).join(" ") : "", label: (c) => ` ${c.dataset.label}: ${fmt(c.parsed.y, unit === "Hz" ? 2 : 1)} ${unit}` } },
       },
       scales: {
-        x: { grid: { color: t.grid, drawTicks: false }, border: { color: t.grid }, ticks: { color: t.tick, maxTicksLimit: 6, autoSkipPadding: 28, maxRotation: 0, font: { family: css("--mono"), size: 10 } } },
+        x: { grid: { color: t.grid, drawTicks: false }, border: { color: t.grid }, ticks: { color: t.tick, maxTicksLimit: 6, autoSkipPadding: 40, maxRotation: 0, align: "inner", font: { family: css("--mono"), size: 10 } } },
         y: { grid: { color: t.grid, drawTicks: false }, border: { display: false }, ...extra.y,
              ticks: { color: t.tick, maxTicksLimit: 5, font: { family: css("--mono"), size: 10 }, callback: (v) => fmt(v, unit === "Hz" ? 1 : 0), ...((extra.y || {}).ticks || {}) } },
       },
@@ -529,7 +537,7 @@
   function labelsFor(t) {
     const long = (t[t.length - 1] - t[0]) > 48 * 3600e3;
     const hm = { hour: "2-digit", minute: "2-digit", hour12: false };
-    return t.map((ms) => { const d = new Date(ms); return long ? d.toLocaleDateString(undefined, { day: "2-digit", month: "short" }) + " " + d.toLocaleTimeString(undefined, hm) : d.toLocaleTimeString(undefined, hm); });
+    return t.map((ms) => { const d = new Date(ms); return long ? [d.toLocaleDateString(undefined, { day: "2-digit", month: "short" }), d.toLocaleTimeString(undefined, hm)] : d.toLocaleTimeString(undefined, hm); });
   }
   function upsert(id, labels, datasets, options) {
     const c = charts[id];
@@ -594,7 +602,7 @@
     if (has(S.grid_available)) upsert("c-grid", L, [ds("Grid", S.grid_available.map((v) => v === null ? null : (v >= 0.5 ? 1 : 0)), C("--c-grid"), { stepped: true, fill: true, backgroundColor: C("--c-grid") + "44" })],
       baseOptions("", { y: { min: 0, max: 1, ticks: { stepSize: 1, callback: (v) => v === 1 ? "on" : v === 0 ? "off" : "" } } }));
     show("p-freq", has(S.frequency_hz));
-    if (has(S.frequency_hz)) upsert("c-freq", L, [ds("Frequency", S.frequency_hz, C("--c-load")), ds("50 Hz", S.frequency_hz.map(() => 50), C("--ink-tertiary"), { borderDash: [3, 5], borderWidth: 1 })], baseOptions("Hz", { y: { suggestedMin: 48, suggestedMax: 52 } }));
+    if (has(S.frequency_hz)) upsert("c-freq", L, [ds("Frequency", S.frequency_hz, C("--c-load")), ds("50 Hz", S.frequency_hz.map((v) => v === null ? null : 50), C("--ink-tertiary"), { borderDash: [3, 5], borderWidth: 1 })], baseOptions("Hz", { y: { suggestedMin: 48, suggestedMax: 52 } }));
     show("p-load", has(S.load_kw));
     if (has(S.load_kw)) upsert("c-load", L, [ds("Load", S.load_kw, C("--c-load"), { fill: true, backgroundColor: C("--c-load") + "33" })], baseOptions("kW", { y: { min: 0 } }));
   }
@@ -605,7 +613,7 @@
     $("#evRange").textContent = `last ${hours >= 48 ? hours / 24 + " days" : hours + " h"}`;
     const el = $("#eventList");
     if (!r.events.length) { el.innerHTML = `<li class="empty">No events in this window.</li>`; return; }
-    el.innerHTML = r.events.map((e) => `<li><span class="sev ${e.severity}"></span><span>${esc(e.message)}</span><time>${new Date(e.ts).toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</time></li>`).join("");
+    el.innerHTML = r.events.map((e) => `<li><span class="sev ${e.severity}"></span><span>${esc(e.message)}</span><time>${new Date(e.ts).toLocaleDateString(undefined, { day: "2-digit", month: "short" })} ${new Date(e.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}</time></li>`).join("");
   }
 
   // ------------------------------------------------------------------ points
@@ -635,6 +643,17 @@
   });
   $("#repDate").value = new Date().toISOString().slice(0, 10);
   $("#repGo").addEventListener("click", () => { window.location.href = `/api/v1/local/report.xlsx?date=${$("#repDate").value}`; toast("Preparing the report…"); });
+
+  // ------------------------------------------------------------------ read now
+  $("#pollBtn").addEventListener("click", async () => {
+    const b = $("#pollBtn"); b.classList.add("busy");
+    try {
+      const r = await (await fetch("/api/v1/local/poll", { method: "POST" })).json();
+      toast(`Read done in ${r.took_s} s: ${r.answering} of ${r.total} devices answering`);
+      await loadSummary(); loadPoints(); loadSeries(); loadAlarms();
+    } catch (e) { toast("Could not reach the collector."); }
+    b.classList.remove("busy");
+  });
 
   // ------------------------------------------------------------------ run
   loadSummary().then(loadSeries); loadAlarms(); loadPoints();

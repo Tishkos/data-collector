@@ -5,6 +5,7 @@ Collector core: registry + adapters + store + a few health checks + daily totals
 from __future__ import annotations
 
 import os
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -44,6 +45,7 @@ class Collector:
         self._comms_lost: set[str] = set()
         self._alarm_on: set[str] = set()
         self._grid_off: set[str] = set()
+        self._poll_lock = threading.RLock()
         self.started_at = datetime.now(timezone.utc)
         self.polls = 0
         self.last_poll_at: datetime | None = None
@@ -83,6 +85,11 @@ class Collector:
     # --- polling ----------------------------------------------------------------------
 
     def poll(self) -> None:
+        """Read every device once. Safe to call from the API thread while the loop runs."""
+        with self._poll_lock:
+            self._poll()
+
+    def _poll(self) -> None:
         for did, ad in self.adapters.items():
             try:
                 rows = ad.read()
@@ -99,11 +106,12 @@ class Collector:
         """Simulator only: move simulated time forward, polling every `step` seconds."""
         assert self.plant is not None
         left = seconds
-        while left > 0:
-            s = min(step, left)
-            self.plant.step(s)
-            left -= s
-            self.poll()
+        with self.store.bulk():
+            while left > 0:
+                s = min(step, left)
+                self.plant.step(s)
+                left -= s
+                self.poll()
 
     def _health(self, did: str, rows) -> None:
         """Minimal event log: comms lost/restored and controller alarm bits."""

@@ -1,9 +1,10 @@
 """
-HTTP API + dashboard. All GET. Nothing here can write to a device.
+HTTP API + dashboard. Nothing here can write to a device; the one POST triggers a read.
 
   /                               dashboard
   /api/v1/health                  collector status
   /api/v1/local/summary           live values, KPIs, device comms, active faults
+  POST /api/v1/local/poll         read every device now (a read, not a write)
   /api/v1/local/series            time series (hours= | from= to=, step=, keys=)
   /api/v1/local/alarms            event log (hours=)
   /api/v1/local/tags              every point with its latest value
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Query, Response
@@ -63,6 +65,15 @@ def create_app(c: Collector) -> FastAPI:
     @app.get("/api/v1/local/summary")
     def summary():
         return views.summary(c)
+
+    @app.post("/api/v1/local/poll")
+    def poll_now():
+        """Read every device right now (the only POST; it reads, it does not write)."""
+        t0 = time.time()
+        c.poll()
+        devs = {d: views.device_comms(c, d) for d in c.registry.devices}
+        return {"ok": True, "took_s": round(time.time() - t0, 2), "time": c.last_poll_at.isoformat(),
+                "devices": devs, "answering": sum(1 for v in devs.values() if v == "ok"), "total": len(devs)}
 
     @app.get("/api/v1/local/series")
     def series(hours: float | None = Query(None, gt=0, le=24 * MAX_EXPORT_DAYS), frm: str | None = Query(None, alias="from"),

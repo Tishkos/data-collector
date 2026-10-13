@@ -13,6 +13,7 @@ import argparse
 import os
 import sys
 import threading
+import time
 import webbrowser
 from datetime import datetime, timedelta, timezone
 
@@ -43,6 +44,22 @@ def _log_to_file(path: str) -> None:
     sys.stdout = sys.stderr = _Stream()
 
 
+def _wait_for_port(host: str, port: int, seconds: int = 40) -> None:
+    """A previous instance may still be closing; wait for the port instead of failing."""
+    import socket
+    for i in range(seconds):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sk:
+            sk.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sk.bind(("" if host == "0.0.0.0" else host, port))
+                return
+            except OSError:
+                if i == 0:
+                    print(f"[collector] port {port} is busy, waiting for it to free up...")
+                time.sleep(1)
+    print(f"[collector] port {port} still busy after {seconds} s; starting anyway")
+
+
 def cmd_run(a) -> int:
     import uvicorn
     from .api import create_app
@@ -64,6 +81,7 @@ def cmd_run(a) -> int:
     t = threading.Thread(target=run_loop, args=(c, a.interval, stop), daemon=True, name="poller")
     t.start()
     url = f"http://localhost:{a.port}"
+    _wait_for_port(a.host, a.port)
     print(f"[collector] dashboard: {url}   api: {url}/api/docs   database: {c.db_path}")
     if a.open:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
