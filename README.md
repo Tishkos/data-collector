@@ -13,6 +13,7 @@ CHECK-PLANT.bat      one poll of the real plant, every point printed — the com
 STOP.bat             stop the collector
 UNINSTALL.bat        remove it from Windows startup (the data stays)
 OPEN-DASHBOARD.bat   http://localhost:8080
+RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows every message; stops when closed)
 ```
 
 The first start installs Python (if missing) and the packages, so it needs internet once.
@@ -59,7 +60,7 @@ Changing the poll rate: one number, `poll_interval_s` in `config\site.plant.yaml
 ## Folder map
 
 ```
-START.bat, START-PLANT.bat, CHECK-PLANT.bat, STOP.bat, UNINSTALL.bat, OPEN-DASHBOARD.bat
+START.bat, START-PLANT.bat, CHECK-PLANT.bat, STOP.bat, UNINSTALL.bat, OPEN-DASHBOARD.bat, RUN-IN-WINDOW.bat
 scripts\run.ps1                     what the START scripts run (Python, packages, Windows task, browser)
 scripts\stop.ps1, uninstall-service.ps1
 config\site.yaml                    demo

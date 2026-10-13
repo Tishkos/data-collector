@@ -4,6 +4,7 @@
 #   START.bat            demo plant (config\site.yaml)
 #   START-PLANT.bat      real plant (config\site.plant.yaml), read-only polling
 #   CHECK-PLANT.bat      one poll of the real plant, every point printed (no background task)
+#   RUN-IN-WINDOW.bat    run in the console instead (no Windows task); shows every message
 #   STOP.bat             stop the background collector
 #   UNINSTALL.bat        remove the Windows task (data stays in data\)
 #
@@ -108,13 +109,24 @@ if (-not $isAdmin) {
 if (-not $Elevated) {
     $url = "http://localhost:$Port"
     $ok = $false
-    for ($i = 0; $i -lt 60; $i++) {
-        try { Invoke-RestMethod "$url/api/v1/health" -TimeoutSec 2 | Out-Null; $ok = $true; break } catch { Start-Sleep -Seconds 1 }
+    Write-Host "[collector] Waiting for the collector to answer on $url (the demo first generates 3 days of history) " -ForegroundColor Cyan -NoNewline
+    for ($i = 0; $i -lt 90; $i++) {
+        try { Invoke-RestMethod "$url/api/v1/health" -TimeoutSec 2 -UseBasicParsing | Out-Null; $ok = $true; break } catch { Write-Host "." -NoNewline; Start-Sleep -Seconds 1 }
     }
+    Write-Host ""
     if ($ok) {
         Say "Collector is running. Dashboard: $url   (log: data\collector.log)"
         if (-not $NoBrowser) { Start-Process $url }
     } else {
-        Warn "The collector did not answer on $url within 60 s. See data\collector.log"
+        Warn "The collector did not answer on $url within 90 s. Diagnostics:"
+        try {
+            $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+            $info = $t | Get-ScheduledTaskInfo
+            Write-Host ("  task state: {0}   last run: {1}   last result: {2}" -f $t.State, $info.LastRunTime, $info.LastTaskResult)
+        } catch { Write-Host "  task '$TaskName' not found" }
+        $log = Join-Path $root "data\collector.log"
+        if (Test-Path $log) { Write-Host "  last lines of data\collector.log:"; Get-Content $log -Tail 15 | ForEach-Object { Write-Host "    $_" } }
+        else { Write-Host "  data\collector.log was not created - the task did not start Python at all." }
+        Write-Host "  To see the error directly, run:  powershell -ExecutionPolicy Bypass -File scripts\run.ps1 -Foreground" -ForegroundColor Yellow
     }
 }
