@@ -22,12 +22,13 @@ sys.path.insert(0, ROOT)
 from openpyxl import load_workbook  # noqa: E402
 
 from plantcollector.publish import HEADER, MAP_VERSION, QUALITY_START, VALUES_START, build_map  # noqa: E402
+from plantcollector.registry import load_registry  # noqa: E402
 from plantcollector.views import load_tag_catalog  # noqa: E402
 
 WORKBOOKS = ["docs/turkey/Solar_Tag_List_Rev.1.2.xlsx", "docs/turkey/Solar_Inverter_Tag_List_Rev.1.2.xlsx"]
 
 
-def write_markdown(tags: list[dict], host: str, port: int, unit: int) -> str:
+def write_markdown(tags: list[dict], host: str, port: int, unit: int, reg=None) -> str:
     lines = [
         "# Modbus TCP register map for the CCI / DT Turkey platform",
         "",
@@ -63,18 +64,29 @@ def write_markdown(tags: list[dict], host: str, port: int, unit: int) -> str:
         "",
         "## Tags",
         "",
-        "| # | Tag name | Address | Registers | Type | Unit | Quality address | Source |",
-        "|---|---|---|---|---|---|---|---|",
+        "| # | Tag name | Address | Registers | Type | Unit | Quality address | Source | Status |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for t in tags:
         lines.append(f"| {t['index']} | {t['name']} | {t['address']} | {t['registers']} | {t['type']} | {t['unit']} | "
-                     f"{t['quality_address']} | {t['device']}.{t['point']} |")
+                     f"{t['quality_address']} | {t['device']}.{t['point']} | {source_status(reg, t)} |")
     lines += ["", f"Value block: {VALUES_START}–{tags[-1]['address'] + tags[-1]['registers'] - 1}. "
                   f"Quality block: {QUALITY_START}–{QUALITY_START + len(tags) - 1}.", ""]
     return "\n".join(lines)
 
 
-def fill_workbook(path: str, by_name: dict[str, dict], host: str, port: int, unit: int) -> int:
+def source_status(reg, t: dict) -> str:
+    """Whether the tag's source point is wired to a register on the plant yet."""
+    d = reg.devices.get(t["device"]) if reg else None
+    p = d.point(t["point"]) if d else None
+    if p is None:
+        return "Pending - no such device on site yet"
+    if "address" in p.raw or (p.raw.get("derived") and any("address" in q.raw for q in d.points)):
+        return "Ready"
+    return "Pending - register map of the source device not yet available"
+
+
+def fill_workbook(path: str, by_name: dict[str, dict], host: str, port: int, unit: int, reg=None) -> int:
     wb = load_workbook(path)
     ws = wb[wb.sheetnames[0]]
     head = [str(c.value).strip() if c.value is not None else "" for c in ws[1]]
@@ -102,7 +114,7 @@ def fill_workbook(path: str, by_name: dict[str, dict], host: str, port: int, uni
         put(row, "register type", f"Holding (FC03), {t['registers']} reg" + ("s" if t["registers"] > 1 else ""))
         put(row, "data type", "Float32 (ABCD)" if t["type"] == "float32" else "Boolean (uint16 0/1)")
         put(row, "scale", 1)
-        put(row, "status", f"Ready — quality register {t['quality_address']}")
+        put(row, "status", f"{source_status(reg, t)} - quality register {t['quality_address']}")
     wb.save(path)
     return n
 
@@ -112,15 +124,17 @@ def main() -> int:
     ap.add_argument("--host", default="<plant-pc-vpn-ip>")
     ap.add_argument("--port", type=int, default=502)
     ap.add_argument("--unit", type=int, default=1)
+    ap.add_argument("--config", default="config/site.plant.yaml", help="plant config, for the per-tag readiness column")
     a = ap.parse_args()
+    reg = load_registry(os.path.join(ROOT, a.config)) if os.path.exists(os.path.join(ROOT, a.config)) else None
     tags = build_map(load_tag_catalog())
     by_name = {t["name"]: t for t in tags}
     md = os.path.join(ROOT, "docs", "TURKEY_MODBUS.md")
     with open(md, "w", encoding="utf-8") as f:
-        f.write(write_markdown(tags, a.host, a.port, a.unit))
+        f.write(write_markdown(tags, a.host, a.port, a.unit, reg))
     print(f"wrote {md} ({len(tags)} tags)")
     for wb in WORKBOOKS:
-        n = fill_workbook(os.path.join(ROOT, wb), by_name, a.host, a.port, a.unit)
+        n = fill_workbook(os.path.join(ROOT, wb), by_name, a.host, a.port, a.unit, reg)
         print(f"filled {n} rows in {wb}")
     return 0
 

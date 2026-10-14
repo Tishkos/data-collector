@@ -1,47 +1,80 @@
-# Device profile: one Sineng string inverter, read THROUGH the SAU-100 gateway (read-only).
+# Device profile: one Sineng SP-320K-H string inverter, read THROUGH the SAU-100 gateway (read-only).
 #
-# All ten inverters share this profile; config/site.plant.yaml sets the unit_id per inverter.
-# Registers are PLACEHOLDERS until the SAU point table / Sineng Modbus protocol for the
-# installed model is available. The collector reads each inverter as ONE block.
+# Site facts (SAU device export 2026-10-14): 10 x SP-320K-H, 320 kW / 320 kVA each (3.2 MW),
+# inner model "Inverter_S-SINENG-SPxxxKHUx12" = 12 string inputs, AC side 800 V (line voltage
+# ~834 V). Named on the SAU "winding 1 INV#1..5" and "winding 2 INV#1..5" (two transformer
+# windings; RS485 addresses 1-5 on COM1, 6-10 on COM2). config/site.plant.yaml sets the unit id.
+#
+# `sau_id` is the SAU's own data ID of each signal (Device Monitor export). It is NOT a Modbus
+# register. The registers the SAU answers on port 502 come from its Modbus TCP point table
+# (SAU-WEB -> Setting, advanced login) or Sineng's SAU/inverter Modbus protocol - still to be
+# obtained. Until then the points carry no `address`: the collector reports them as
+# "no register mapping" (quality bad) instead of showing numbers from guessed registers.
+# When the table arrives: add raw.address / kind / scale next to each sau_id; nothing else changes.
 #
 # Point ids here are what profiles/tag_catalog.yaml maps the DT Turkey tag names onto.
 
 kind: pv
 vendor: Sineng
-model: "SP-xxxK-HU string inverter, 12 strings (exact rating TBC)"
-profile_revision: 2
-profile_status: draft
-source_document: "SAU-100 point table / Sineng Modbus protocol — TO BE ATTACHED"
+model: "SP-320K-H string inverter, 320 kW, 12 strings"
+profile_revision: 3
+profile_status: pending point table
+source_document: "SAU-100 device export device_data_2.xlsx (2026-10-14); SAU Modbus TCP point table - TO BE OBTAINED"
+
+limits: {rated_kw: 320}
 
 points:
-  - {id: ac_power_kw,       unit: kW,  raw: {address: 0,  kind: uint32, scale: 0.001}}   # TODO
-  - {id: dc_power_kw,       unit: kW,  raw: {address: 2,  kind: uint32, scale: 0.001}}   # TODO
-  - {id: frequency_hz,      unit: Hz,  raw: {address: 4,  kind: uint16, scale: 0.01}}    # TODO
-  - {id: current_l1_a,      unit: A,   raw: {address: 5,  kind: uint16, scale: 0.1}}     # TODO
-  - {id: current_l2_a,      unit: A,   raw: {address: 6,  kind: uint16, scale: 0.1}}     # TODO
-  - {id: current_l3_a,      unit: A,   raw: {address: 7,  kind: uint16, scale: 0.1}}     # TODO
-  - {id: voltage_l1_v,      unit: V,   raw: {address: 8,  kind: uint16, scale: 0.1}}     # TODO
-  - {id: voltage_l2_v,      unit: V,   raw: {address: 9,  kind: uint16, scale: 0.1}}     # TODO
-  - {id: voltage_l3_v,      unit: V,   raw: {address: 10, kind: uint16, scale: 0.1}}     # TODO
-  - {id: energy_today_kwh,  unit: kWh, raw: {address: 11, kind: uint32, scale: 0.1}}     # TODO
-  - {id: energy_total_kwh,  unit: kWh, raw: {address: 13, kind: uint32, scale: 1.0}}     # TODO
+  - {id: ac_power_kw,       unit: kW,  raw: {sau_id: 66500}, description: "Output active power"}
+  - {id: reactive_kvar,     unit: kVAr, raw: {sau_id: 66501}, description: "Output reactive power"}
+  - {id: power_factor,      unit: "",  raw: {sau_id: 66502}, description: "Output power factor"}
+  - {id: dc_power_kw,       unit: kW,  raw: {sau_id: 66200}, description: "PV input total power"}
+  - {id: frequency_hz,      unit: Hz,  raw: {sau_id: 66506}, description: "Grid frequency"}
+  - {id: current_l1_a,      unit: A,   raw: {sau_id: 66503}, description: "Phase A output current"}
+  - {id: current_l2_a,      unit: A,   raw: {sau_id: 66504}, description: "Phase B output current"}
+  - {id: current_l3_a,      unit: A,   raw: {sau_id: 66505}, description: "Phase C output current"}
+  - {id: voltage_l1_v,      unit: V,   raw: {sau_id: 66507}, description: "Grid AB line voltage (800 V side)"}
+  - {id: voltage_l2_v,      unit: V,   raw: {sau_id: 66508}, description: "Grid BC line voltage"}
+  - {id: voltage_l3_v,      unit: V,   raw: {sau_id: 66509}, description: "Grid CA line voltage"}
+  - {id: energy_today_kwh,  unit: kWh, raw: {sau_id: 66700}, description: "Daily power generation"}
+  - {id: energy_month_kwh,  unit: kWh, raw: {sau_id: 66701}, description: "Monthly power generation"}
+  - {id: energy_year_kwh,   unit: kWh, raw: {sau_id: 66702}, description: "Yearly power generation"}
+  - {id: energy_total_kwh,  unit: kWh, raw: {sau_id: 66703}, description: "Total power generation"}
   - {id: comm_error,        type: boolean, raw: {derived: comm_error}, description: "set by the collector: inverter not answering"}
-  # string currents: the installed model has 12 string inputs (SPxxxKHUx12); 13-17 kept for the Turkey
-  # template and will read as not available on the real device
-  - {id: string_current_1_a,  unit: A, raw: {address: 20, kind: uint16, scale: 0.01}}  # TODO
-  - {id: string_current_2_a,  unit: A, raw: {address: 21, kind: uint16, scale: 0.01}}
-  - {id: string_current_3_a,  unit: A, raw: {address: 22, kind: uint16, scale: 0.01}}
-  - {id: string_current_4_a,  unit: A, raw: {address: 23, kind: uint16, scale: 0.01}}
-  - {id: string_current_5_a,  unit: A, raw: {address: 24, kind: uint16, scale: 0.01}}
-  - {id: string_current_6_a,  unit: A, raw: {address: 25, kind: uint16, scale: 0.01}}
-  - {id: string_current_7_a,  unit: A, raw: {address: 26, kind: uint16, scale: 0.01}}
-  - {id: string_current_8_a,  unit: A, raw: {address: 27, kind: uint16, scale: 0.01}}
-  - {id: string_current_9_a,  unit: A, raw: {address: 28, kind: uint16, scale: 0.01}}
-  - {id: string_current_10_a, unit: A, raw: {address: 29, kind: uint16, scale: 0.01}}
-  - {id: string_current_11_a, unit: A, raw: {address: 30, kind: uint16, scale: 0.01}}
-  - {id: string_current_12_a, unit: A, raw: {address: 31, kind: uint16, scale: 0.01}}
-  - {id: string_current_13_a, unit: A, raw: {address: 32, kind: uint16, scale: 0.01}}
-  - {id: string_current_14_a, unit: A, raw: {address: 33, kind: uint16, scale: 0.01}}
-  - {id: string_current_15_a, unit: A, raw: {address: 34, kind: uint16, scale: 0.01}}
-  - {id: string_current_16_a, unit: A, raw: {address: 35, kind: uint16, scale: 0.01}}
-  - {id: string_current_17_a, unit: A, raw: {address: 36, kind: uint16, scale: 0.01}}
+  - {id: grid_connected,    type: boolean, raw: {sau_id: 1},  description: "The inverter is connected to the grid for power generation"}
+  - {id: running_with_alarm, type: boolean, raw: {sau_id: 2}}
+  - {id: derated,           type: boolean, raw: {sau_id: 3}}
+  - {id: fault,             type: boolean, raw: {sau_id: 4},  description: "Inverter failure"}
+  - {id: standby,           type: boolean, raw: {sau_id: 5}}
+  - {id: dormant,           type: boolean, raw: {sau_id: 6},  description: "night / no DC"}
+  - {id: warning,           type: boolean, raw: {sau_id: 20}, description: "Inverter warning"}
+  # string currents: the installed model has 12 string inputs; 13-17 kept for the Turkey template
+  # and will read as not available on the real device
+  - {id: string_current_1_a,  unit: A, raw: {sau_id: 1010}}
+  - {id: string_current_2_a,  unit: A, raw: {sau_id: 1011}}
+  - {id: string_current_3_a,  unit: A, raw: {sau_id: 1012}}
+  - {id: string_current_4_a,  unit: A, raw: {sau_id: 1013}}
+  - {id: string_current_5_a,  unit: A, raw: {sau_id: 1014}}
+  - {id: string_current_6_a,  unit: A, raw: {sau_id: 1015}}
+  - {id: string_current_7_a,  unit: A, raw: {sau_id: 1016}}
+  - {id: string_current_8_a,  unit: A, raw: {sau_id: 1017}}
+  - {id: string_current_9_a,  unit: A, raw: {sau_id: 1018}}
+  - {id: string_current_10_a, unit: A, raw: {sau_id: 1019}}
+  - {id: string_current_11_a, unit: A, raw: {sau_id: 1020}}
+  - {id: string_current_12_a, unit: A, raw: {sau_id: 1021}}
+  - {id: string_current_13_a, unit: A, raw: {}, description: "not on this model"}
+  - {id: string_current_14_a, unit: A, raw: {}, description: "not on this model"}
+  - {id: string_current_15_a, unit: A, raw: {}, description: "not on this model"}
+  - {id: string_current_16_a, unit: A, raw: {}, description: "not on this model"}
+  - {id: string_current_17_a, unit: A, raw: {}, description: "not on this model"}
+  - {id: string_voltage_1_v,  unit: V, raw: {sau_id: 1042}}
+  - {id: string_voltage_2_v,  unit: V, raw: {sau_id: 1043}}
+  - {id: string_voltage_3_v,  unit: V, raw: {sau_id: 1044}}
+  - {id: string_voltage_4_v,  unit: V, raw: {sau_id: 1045}}
+  - {id: string_voltage_5_v,  unit: V, raw: {sau_id: 1046}}
+  - {id: string_voltage_6_v,  unit: V, raw: {sau_id: 1047}}
+  - {id: string_voltage_7_v,  unit: V, raw: {sau_id: 1048}}
+  - {id: string_voltage_8_v,  unit: V, raw: {sau_id: 1049}}
+  - {id: string_voltage_9_v,  unit: V, raw: {sau_id: 1050}}
+  - {id: string_voltage_10_v, unit: V, raw: {sau_id: 1051}}
+  - {id: string_voltage_11_v, unit: V, raw: {sau_id: 1052}}
+  - {id: string_voltage_12_v, unit: V, raw: {sau_id: 1053}}

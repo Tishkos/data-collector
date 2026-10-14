@@ -174,10 +174,11 @@ class Collector:
         ts = self.now()
         dev = self.registry.devices[did]
         measured = [r for pid, r in rows.items() if not (dev.point(pid) and dev.point(pid).raw.get("derived"))]
-        all_bad = bool(measured) and all(r.quality == Quality.BAD for r in measured)
+        asked = [r for r in measured if not (r.error or "").startswith("no register mapping")]   # unmapped points were never requested
+        all_bad = bool(asked) and all(r.quality == Quality.BAD for r in asked)
         if all_bad and did not in self._comms_lost:
             self._comms_lost.add(did)
-            err = next((r.error for r in rows.values() if r.error), "")
+            err = next((r.error for r in asked if r.error), "")
             self.store.event("comms_lost", f"{did}: no valid data ({err})", device_id=did, severity="error", code="COMMS_LOST", ts=ts)
         elif not all_bad and did in self._comms_lost:
             self._comms_lost.discard(did)

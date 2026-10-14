@@ -81,3 +81,77 @@ def test_unreachable_device_marks_everything_bad():
     out = ad.read()
     assert all(r.quality == Quality.BAD for pid, r in out.items() if pid != "comm_error")
     assert out["comm_error"].value is True
+
+
+# --- the InteliNeo layout: a fake controller with the registers of the real Modbus export -----------
+NEO_PORT = 15021
+
+
+@pytest.fixture(scope="module")
+def neo_server():
+    regs = [0] * 1400
+    regs[1040] = 1250                                   # PV Actual P 1250 kW
+    regs[1041] = 0xFF9C                                 # PV Actual Q -100 kVAr
+    regs[1046] = 9588                                   # Curtailment Output 95.88 %
+    regs[1068], regs[1069] = 0x0000, 1482               # Gensets P int32 = 1482 kW
+    regs[1074], regs[1075] = 0x0000, 50010              # Mains/Bus Frequency 50.010 Hz
+    regs[1076], regs[1082] = 241, 241
+    regs[1085] = 0xFFCE                                 # Mains Import P -50 kW (export)
+    regs[1149] = 0b00001111                             # PV1, PV2, UPS1, UPS2 feedback
+    regs[1151] = 0b10100000                             # UPS1 OFF, UPS2 OFF
+    regs[1189] = 2                                      # AUTO
+    regs[1227] = 0b10111                                # Gen 1,2,3,5 loaded
+    regs[1259] = 0b1000                                 # Any GCB Closed
+    regs[1260] = 0x0001                                 # Common Warning
+    regs[1268] = 0b100                                  # ECU 3 Comm Fail
+    store = ModbusDeviceContext(hr=ModbusSequentialDataBlock(1, regs), ir=ModbusSequentialDataBlock(1, regs))
+    ctx = ModbusServerContext(devices={1: store}, single=False)
+    import asyncio
+    holder = {}
+
+    async def serve():
+        holder["srv"] = ModbusTcpServer(ctx, address=("127.0.0.1", NEO_PORT))
+        await holder["srv"].serve_forever()
+
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=lambda: loop.run_until_complete(serve()), daemon=True).start()
+    time.sleep(1.0)
+    yield holder
+    loop.call_soon_threadsafe(lambda: asyncio.ensure_future(holder["srv"].shutdown()))
+
+
+def test_intelineo_profile_against_fake_controller(neo_server):
+    from plantcollector.registry import load_registry
+    reg = load_registry("config/site.plant.yaml")
+    neo = reg.devices["neo-01"].model_copy(update={"connection": {"host": "127.0.0.1", "port": NEO_PORT, "unit_id": 1, "timeout": 1}})
+    ad = ModbusTcpAdapter(neo)
+    assert len(ad._blocks) == 3 and all(n <= 100 for _, _, n, _ in ad._blocks)     # three block reads per hour, that's all
+    out = ad.read()
+    bad = [pid for pid, r in out.items() if r.quality != Quality.GOOD]
+    assert bad == [], bad
+    assert out["pv_prod_kw"].value == 1250 and out["pv_q_kvar"].value == -100
+    assert out["pv_curtailment_pct"].value == pytest.approx(95.88)
+    assert out["power_kw"].value == 1482 and out["mains_power_kw"].value == -50
+    assert out["bus_frequency_hz"].value == pytest.approx(50.010) and out["bus_voltage_v"].value == 241
+    assert out["load_kw"].value == pytest.approx(1482 - 50 + 1250)                 # derived sum
+    assert out["pvcb_closed"].value is True and out["pvcb_open"].value is False     # invert
+    assert out["ups1_off_cmd"].value is True and out["ups2_on_cmd"].value is False
+    assert out["controller_mode"].value == 2
+    assert [out[f"g{i}_running"].value for i in range(1, 6)] == [True, True, True, False, True]
+    assert out["running"].value is True
+    assert out["alarm_active"].value is True and out["common_shutdown"].value is False   # mask
+    assert out["pv_logger_comm_fail"].value is True and out["ecu2_comm_fail"].value is False
+    assert out["comm_error"].value is False
+    ad.close()
+
+
+def test_address_offset_and_sum_needs_good_inputs(neo_server):
+    """address_offset shifts every request; a derived sum is bad when an input is bad."""
+    d = Device(id="t", kind="genset", adapter="modbus_tcp",
+               connection={"host": "127.0.0.1", "port": NEO_PORT, "unit_id": 1, "timeout": 1, "address_offset": -1},
+               points=[PointDefinition(id="pv", raw={"address": 1041, "kind": "int16"}),          # reads 1040 -> 1250
+                       PointDefinition(id="total", raw={"derived": "sum", "of": ["pv", "nope"]}),
+                       PointDefinition(id="nope")])
+    out = ModbusTcpAdapter(d).read()
+    assert out["pv"].value == 1250
+    assert out["total"].quality == Quality.BAD and "nope" in out["total"].error

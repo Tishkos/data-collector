@@ -1,35 +1,56 @@
 # Still needed from the site
 
-The program is complete; these are the numbers that turn the placeholder register maps
-into real ones. Each item names the file it goes into.
+Updated after the remote session of 2026-10-14. The InteliNeo side is mapped; what is left is
+the inverter register map and a few confirmations on the first live read.
 
-## 1. ComAp InteliNeo 5500 (site master)
-- [ ] InteliConfig → Modules → **Modbus Registers** tab: export (or screenshots) of the register
-      list → `profiles\intelineo_master.yaml`
-- [ ] The controller's Modbus **unit id** (device address, default 1) → `config\site.plant.yaml` `neo-01.connection.unit_id`
-- [ ] Word order of 32-bit values (checked on the first live read; `word_order: little` if values look wild)
-- [ ] Names of the per-genset values exposed by the master (G1…G5 power, running, fuel) — if the master does
-      not expose them, each genset controller is added as its own device with `profiles\genset_comap.yaml`
+## 1. ComAp InteliNeo 5500 (site master) - DONE, verify on first live read
+- [x] Modbus register list (Generate Cfg image MODBUS, 2026-10-14) → `profiles\intelineo_master.yaml`
+- [x] Modbus unit id = **1** (Setpoints: Modbus Server Address 1; CAN address 9 is not it)
+- [ ] First `CHECK-PLANT.bat`: `bus_frequency_hz` ≈ 50, `bus_voltage_v` ≈ 241, `power_kw` = the kW on the
+      controller screen. If the voltages look shifted by one register the table is 1-based →
+      `address_offset: -1` on `neo-01` in `config\site.plant.yaml`.
+- [ ] `pvcb_closed` = 1 while the PV breaker is closed (bit order of Binary Inputs); `g1..g5_running`
+      match the gensets that are actually loaded (Gen Loaded 16 bit order)
+- [ ] ECU order of the Neo's Modbus-master devices (profile assumes ECU 2 and 3 = PV logger groups
+      1 and 2): check in the archive, Controller configuration → Modbus master, or at the next
+      "PV Logger Comm Fail" warning
+- [ ] If the plant agrees to extend the controller's Modbus list later: PV logger values (Daily yield,
+      Max Active Power Available, inverter counts), the three InteliMains readings, PLC "Load P site",
+      the Statistics group (PV / Gen kWh, fuel). Com. objects are listed in the profile header.
 
-## 2. Sineng inverters through the SAU-100
-- [ ] Inverter **model** (nameplate photo) and number of string inputs
-- [ ] SAU **point table** (SAU web page → communication / Modbus settings, or the Sineng Modbus
-      protocol document for the model) → `profiles\inverter_sineng.yaml`
-- [ ] Each inverter's **unit id** on the SAU → the ten `unit_id`s in `config\site.plant.yaml`
-- [ ] Is a pyranometer / temperature sensor connected to the SAU? Its address → `profiles\pv_sunspec.yaml`
-      (the Turkey list has IRRADIANCE, MODULE/AMBIENT TEMPERATURE)
+## 2. Sineng inverters through the SAU-100 - the one open item for the Turkey tags
+- [x] Model **SP-320K-H**, 320 kW, 12 strings, 10 units (SAU export) ; unit ids 1-10 assumed = RS485 addresses
+- [x] Signal list with the SAU's data IDs → `profiles\inverter_sineng.yaml` (`sau_id` per point)
+- [ ] **SAU Modbus TCP point table** = which register holds which data ID for which unit id.
+      Sources, any one of: SAU-WEB → Setting with the *advanced* or *super* login (the *general*
+      login shows no protocol pages), Sineng support ("SAU-100 Modbus TCP point table / northbound
+      protocol" for SmartCMSHU121B 0.7.3), or a register scan from the plant PC (the PowerShell dump
+      script of 14 Oct, `modbus_dump.csv`) matched against the live values in Device Monitor.
+      → `raw.address / kind / scale` next to each `sau_id`.
+- [ ] The SAU's virtual array device (unit 245, answers at register 0): its map would give PV totals
+      and energies for the plant-level tags (Real energy delivered, Total_Energy)
+- [x] Pyranometer / panel temperature: **no such sensor on site** (SAU device list) - the two
+      `pv-env` tags stay unmapped unless a sensor is added
 
 ## 3. Mains and meter
-- [ ] Where does the plant read mains power and "mains available"? (InteliNeo master values, an
-      InteliMains 210, or a separate meter) → `mains_power_kw` / `mains_available` in the InteliNeo
-      profile, or a device with `profiles\grid_mains.yaml`
-- [ ] LV panel meter: brand/model, address, is it on the SAU or on its own IP → `profiles\meter_site.yaml`
+- [x] Mains power / availability come from the Neo (Mains Import P, MCB Status) - `mains_available`
+      to be confirmed the first time the grid is on
+- [x] No PV-side LV meter on the SAU (M1 = generator feeder Acrel PZ96L-E4, M3 = grid feeder Sfere
+      PD194E, no data). The Turkey "pv-meter" tags: Psum3 / Qsum3 / Voltage L1-3 N come from the
+      Neo's PV aggregate and bus; currents and energies unmapped until a meter or the SAU totals exist
 
-## 4. Plant PC
-- [ ] Which PC runs it (the SCADA PC at 192.168.0.x is fine), and that it stays on 24/7
-- [ ] A short written OK from Mr Baban / plant management for read-only data collection
-- [ ] Whether Turkey may reach `http://<pc-ip>:8080` (VPN) or receives exported files instead
+## 4. Plant PC - DONE except the installation visit
+- [x] DESKTOP-91MOKR0, Siemens IPC, Windows 10 IoT Enterprise 19045, stays on; ComAp network on
+      "Ethernet 2" (USB dongle) at **192.168.0.200**, internet on the CCI Wi-Fi; port 502 free;
+      Python not installed (START-PLANT.bat installs it from python.org)
+- [ ] At installation: move the ComAp cable from the USB dongle to a built-in LAN port (P1/P2) and give
+      that port 192.168.0.200/24, no gateway; set the Siemens virtual "Ethernet" adapter back to automatic
+- [ ] A short written OK from plant management for read-only data collection
+- [ ] VPN for CCI: the PC is already on CCI's corporate Wi-Fi (172.17.76.x, cci.tr) and has an OpenVPN
+      TAP adapter - ask CCI IT whether their platform can reach it there; then `publish.modbus_tcp.bind`
 
 ## 5. Nice to have
-- [ ] Local diesel price → `fuel_price_per_l` (only used for the cost figures)
-- [ ] Genset nameplate ratings → `limits.rated_kw` (only used for the demo and for `L per kWh` sanity)
+- [ ] Local diesel price → `fuel_price_per_l`
+- [ ] Per-genset detail (fuel level, hours, alarms): Modbus exports of one IG4 200 and one IM210G2 the
+      same way as the Neo's, then the commented devices in `config\site.plant.yaml`
+- [ ] SAU advanced login also gives the Setup Wizard pages (RS485 settings - the 53-77 % success rate)

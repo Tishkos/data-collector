@@ -52,10 +52,14 @@ def series_specs(reg: Registry) -> dict[str, tuple[str, list[tuple[str, str]]]]:
     specs: dict[str, tuple[str, list[tuple[str, str]]]] = {}
     load = having("meter", "load_kw") or having(None, "load_kw")
     specs["load_kw"] = ("sum", load)
-    specs["frequency_hz"] = ("avg", having("meter", "frequency_hz") or having(None, "bus_frequency_hz", "frequency_hz"))
-    specs["voltage_v"] = ("avg", having("meter", "voltage_v") or having(None, "bus_voltage_l1_v", "voltage_l1_v"))
+    # bus frequency / voltage: a meter, else the site master's bus measurement, else whatever device has one
+    # (never mixed: the inverters sit on an 800 V winding, the bus is 400 V)
+    specs["frequency_hz"] = ("avg", having("meter", "frequency_hz") or having(None, "bus_frequency_hz") or having(None, "frequency_hz"))
+    specs["voltage_v"] = ("avg", having("meter", "voltage_v") or having(None, "bus_voltage_l1_v") or having(None, "voltage_l1_v"))
+    # site PV total: the master's aggregated reading when there is one (what the controller acts on),
+    # else the sum of the PV devices
     pv = having("pv", "power_kw", "ac_power_kw")
-    specs["pv_kw"] = ("sum", pv or having(None, "pv_prod_kw"))
+    specs["pv_kw"] = ("sum", having(None, "pv_prod_kw") or pv)
     specs["pv_available_kw"] = ("sum", having("pv", "available_kw"))
     specs["irradiance_wm2"] = ("avg", having("pv", "irradiance_wm2"))
     specs["genset_kw"] = ("sum", having("genset", "power_kw"))
@@ -136,7 +140,8 @@ def device_comms(c: Collector, did: str) -> str:
     if not rows:
         return "lost"
     if all(r.quality == Quality.BAD for r in rows.values()):
-        return "lost"
+        # a device whose profile has no register addresses yet is "unmapped", not "lost"
+        return "unmapped" if all((r.error or "").startswith("no register mapping") for r in rows.values()) else "lost"
     now = c.now()
     for r in rows.values():
         if r.quality == Quality.STALE:

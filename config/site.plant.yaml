@@ -1,15 +1,21 @@
-# REAL PLANT configuration — Erbil Coca-Cola hybrid plant.
-# Start with:  START.bat -Plant        (or CHECK.bat first: one poll, every point printed)
+# REAL PLANT configuration - Erbil Coca-Cola hybrid plant.
+# Start with:  START-PLANT.bat        (CHECK-PLANT.bat first: one poll, every point printed)
 #
-# Everything here is READ-ONLY polling. Gentle on purpose: the SAU gateway is already
-# busy serving the InteliNeo. One block of reads per device, once an hour.
+# Everything here is READ-ONLY polling. Gentle on purpose: one connection per device host,
+# a few block reads per device, once an hour, connection closed afterwards.
 #
-# Before first use, replace the TODO values:
-#   - InteliNeo unit id and the register addresses in profiles/intelineo_master.yaml
-#     (from InteliConfig -> Modules -> Modbus Registers)
-#   - inverter unit ids on the SAU and the addresses in profiles/inverter_sineng.yaml
-#     (from the SAU point table / Sineng Modbus protocol)
-#   - meter unit id and addresses in profiles/meter_site.yaml (if the LV meter is on the SAU)
+# Network (session of 2026-10-14):
+#   plant PC DESKTOP-91MOKR0 (Siemens IPC, Windows 10 IoT) - ComAp network on adapter "Ethernet 2"
+#   (Realtek USB dongle) with the fixed address 192.168.0.200/24, no gateway; internet over the
+#   CCI Wi-Fi (172.17.76.x). Move the cable to a built-in LAN port at installation and give that
+#   port the same address.
+#   ComAp controllers (all port 23 ComAp, port 502 Modbus):
+#     Gen 1  IG4 200   192.168.0.105  SN 242535AC      MAIN 1  IM210G2  192.168.0.107  SN 24264E2B
+#     Gen 2  IG4 200   192.168.0.106  SN 241635D3      MAIN 2  IM210G2  192.168.0.111  SN 24264E58
+#     Gen 3  IG4 200   192.168.0.113  SN 241635B6      MAIN 3  IM210G2  192.168.0.110  SN 24264ED4
+#     Gen 4  IG4 200   192.168.0.114  SN 2416350D      InteliNeo 5500  192.168.0.112  SN 240842DA
+#     Gen 5  IG4 200   192.168.0.115  SN 2416355C
+#   Sineng SAU-100 gateway 192.168.0.128 (ETH0), 192.168.1.123 (ETH1); 10 x SP-320K-H inverters.
 
 site:
   site_id: erbil-cc-01
@@ -20,14 +26,19 @@ site:
                                     # saves its choice in data\settings.json, which overrides this value.
 
 devices:
-  # --- ComAp master: gensets, mains, PV totals, breakers, alarms --------------------
+  # --- ComAp master: gensets total, mains, PV total, breakers, alarms --------------------------
+  # Modbus server enabled, unit id 1 (confirmed 2026-10-14; the controller's CAN address 9 is not
+  # the Modbus unit id). Registers from the controller's own Modbus export, see the profile.
+  # If the first CHECK shows the bus frequency far from 50 Hz, add address_offset: -1 here.
   - id: neo-01
     profile: intelineo_master.yaml
     adapter: modbus_tcp
-    connection: {host: 192.168.0.112, port: 502, unit_id: 1, timeout: 3}     # TODO unit_id from InteliNeo Modbus settings
+    connection: {host: 192.168.0.112, port: 502, unit_id: 1, timeout: 3}
 
-  # --- Sineng inverters through the SAU-100 gateway ----------------------------------------
-  # unit_id = the inverter's Modbus address on the SAU (TODO from SAU point table)
+  # --- Sineng inverters through the SAU-100 -------------------------------------------------------
+  # Unit ids 1-10 = the RS485 addresses (winding 1 INV#1-5 = 1-5, winding 2 INV#1-5 = 6-10) -
+  # the SAU answers unit 1 but the register map (its Modbus TCP point table) is still unknown, so the
+  # profile has no addresses yet and these devices show "registers pending" until it arrives.
   - {id: inv-01, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 1,  timeout: 5}}
   - {id: inv-02, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 2,  timeout: 5}}
   - {id: inv-03, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 3,  timeout: 5}}
@@ -39,21 +50,32 @@ devices:
   - {id: inv-09, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 9,  timeout: 5}}
   - {id: inv-10, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 10, timeout: 5}}
 
-  # --- LV panel meter (if connected to the SAU; otherwise remove) --------------------------
-  - id: pv-meter
-    profile: meter_site.yaml
-    adapter: modbus_tcp
-    connection: {host: 192.168.0.128, port: 502, unit_id: 100, timeout: 5}   # TODO meter address on SAU
+  # No PV-side meter and no irradiance / panel-temperature sensor were found on site (the SAU's
+  # meters M1 and M3 are the generator and grid feeders). The Turkey tags that need them stay
+  # "not mapped" until such devices exist. The SAU's virtual array device (unit 245) could give
+  # PV totals and energies once its registers are known.
+
+  # The genset and mains controllers can be read directly later for per-genset detail (fuel level,
+  # engine hours, alarms). Their register tables are the controllers' own Modbus lists - export
+  # them with InteliConfig the same way as the Neo's before enabling:
+  # - {id: gen-01,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.105, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: gen-02,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.106, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: gen-03,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.113, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: gen-04,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.114, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: gen-05,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.115, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: main-01, profile: im210_mains.yaml,    adapter: modbus_tcp, connection: {host: 192.168.0.107, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: main-02, profile: im210_mains.yaml,    adapter: modbus_tcp, connection: {host: 192.168.0.111, port: 502, unit_id: 1, timeout: 3}}
+  # - {id: main-03, profile: im210_mains.yaml,    adapter: modbus_tcp, connection: {host: 192.168.0.110, port: 502, unit_id: 1, timeout: 3}}
 
 # --- Publishing for the DT Turkey / CCI monitoring platform ------------------------------------
 # A read-only Modbus TCP server on this PC with all tags of profiles/tag_catalog.yaml at fixed
 # registers (map: docs/TURKEY_MODBUS.md, or GET /api/v1/tags/registers). Their platform polls
 # this PC, never the SAU or the InteliNeo. Switch on when the VPN is in place and set `bind`
-# to the PC's VPN address so the port is not visible anywhere else.
+# to the PC's VPN address so the port is not visible anywhere else. Port 502 is free on the PC.
 publish:
   modbus_tcp:
     enabled: false
-    bind: 0.0.0.0            # TODO the PC's VPN address, e.g. 10.8.0.12 (0.0.0.0 = every interface)
+    bind: 0.0.0.0            # TODO the PC's VPN address (0.0.0.0 = every interface)
     port: 502
     unit_id: 1
     bad_value: last          # what a tag shows while its device does not answer: last | zero | nan

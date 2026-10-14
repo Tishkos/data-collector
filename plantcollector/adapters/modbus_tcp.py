@@ -10,7 +10,14 @@ gateway allows only 5 Modbus TCP links in total, and the InteliNeo already uses 
 them. Ten inverters behind one SAU therefore cost one connection, and none between polls.
 
 point.raw: {address, kind: uint16|int16|uint32|int32|float32, scale, fn: holding|input,
-            word_order: big|little, bit: <n> (one bit of a status word)}
+            word_order: big|little,
+            bit: <n>        one bit of a status word (0 = least significant)
+            mask: <int>     true when any of these bits is set
+            invert: true    negate a bit/mask boolean
+            derived: comm_error              true when the device answered nothing
+            derived: sum, of: [point, ...]   sum of sibling points (all must be good)}
+connection.address_offset: added to every address before the request (0 by default; -1 if a
+            device's table turns out to be 1-based).
 """
 
 from __future__ import annotations
@@ -75,6 +82,7 @@ class ModbusTcpAdapter(Adapter):
         super().__init__(device)
         c = device.connection
         self.unit_id = int(c.get("unit_id", 1))
+        self.address_offset = int(c.get("address_offset", 0))
         self._client = shared_client(c["host"], int(c.get("port", 502)), float(c.get("timeout", 3)))
         self._blocks = self._plan_blocks(device.points)
 
@@ -117,7 +125,7 @@ class ModbusTcpAdapter(Adapter):
         derived = []
         for p in self.device.points:
             if "address" not in p.raw:
-                if p.raw.get("derived") == "comm_error":
+                if p.raw.get("derived") in ("comm_error", "sum"):
                     derived.append(p)
                 else:
                     out[p.id] = reading(p, None, Quality.BAD, "no register mapping", now)
@@ -127,7 +135,7 @@ class ModbusTcpAdapter(Adapter):
             try:
                 if not self._client.connected:
                     self._client.connect()
-                rr = call(address=start, count=count, device_id=self.unit_id)
+                rr = call(address=start + self.address_offset, count=count, device_id=self.unit_id)
                 if rr is None or rr.isError():
                     raise RuntimeError(str(rr))
                 regs = rr.registers
@@ -145,13 +153,28 @@ class ModbusTcpAdapter(Adapter):
                     chunk = regs[off:off + _size(kind)]
                     if "bit" in raw:
                         val = bool((int(chunk[0]) >> int(raw["bit"])) & 1)
+                    elif "mask" in raw:
+                        val = bool(int(chunk[0]) & int(raw["mask"]))
                     else:
                         val = _decode(chunk, kind, float(raw.get("scale", 1.0)), raw.get("word_order", "big"))
                         if p.type == "boolean":
                             val = bool(val)
+                    if raw.get("invert") and isinstance(val, bool):
+                        val = not val
                     out[p.id] = reading(p, val, ts=now)
                 except Exception as exc:
                     out[p.id] = reading(p, None, Quality.BAD, f"decode: {exc}", now)
-        for p in derived:   # "comm_error" = the device answered nothing this poll
-            out[p.id] = reading(p, failed_blocks > 0 and ok_blocks == 0, ts=now)
+        for p in derived:
+            if p.raw.get("derived") == "comm_error":   # the device answered nothing this poll
+                if not self._blocks:                    # nothing mapped yet: nothing was asked, so unknown
+                    out[p.id] = reading(p, None, Quality.BAD, "no register mapping", now)
+                else:
+                    out[p.id] = reading(p, failed_blocks > 0 and ok_blocks == 0, ts=now)
+            else:                                       # sum of sibling points, good only when all are good
+                parts = [out.get(pid) for pid in p.raw.get("of", [])]
+                if parts and all(r is not None and r.quality == Quality.GOOD and r.value is not None for r in parts):
+                    out[p.id] = reading(p, round(sum(float(r.value) for r in parts), 3), ts=now)
+                else:
+                    missing = [pid for pid, r in zip(p.raw.get("of", []), parts) if r is None or r.quality != Quality.GOOD]
+                    out[p.id] = reading(p, None, Quality.BAD, f"sum needs {', '.join(missing) or 'of: [...]'}", now)
         return out

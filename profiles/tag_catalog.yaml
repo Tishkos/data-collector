@@ -1,4 +1,6 @@
 version: '1.2'
+# Source per tag (2026-10-14): inv-* = SAU-100 (registers pending its point table); neo-01 = InteliNeo
+# Modbus table; pv-meter and pv-env = no such device found on site yet (tags stay unmapped).
 tags:
 - name: INVERTER_1.INV1_AC_POWER
   device: inv-01
@@ -1466,13 +1468,13 @@ tags:
   type: float
   unit: A
 - name: Psum3
-  device: pv-meter
-  point: power_kw
+  device: neo-01
+  point: pv_prod_kw
   type: float
   unit: kW
 - name: Qsum3
-  device: pv-meter
-  point: reactive_kvar
+  device: neo-01
+  point: pv_q_kvar
   type: float
   unit: kvar
 - name: Real energy L1 L3 delivered
@@ -1481,18 +1483,18 @@ tags:
   type: float
   unit: kWh
 - name: Voltage L1 N
-  device: pv-meter
-  point: voltage_l1_v
+  device: neo-01
+  point: bus_voltage_l1_v
   type: float
   unit: V
 - name: Voltage L2 N
-  device: pv-meter
-  point: voltage_l2_v
+  device: neo-01
+  point: bus_voltage_l2_v
   type: float
   unit: V
 - name: Voltage L3 N
-  device: pv-meter
-  point: voltage_l3_v
+  device: neo-01
+  point: bus_voltage_l3_v
   type: float
   unit: V
 - name: Panel Temperature

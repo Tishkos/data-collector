@@ -1,0 +1,1520 @@
+HEADER
+========================================================================================================================================================================================
+Format:              2.3
+LongNamesLength:     64 - Name, Name of State, Name of Value, Bit Name, Group
+ShortNamesLength:    10 - Dimension, Type
+========================================================================================================================================================================================
+========================================================================================================================================================================================
+ Table: Binaries
+========================================================================================================================================================================================
+
+Allowed MODBUS functions: 01, 02
+
+Addresses     Source              
+Modbus Addr.  = Value  C.O.#    Name of Value                                                    Bit # Bit Name                                                         Group / Subgroup
+Prot. Addr.   = State  State #  Name of State                                                    Activated by protection(s):             
+========================================================================================================================================================================================
+00000         Value       8235  Binary Inputs                                                        1 PV1 feedback                                                     Controller I/O
+00001         Value       8235  Binary Inputs                                                        2 PV2 feedback                                                     Controller I/O
+00002         Value       8235  Binary Inputs                                                        3 UPS1 feedback                                                    Controller I/O
+00003         Value       8235  Binary Inputs                                                        4 UPS2 feedback                                                    Controller I/O
+00004         Value       8235  Binary Inputs                                                        5 Remote OFF                                                       Controller I/O
+00005         Value       8235  Binary Inputs                                                        6 Remote TEST                                                      Controller I/O
+00006         Value       8235  Binary Inputs                                                        7 Sd Override                                                      Controller I/O
+00007         Not Used
+00008         Value       8239  Binary Outputs                                                       1 PV CB1 ON                                                        Controller I/O
+00009         Value       8239  Binary Outputs                                                       2 PV CB2 ON                                                        Controller I/O
+00010         Value       8239  Binary Outputs                                                       3 UPS1 ON                                                          Controller I/O
+00011         Value       8239  Binary Outputs                                                       4 PV CB1 OFF                                                       Controller I/O
+00012         Value       8239  Binary Outputs                                                       5 PV CB2 OFF                                                       Controller I/O
+00013         Value       8239  Binary Outputs                                                       6 UPS1 OFF                                                         Controller I/O
+00014         Value       8239  Binary Outputs                                                       7 UPS2 ON                                                          Controller I/O
+00015         Value       8239  Binary Outputs                                                       8 UPS2 OFF                                                         Controller I/O
+00016         Value      20743  User Buttons                                                         1 User Button 1                                                    User Buttons / User Buttons
+00017         Value      20743  User Buttons                                                         2 User Button 2                                                    User Buttons / User Buttons
+00018         Value      20743  User Buttons                                                         3 User Button 3                                                    User Buttons / User Buttons
+00019         Value      20743  User Buttons                                                         4 User Button 4                                                    User Buttons / User Buttons
+00020         Value      20743  User Buttons                                                         5 User Button 5                                                    User Buttons / User Buttons
+00021         Value      20743  User Buttons                                                         6 User Button 6                                                    User Buttons / User Buttons
+00022         Value      20743  User Buttons                                                         7 User Button 7                                                    User Buttons / User Buttons
+00023         Value      20743  User Buttons                                                         8 User Button 8                                                    User Buttons / User Buttons
+00024         Value      20743  User Buttons                                                         9 User Button 9                                                    User Buttons / User Buttons
+00025         Value      20743  User Buttons                                                        10 User Button 10                                                   User Buttons / User Buttons
+00026         Value      20743  User Buttons                                                        11 User Button 11                                                   User Buttons / User Buttons
+00027         Value      20743  User Buttons                                                        12 User Button 12                                                   User Buttons / User Buttons
+00028         Value      20743  User Buttons                                                        13 User Button 13                                                   User Buttons / User Buttons
+00029         Value      20743  User Buttons                                                        14 User Button 14                                                   User Buttons / User Buttons
+00030         Value      20743  User Buttons                                                        15 User Button 15                                                   User Buttons / User Buttons
+00031         Value      20743  User Buttons                                                        16 User Button 16                                                   User Buttons / User Buttons
+00032         Not Used
+00033         Not Used
+00034         Not Used
+00035         Not Used
+00036         Not Used
+00037         Not Used
+00038         Not Used
+00039         Not Used
+00040         Not Used
+00041         Not Used
+00042         Not Used
+00043         Not Used
+00044         Not Used
+00045         Not Used
+00046         Not Used
+00047         Not Used
+00048         Value      20744  Fixed Protections States 1                                           1 Wrn Brute Force Protection Active                                Fixed Protections States
+00049         Not Used
+00050         Value      20744  Fixed Protections States 1                                           3 Wrn CAN2 Empty                                                   Fixed Protections States
+00051         Not Used
+00052         Not Used
+00053         Not Used
+00054         Not Used
+00055         Not Used
+00056         Not Used
+00057         Not Used
+00058         Not Used
+00059         Not Used
+00060         Not Used
+00061         Not Used
+00062         Not Used
+00063         Value      20744  Fixed Protections States 1                                          16 Wrn Battery Undervoltage                                         Fixed Protections States
+00064         Value      20744  Fixed Protections States 1                                          17 Wrn Battery Overvoltage                                          Fixed Protections States
+00065         Value      20744  Fixed Protections States 1                                          18 BCB Closing Is Blocked                                           Fixed Protections States
+00066         Value      20744  Fixed Protections States 1                                          19 Wrn Universal Genset Overflow                                    Fixed Protections States
+00067         Not Used
+00068         Not Used
+00069         Not Used
+00070         Value      20744  Fixed Protections States 1                                          23 Wrn Override All Sd                                              Fixed Protections States
+00071         Value      20744  Fixed Protections States 1                                          24 Wrn Load IMP/EXP Fail                                            Fixed Protections States
+00072         Value      20744  Fixed Protections States 1                                          25 Wrn PF/Q IMP/EXP Fail                                            Fixed Protections States
+00073         Value      20744  Fixed Protections States 1                                          26 Wrn PF Control Fail                                              Fixed Protections States
+00074         Value      20744  Fixed Protections States 1                                          27 Wrn Q Control Fail                                               Fixed Protections States
+00075         Value      20744  Fixed Protections States 1                                          28 Wrn Q(Um) Fail                                                   Fixed Protections States
+00076         Value      20744  Fixed Protections States 1                                          29 Wrn Qref/Ulim Fail                                               Fixed Protections States
+00077         Value      20744  Fixed Protections States 1                                          30 Wrn Q(P) Fail                                                    Fixed Protections States
+00078         Value      20744  Fixed Protections States 1                                          31 Wrn PF(Pm) Fail                                                  Fixed Protections States
+00079         Value      20744  Fixed Protections States 1                                          32 Wrn P(Um) Fail                                                   Fixed Protections States
+00080         Value      20745  Fixed Protections States 2                                           1 Sd BESS >V L1-N                                                  Fixed Protections States
+00081         Value      20745  Fixed Protections States 2                                           2 Sd BESS >V L2-N                                                  Fixed Protections States
+00082         Value      20745  Fixed Protections States 2                                           3 Sd BESS >V L3-N                                                  Fixed Protections States
+00083         Value      20745  Fixed Protections States 2                                           4 Sd BESS >V L1-L2                                                 Fixed Protections States
+00084         Value      20745  Fixed Protections States 2                                           5 Sd BESS >V L2-L3                                                 Fixed Protections States
+00085         Value      20745  Fixed Protections States 2                                           6 Sd BESS >V L3-L1                                                 Fixed Protections States
+00086         Value      20745  Fixed Protections States 2                                           7 Sd BESS >>V L1-N                                                 Fixed Protections States
+00087         Value      20745  Fixed Protections States 2                                           8 Sd BESS >>V L2-N                                                 Fixed Protections States
+00088         Value      20745  Fixed Protections States 2                                           9 Sd BESS >>V L3-N                                                 Fixed Protections States
+00089         Value      20745  Fixed Protections States 2                                          10 Sd BESS >>V L1-L2                                                Fixed Protections States
+00090         Value      20745  Fixed Protections States 2                                          11 Sd BESS >>V L2-L3                                                Fixed Protections States
+00091         Value      20745  Fixed Protections States 2                                          12 Sd BESS >>V L3-L1                                                Fixed Protections States
+00092         Value      20745  Fixed Protections States 2                                          13 Sd BESS <V L1-N                                                  Fixed Protections States
+00093         Value      20745  Fixed Protections States 2                                          14 Sd BESS <V L2-N                                                  Fixed Protections States
+00094         Value      20745  Fixed Protections States 2                                          15 Sd BESS <V L3-N                                                  Fixed Protections States
+00095         Value      20745  Fixed Protections States 2                                          16 Sd BESS <V L1-L2                                                 Fixed Protections States
+00096         Value      20745  Fixed Protections States 2                                          17 Sd BESS <V L2-L3                                                 Fixed Protections States
+00097         Value      20745  Fixed Protections States 2                                          18 Sd BESS <V L3-L1                                                 Fixed Protections States
+00098         Value      20745  Fixed Protections States 2                                          19 Sd BESS V Unbalance Ph-N                                         Fixed Protections States
+00099         Value      20745  Fixed Protections States 2                                          20 Sd BESS V Unbalance Ph-Ph                                        Fixed Protections States
+00100         Value      20745  Fixed Protections States 2                                          21 Sd BESS >f                                                       Fixed Protections States
+00101         Value      20745  Fixed Protections States 2                                          22 Sd BESS <f                                                       Fixed Protections States
+00102         Not Used
+00103         Not Used
+00104         Value      20745  Fixed Protections States 2                                          25 Sd IDMT Overload                                                 Fixed Protections States
+00105         Value      20745  Fixed Protections States 2                                          26 Sd Short Circuit                                                 Fixed Protections States
+00106         Value      20745  Fixed Protections States 2                                          27 Sd IDMT BESS >A                                                  Fixed Protections States
+00107         Value      20745  Fixed Protections States 2                                          28 Sd IDMT Earth Fault Current                                      Fixed Protections States
+00108         Value      20745  Fixed Protections States 2                                          29 Sd BESS Current Unbalance                                        Fixed Protections States
+00109         Value      20745  Fixed Protections States 2                                          30 ALI BESS Ph Rotation Opposite                                    Fixed Protections States
+00110         Not Used
+00111         Not Used
+00112         Value      20746  Fixed Protections States 3                                           1 Emergency Stop                                                   Fixed Protections States
+00113         Value      20746  Fixed Protections States 3                                           2 Daily Battery Cycles Reached                                     Fixed Protections States
+00114         Not Used
+00115         Not Used
+00116         Value      20746  Fixed Protections States 3                                           5 Wrn Stop Fail                                                    Fixed Protections States
+00117         Value      20746  Fixed Protections States 3                                           6 Wrn SOC Low Alarm                                                Fixed Protections States
+00118         Value      20746  Fixed Protections States 3                                           7 Wrn SOC High Alarm                                               Fixed Protections States
+00119         Value      20746  Fixed Protections States 3                                           8 Sd SOC Critical Low                                              Fixed Protections States
+00120         Value      20746  Fixed Protections States 3                                           9 Sd SOC Critical High                                             Fixed Protections States
+00121         Not Used
+00122         Value      20746  Fixed Protections States 3                                          11 Wrn Frequency Regulation Limit                                   Fixed Protections States
+00123         Value      20746  Fixed Protections States 3                                          12 Wrn Voltage Regulation Limit                                     Fixed Protections States
+00124         Value      20746  Fixed Protections States 3                                          13 Stp Synchronization Fail                                         Fixed Protections States
+00125         Value      20746  Fixed Protections States 3                                          14 Wrn Reverse Synchro Fail                                         Fixed Protections States
+00126         Value      20746  Fixed Protections States 3                                          15 Stp BCB Fail                                                     Fixed Protections States
+00127         Value      20746  Fixed Protections States 3                                          16 Stp BCB Secondary Fail                                           Fixed Protections States
+00128         Value      20746  Fixed Protections States 3                                          17 Sd NCB Fail                                                      Fixed Protections States
+00129         Value      20746  Fixed Protections States 3                                          18 Dead Bus GCB Blocked                                             Fixed Protections States
+00130         Value      20746  Fixed Protections States 3                                          19 PVCB Fail                                                        Fixed Protections States
+00131         Value      20746  Fixed Protections States 3                                          20 PVCB Fail To Open                                                Fixed Protections States
+00132         Value      20746  Fixed Protections States 3                                          21 PVCB Fail To Close                                               Fixed Protections States
+00133         Value      20746  Fixed Protections States 3                                          22 Sd BESS SOC Not Configured                                       Fixed Protections States
+00134         Value      20746  Fixed Protections States 3                                          23 Stp BESS SOC Not Available                                       Fixed Protections States
+00135         Value      20746  Fixed Protections States 3                                          24 Sd DC Circuit Close Fail                                         Fixed Protections States
+00136         Not Used
+00137         Not Used
+00138         Not Used
+00139         Not Used
+00140         Not Used
+00141         Not Used
+00142         Not Used
+00143         Value      20746  Fixed Protections States 3                                          32 Manual Restore                                                   Fixed Protections States
+00144         Value      20747  Fixed Protections States 4                                           1 Mains/Bus >V L1-N                                                Fixed Protections States
+00145         Value      20747  Fixed Protections States 4                                           2 Mains/Bus >V L2-N                                                Fixed Protections States
+00146         Value      20747  Fixed Protections States 4                                           3 Mains/Bus >V L3-N                                                Fixed Protections States
+00147         Value      20747  Fixed Protections States 4                                           4 Mains/Bus >V L1-L2                                               Fixed Protections States
+00148         Value      20747  Fixed Protections States 4                                           5 Mains/Bus >V L2-L3                                               Fixed Protections States
+00149         Value      20747  Fixed Protections States 4                                           6 Mains/Bus >V L3-L1                                               Fixed Protections States
+00150         Value      20747  Fixed Protections States 4                                           7 Mains/Bus >>V L1-N                                               Fixed Protections States
+00151         Value      20747  Fixed Protections States 4                                           8 Mains/Bus >>V L2-N                                               Fixed Protections States
+00152         Value      20747  Fixed Protections States 4                                           9 Mains/Bus >>V L3-N                                               Fixed Protections States
+00153         Value      20747  Fixed Protections States 4                                          10 Mains/Bus >>V L1-L2                                              Fixed Protections States
+00154         Value      20747  Fixed Protections States 4                                          11 Mains/Bus >>V L2-L3                                              Fixed Protections States
+00155         Value      20747  Fixed Protections States 4                                          12 Mains/Bus >>V L3-L1                                              Fixed Protections States
+00156         Value      20747  Fixed Protections States 4                                          13 Mains Avg >V L1-N                                                Fixed Protections States
+00157         Value      20747  Fixed Protections States 4                                          14 Mains Avg >V L2-N                                                Fixed Protections States
+00158         Value      20747  Fixed Protections States 4                                          15 Mains Avg >V L3-N                                                Fixed Protections States
+00159         Value      20747  Fixed Protections States 4                                          16 Mains Avg >V L1-L2                                               Fixed Protections States
+00160         Value      20747  Fixed Protections States 4                                          17 Mains Avg >V L2-L3                                               Fixed Protections States
+00161         Value      20747  Fixed Protections States 4                                          18 Mains Avg >V L3-L1                                               Fixed Protections States
+00162         Value      20747  Fixed Protections States 4                                          19 Mains/Bus <V L1-N                                                Fixed Protections States
+00163         Value      20747  Fixed Protections States 4                                          20 Mains/Bus <V L2-N                                                Fixed Protections States
+00164         Value      20747  Fixed Protections States 4                                          21 Mains/Bus <V L3-N                                                Fixed Protections States
+00165         Value      20747  Fixed Protections States 4                                          22 Mains/Bus <V L1-L2                                               Fixed Protections States
+00166         Value      20747  Fixed Protections States 4                                          23 Mains/Bus <V L2-L3                                               Fixed Protections States
+00167         Value      20747  Fixed Protections States 4                                          24 Mains/Bus <V L3-L1                                               Fixed Protections States
+00168         Value      20747  Fixed Protections States 4                                          25 Mains/Bus <<V L1-N                                               Fixed Protections States
+00169         Value      20747  Fixed Protections States 4                                          26 Mains/Bus <<V L2-N                                               Fixed Protections States
+00170         Value      20747  Fixed Protections States 4                                          27 Mains/Bus <<V L3-N                                               Fixed Protections States
+00171         Value      20747  Fixed Protections States 4                                          28 Mains/Bus <<V L1-L2                                              Fixed Protections States
+00172         Value      20747  Fixed Protections States 4                                          29 Mains/Bus <<V L2-L3                                              Fixed Protections States
+00173         Value      20747  Fixed Protections States 4                                          30 Mains/Bus <<V L3-L1                                              Fixed Protections States
+00174         Value      20747  Fixed Protections States 4                                          31 Mains/Bus V Unbalance Ph-Ph                                      Fixed Protections States
+00175         Value      20747  Fixed Protections States 4                                          32 Mains/Bus V Unbalance Ph-N                                       Fixed Protections States
+00176         Value      20748  Fixed Protections States 5                                           1 Mains/Bus >f                                                     Fixed Protections States
+00177         Value      20748  Fixed Protections States 5                                           2 Mains/Bus >>f                                                    Fixed Protections States
+00178         Value      20748  Fixed Protections States 5                                           3 Mains/Bus <f                                                     Fixed Protections States
+00179         Value      20748  Fixed Protections States 5                                           4 Mains/Bus <<f                                                    Fixed Protections States
+00180         Value      20748  Fixed Protections States 5                                           5 ALI Mains Ph Rotation Opposite                                   Fixed Protections States
+00181         Value      20748  Fixed Protections States 5                                           6 ALI BESS Ph Rotation Opposite                                    Fixed Protections States
+00182         Value      20748  Fixed Protections States 5                                           7 Wrn MCB Fail                                                     Fixed Protections States
+00183         Value      20748  Fixed Protections States 5                                           8 Bus Meas Error                                                   Fixed Protections States
+00184         Value      20748  Fixed Protections States 5                                           9 BESS Anti Islanding                                              Fixed Protections States
+00185         Value      20748  Fixed Protections States 5                                          10 Wrn Test UPQF                                                    Fixed Protections States
+00186         Value      20748  Fixed Protections States 5                                          11 SyncNotAllowed                                                   Fixed Protections States
+00187         Value      20748  Fixed Protections States 5                                          12 Wrn P For Q Fail                                                 Fixed Protections States
+00188         Value      20748  Fixed Protections States 5                                          13 Wrn Q&U Protection                                               Fixed Protections States
+00189         Value      20748  Fixed Protections States 5                                          14 Wrn VRT Protection Trip                                          Fixed Protections States
+00190         Value      20748  Fixed Protections States 5                                          15 MP VRT Protection Trip                                           Fixed Protections States
+00191         Value      20748  Fixed Protections States 5                                          16 Soft Transfer Fail                                               Fixed Protections States
+00192         Value      20748  Fixed Protections States 5                                          17 Wrn Fence 1 Alarm                                                Fixed Protections States
+00193         Value      20748  Fixed Protections States 5                                          18 Sd Fence 1 Alarm                                                 Fixed Protections States
+00194         Value      20748  Fixed Protections States 5                                          19 BOC Fence 1 Alarm                                                Fixed Protections States
+00195         Value      20748  Fixed Protections States 5                                          20 Fence 1 Alarm                                                    Fixed Protections States
+00196         Value      20748  Fixed Protections States 5                                          21 Wrn Fence 2 Alarm                                                Fixed Protections States
+00197         Value      20748  Fixed Protections States 5                                          22 Sd Fence 2 Alarm                                                 Fixed Protections States
+00198         Value      20748  Fixed Protections States 5                                          23 BOC Fence 2 Alarm                                                Fixed Protections States
+00199         Value      20748  Fixed Protections States 5                                          24 Fence 2 Alarm                                                    Fixed Protections States
+00200         Not Used
+00201         Not Used
+00202         Not Used
+00203         Not Used
+00204         Not Used
+00205         Not Used
+00206         Not Used
+00207         Not Used
+00208         Not Used
+00209         Value       9143  Log Bout 1                                                           2 Alarm                                                            Log Bout
+00210         Value       9143  Log Bout 1                                                           3 Alarm Flashing                                                   Log Bout
+00211         Value       9143  Log Bout 1                                                           4 Horn                                                             Log Bout
+00212         Value       9143  Log Bout 1                                                           5 Horn Flashing                                                    Log Bout
+00213         Value       9143  Log Bout 1                                                           6 Not Ready                                                        Log Bout
+00214         Value       9143  Log Bout 1                                                           7 Ready                                                            Log Bout
+00215         Value       9143  Log Bout 1                                                           8 Manual Ready                                                     Log Bout
+00216         Value       9143  Log Bout 1                                                           9 Operational                                                      Log Bout
+00217         Value       9143  Log Bout 1                                                          10 Reserved                                                         Log Bout
+00218         Value       9143  Log Bout 1                                                          11 Precharge                                                        Log Bout
+00219         Value       9143  Log Bout 1                                                          12 Starting                                                         Log Bout
+00220         Value       9143  Log Bout 1                                                          13 Energized                                                        Log Bout
+00221         Value       9143  Log Bout 1                                                          14 Soft Load                                                        Log Bout
+00222         Value       9143  Log Bout 1                                                          15 Loaded                                                           Log Bout
+00223         Value       9143  Log Bout 1                                                          16 Soft Unload                                                      Log Bout
+00224         Value       9144  Log Bout 2                                                           1 Stopping                                                         Log Bout
+00225         Value       9144  Log Bout 2                                                           2 Sd Override                                                      Log Bout
+00226         Value       9144  Log Bout 2                                                           3 Inverter Run Request                                             Log Bout
+00227         Value       9144  Log Bout 2                                                           4 BESS Ready To Load                                               Log Bout
+00228         Value       9144  Log Bout 2                                                           5 BESS Parallel Oper                                               Log Bout
+00229         Value       9144  Log Bout 2                                                           6 BESS In Loadsharing                                              Log Bout
+00230         Value       9144  Log Bout 2                                                           7 BESS Active                                                      Log Bout
+00231         Value       9144  Log Bout 2                                                           8 MCB Close/Open                                                   Log Bout
+00232         Value       9144  Log Bout 2                                                           9 MCB ON Coil                                                      Log Bout
+00233         Value       9144  Log Bout 2                                                          10 MCB OFF Coil                                                     Log Bout
+00234         Value       9144  Log Bout 2                                                          11 MCB UV Coil                                                      Log Bout
+00235         Value       9144  Log Bout 2                                                          12 MCB Status                                                       Log Bout
+00236         Value       9144  Log Bout 2                                                          13 BCB Close/Open                                                   Log Bout
+00237         Value       9144  Log Bout 2                                                          14 BCB ON Coil                                                      Log Bout
+00238         Value       9144  Log Bout 2                                                          15 BCB OFF Coil                                                     Log Bout
+00239         Value       9144  Log Bout 2                                                          16 BCB UV Coil                                                      Log Bout
+00240         Value       9145  Log Bout 3                                                           1 BCB Close/Open Secondary                                         Log Bout
+00241         Value       9145  Log Bout 3                                                           2 BCB ON Coil Secondary                                            Log Bout
+00242         Value       9145  Log Bout 3                                                           3 BCB OFF Coil Secondary                                           Log Bout
+00243         Value       9145  Log Bout 3                                                           4 BCB UV Coil Secondary                                            Log Bout
+00244         Value       9145  Log Bout 3                                                           5 BCB Status                                                       Log Bout
+00245         Not Used
+00246         Not Used
+00247         Value       9145  Log Bout 3                                                           8 PVCB Close/Open                                                  Log Bout
+00248         Value       9145  Log Bout 3                                                           9 PVCB ON Coil                                                     Log Bout
+00249         Value       9145  Log Bout 3                                                          10 PVCB OFF Coil                                                    Log Bout
+00250         Value       9145  Log Bout 3                                                          11 PVCB UV Coil                                                     Log Bout
+00251         Value       9145  Log Bout 3                                                          12 PVCB Status                                                      Log Bout
+00252         Value       9145  Log Bout 3                                                          13 PV/WT Run Request                                                Log Bout
+00253         Value       9145  Log Bout 3                                                          14 Curtailment Enable                                               Log Bout
+00254         Value       9145  Log Bout 3                                                          15 SOC Charge Disabled                                              Log Bout
+00255         Value       9145  Log Bout 3                                                          16 SOC Discharge Disabled                                           Log Bout
+00256         Value       9146  Log Bout 4                                                           1 Daily Batt Cycles Reached                                        Log Bout
+00257         Value       9146  Log Bout 4                                                           2 BESS Capability C Limit                                          Log Bout
+00258         Value       9146  Log Bout 4                                                           3 BESS Capability L Limit                                          Log Bout
+00259         Value       9146  Log Bout 4                                                           4 Any GCB Closed                                                   Log Bout
+00260         Value       9146  Log Bout 4                                                           5 Any Other GCB Closed                                             Log Bout
+00261         Value       9146  Log Bout 4                                                           6 NCB Close/Open                                                   Log Bout
+00262         Value       9146  Log Bout 4                                                           7 System Reserve OK                                                Log Bout
+00263         Value       9146  Log Bout 4                                                           8 System Ready                                                     Log Bout
+00264         Value       9146  Log Bout 4                                                           9 All Available Gen-sets Run                                       Log Bout
+00265         Value       9146  Log Bout 4                                                          10 Engines Swapped                                                  Log Bout
+00266         Value       9146  Log Bout 4                                                          11 Peripheral Module Comm Fail                                      Log Bout
+00267         Not Used
+00268         Value       9146  Log Bout 4                                                          13 Frequency Up                                                     Log Bout
+00269         Value       9146  Log Bout 4                                                          14 Frequency Down                                                   Log Bout
+00270         Value       9146  Log Bout 4                                                          15 Voltage Up                                                       Log Bout
+00271         Value       9146  Log Bout 4                                                          16 Voltage Down                                                     Log Bout
+00272         Value       9147  Log Bout 5                                                           1 Common Warning                                                   Log Bout
+00273         Value       9147  Log Bout 5                                                           2 Common Shutdown                                                  Log Bout
+00274         Not Used
+00275         Value       9147  Log Bout 5                                                           4 Common Shutdown Override                                         Log Bout
+00276         Value       9147  Log Bout 5                                                           5 Common Slow Stop                                                 Log Bout
+00277         Not Used
+00278         Not Used
+00279         Value       9147  Log Bout 5                                                           8 Common PVCB Open                                                 Log Bout
+00280         Value       9147  Log Bout 5                                                           9 Common Mains Protection                                          Log Bout
+00281         Value       9147  Log Bout 5                                                          10 Common Alarm Only                                                Log Bout
+00282         Value       9147  Log Bout 5                                                          11 Common History Record                                            Log Bout
+00283         Value       9147  Log Bout 5                                                          12 Common Alarm Level 1                                             Log Bout
+00284         Value       9147  Log Bout 5                                                          13 Common Alarm Level 2                                             Log Bout
+00285         Value       9147  Log Bout 5                                                          14 Common Alarm Active Level 1                                      Log Bout
+00286         Value       9147  Log Bout 5                                                          15 Common Alarm Active Level 2                                      Log Bout
+00287         Value       9147  Log Bout 5                                                          16 External CB Block                                                Log Bout
+00288         Value       9148  Log Bout 6                                                           1 AL Maintenance 1                                                 Log Bout
+00289         Value       9148  Log Bout 6                                                           2 AL Maintenance 2                                                 Log Bout
+00290         Value       9148  Log Bout 6                                                           3 AL Maintenance 3                                                 Log Bout
+00291         Value       9148  Log Bout 6                                                           4 AL Maintenance 4                                                 Log Bout
+00292         Value       9148  Log Bout 6                                                           5 Forward Synchronization                                          Log Bout
+00293         Value       9148  Log Bout 6                                                           6 Reverse Synchronization                                          Log Bout
+00294         Value       9148  Log Bout 6                                                           7 In Synchronism                                                   Log Bout
+00295         Not Used
+00296         Not Used
+00297         Value       9148  Log Bout 6                                                          10 Heartbeat                                                        Log Bout
+00298         Not Used
+00299         Value       9148  Log Bout 6                                                          12 Not In Auto                                                      Log Bout
+00300         Value       9148  Log Bout 6                                                          13 Mode OFF                                                         Log Bout
+00301         Value       9148  Log Bout 6                                                          14 Mode MAN                                                         Log Bout
+00302         Value       9148  Log Bout 6                                                          15 Mode AUTO                                                        Log Bout
+00303         Not Used
+00304         Not Used
+00305         Value       9149  Log Bout 7                                                           2 Peak Shaving Active                                              Log Bout
+00306         Not Used
+00307         Not Used
+00308         Not Used
+00309         Not Used
+00310         Value       9149  Log Bout 7                                                           7 BESS Healthy                                                     Log Bout
+00311         Value       9149  Log Bout 7                                                           8 Mains/Bus Healthy                                                Log Bout
+00312         Value       9149  Log Bout 7                                                           9 Initialized                                                      Log Bout
+00313         Not Used
+00314         Value       9149  Log Bout 7                                                          11 kWh Pulse                                                        Log Bout
+00315         Value       9149  Log Bout 7                                                          12 Deadbus                                                          Log Bout
+00316         Value       9149  Log Bout 7                                                          13 Logical 0                                                        Log Bout
+00317         Value       9149  Log Bout 7                                                          14 Logical 1                                                        Log Bout
+00318         Not Used
+00319         Value       9149  Log Bout 7                                                          16 Vector Shift Active                                              Log Bout
+00320         Value       9150  Log Bout 8                                                           1 Exercise Timer 1                                                 Log Bout
+00321         Value       9150  Log Bout 8                                                           2 Exercise Timer 2                                                 Log Bout
+00322         Value       9150  Log Bout 8                                                           3 Exercise Timer 3                                                 Log Bout
+00323         Value       9150  Log Bout 8                                                           4 Exercise Timer 4                                                 Log Bout
+00324         Value       9150  Log Bout 8                                                           5 Exercise Timer 5                                                 Log Bout
+00325         Value       9150  Log Bout 8                                                           6 Exercise Timer 6                                                 Log Bout
+00326         Not Used
+00327         Not Used
+00328         Not Used
+00329         Not Used
+00330         Not Used
+00331         Not Used
+00332         Value       9150  Log Bout 8                                                          13 ROCOF 1 Active                                                   Log Bout
+00333         Value       9150  Log Bout 8                                                          14 ROCOF 2 Active                                                   Log Bout
+00334         Value       9150  Log Bout 8                                                          15 ROCOF 3 Active                                                   Log Bout
+00335         Value       9150  Log Bout 8                                                          16 ROCOF 4 Active                                                   Log Bout
+00336         Value      11896  Log Bout 9                                                           1 Alarm BESS Voltage                                               Log Bout
+00337         Value      11896  Log Bout 9                                                           2 Alarm BESS Frequency                                             Log Bout
+00338         Value      11896  Log Bout 9                                                           3 Alarm BESS Overcurrent                                           Log Bout
+00339         Value      11896  Log Bout 9                                                           4 Alarm Mains Fail                                                 Log Bout
+00340         Value      11896  Log Bout 9                                                           5 Alarm Mains Frequency                                            Log Bout
+00341         Value      11896  Log Bout 9                                                           6 Alarm Mains Voltage                                              Log Bout
+00342         Value      11896  Log Bout 9                                                           7 Load Shedding Stage 1                                            Log Bout
+00343         Value      11896  Log Bout 9                                                           8 Load Shedding Stage 2                                            Log Bout
+00344         Value      11896  Log Bout 9                                                           9 Load Shedding Stage 3                                            Log Bout
+00345         Value      11896  Log Bout 9                                                          10 Load Shedding Stage 4                                            Log Bout
+00346         Value      11896  Log Bout 9                                                          11 Load Shedding Stage 5                                            Log Bout
+00347         Not Used
+00348         Not Used
+00349         Not Used
+00350         Not Used
+00351         Not Used
+00352         Value      11897  Log Bout 10                                                          1 FltRes Button Echo                                               Log Bout
+00353         Value      11897  Log Bout 10                                                          2 HornRes Button Echo                                              Log Bout
+00354         Value      11897  Log Bout 10                                                          3 Start Button Echo                                                Log Bout
+00355         Value      11897  Log Bout 10                                                          4 Stop Button Echo                                                 Log Bout
+00356         Value      11897  Log Bout 10                                                          5 MCB Button Echo                                                  Log Bout
+00357         Value      11897  Log Bout 10                                                          6 BCB Button Echo                                                  Log Bout
+00358         Value      11897  Log Bout 10                                                          7 PVCB Button Echo                                                 Log Bout
+00359         Value      11897  Log Bout 10                                                          8 Event Mains Frequency Rise                                       Log Bout
+00360         Value      11897  Log Bout 10                                                          9 Event Mains Frequency Fall                                       Log Bout
+00361         Value      11897  Log Bout 10                                                         10 Event Load Reduction                                             Log Bout
+00362         Value      11897  Log Bout 10                                                         11 Event Mains Trip                                                 Log Bout
+00363         Value      11897  Log Bout 10                                                         12 Event P For Q                                                    Log Bout
+00364         Value      11897  Log Bout 10                                                         13 Event Soft Unload                                                Log Bout
+00365         Value      11897  Log Bout 10                                                         14 Event Post VRT                                                   Log Bout
+00366         Value      11897  Log Bout 10                                                         15 Event Return Over/Under Frequency                                Log Bout
+00367         Value      11897  Log Bout 10                                                         16 Event P(Um)                                                      Log Bout
+00368         Value      11898  Log Bout 11                                                          1 PQ-L Area Limit                                                  Log Bout
+00369         Value      11898  Log Bout 11                                                          2 PQ-C Area Limit                                                  Log Bout
+00370         Value      11898  Log Bout 11                                                          3 UQ-L Area Limit                                                  Log Bout
+00371         Value      11898  Log Bout 11                                                          4 UQ-C Area Limit                                                  Log Bout
+00372         Value      11898  Log Bout 11                                                          5 P For Q Active                                                   Log Bout
+00373         Value      11898  Log Bout 11                                                          6 Load Reduction Active                                            Log Bout
+00374         Value      11898  Log Bout 11                                                          7 P Over Frequency Active                                          Log Bout
+00375         Value      11898  Log Bout 11                                                          8 P Under Frequency Active                                         Log Bout
+00376         Value      11898  Log Bout 11                                                          9 LVRT Active                                                      Log Bout
+00377         Value      11898  Log Bout 11                                                         10 OVRT Active                                                      Log Bout
+00378         Value      11898  Log Bout 11                                                         11 Pave                                                             Log Bout
+00379         Value      11898  Log Bout 11                                                         12 LVRT Severe                                                      Log Bout
+00380         Value      11898  Log Bout 11                                                         13 LVRTCurveTrip                                                    Log Bout
+00381         Value      11898  Log Bout 11                                                         14 OVRTCurveTrip                                                    Log Bout
+00382         Value      11898  Log Bout 11                                                         15 P Over Frequency Curve Invalid                                   Log Bout
+00383         Value      11898  Log Bout 11                                                         16 P Under Frequency Curve Invalid                                  Log Bout
+00384         Value      11899  Log Bout 12                                                          1 OVRT Invalid                                                     Log Bout
+00385         Value      11899  Log Bout 12                                                          2 LVRT 1-phase Invalid                                             Log Bout
+00386         Value      11899  Log Bout 12                                                          3 LVRT 2-phase Invalid                                             Log Bout
+00387         Value      11899  Log Bout 12                                                          4 LVRT 3-phase Invalid                                             Log Bout
+00388         Value      11899  Log Bout 12                                                          5 Pave FLS                                                         Log Bout
+00389         Value      11899  Log Bout 12                                                          6 Sync To Mains Allowed                                            Log Bout
+00390         Value      11899  Log Bout 12                                                          7 Process Power Limitation                                         Log Bout
+00391         Value      11899  Log Bout 12                                                          8 GridCodes Power Limitation                                       Log Bout
+00392         Not Used
+00393         Not Used
+00394         Not Used
+00395         Not Used
+00396         Value      11899  Log Bout 12                                                         13 PV Operable                                                      Log Bout
+00397         Value      11899  Log Bout 12                                                         14 WT Operable                                                      Log Bout
+00398         Not Used
+00399         Not Used
+00400         Value      11900  Log Bout 13                                                          1 ECU 1 Comm Fail                                                  Log Bout
+00401         Value      11900  Log Bout 13                                                          2 ECU 2 Comm Fail                                                  Log Bout
+00402         Value      11900  Log Bout 13                                                          3 ECU 3 Comm Fail                                                  Log Bout
+00403         Value      11900  Log Bout 13                                                          4 ECU 4 Comm Fail                                                  Log Bout
+00404         Value      11900  Log Bout 13                                                          5 ECU 5 Comm Fail                                                  Log Bout
+00405         Value      11900  Log Bout 13                                                          6 ECU 6 Comm Fail                                                  Log Bout
+00406         Value      11900  Log Bout 13                                                          7 ECU 7 Comm Fail                                                  Log Bout
+00407         Value      11900  Log Bout 13                                                          8 ECU 8 Comm Fail                                                  Log Bout
+00408         Value      11900  Log Bout 13                                                          9 ECU 9 Comm Fail                                                  Log Bout
+00409         Value      11900  Log Bout 13                                                         10 Reserved                                                         Log Bout
+00410         Value      11900  Log Bout 13                                                         11 Reserved                                                         Log Bout
+00411         Value      11900  Log Bout 13                                                         12 Reserved                                                         Log Bout
+00412         Value      11900  Log Bout 13                                                         13 Reserved                                                         Log Bout
+00413         Value      11900  Log Bout 13                                                         14 Reserved                                                         Log Bout
+00414         Value      11900  Log Bout 13                                                         15 Reserved                                                         Log Bout
+00415         Value      11900  Log Bout 13                                                         16 Reserved                                                         Log Bout
+00416         Value      11901  Log Bout 14                                                          1 AIN Switch01                                                     Log Bout
+00417         Value      11901  Log Bout 14                                                          2 AIN Switch02                                                     Log Bout
+00418         Value      11901  Log Bout 14                                                          3 AIN Switch03                                                     Log Bout
+00419         Value      11901  Log Bout 14                                                          4 AIN Switch04                                                     Log Bout
+00420         Value      11901  Log Bout 14                                                          5 AIN Switch05                                                     Log Bout
+00421         Value      11901  Log Bout 14                                                          6 AIN Switch06                                                     Log Bout
+00422         Value      11901  Log Bout 14                                                          7 AIN Switch07                                                     Log Bout
+00423         Value      11901  Log Bout 14                                                          8 AIN Switch08                                                     Log Bout
+00424         Value      11901  Log Bout 14                                                          9 AIN Switch09                                                     Log Bout
+00425         Value      11901  Log Bout 14                                                         10 AIN Switch10                                                     Log Bout
+00426         Value      11901  Log Bout 14                                                         11 Reserved                                                         Log Bout
+00427         Not Used
+00428         Not Used
+00429         Not Used
+00430         Not Used
+00431         Not Used
+00432         Value      11902  Log Bout 15                                                          1 Display Fail                                                     Log Bout
+00433         Value      11902  Log Bout 15                                                          2 Controller HeartBeat Fail Detect                                 Log Bout
+00434         Value      11902  Log Bout 15                                                          3 Electrical Alarm                                                 Log Bout
+
+
+========================================================================================================================================================================================
+ Table: Values
+========================================================================================================================================================================================
+
+Allowed MODBUS functions: 03, 04
+
+Register(s)    Com.Obj. Name                                                             Dimension  Type       Len Dec         Min          Max Group / Subgroup
+========================================================================================================================================================================================
+01000              8202 BESS P                                                           kW         Integer      2  0       -32767        32767 BESS
+01001              8524 BESS P L1                                                        kW         Integer      2  0       -32767        32767 BESS
+01002              8525 BESS P L2                                                        kW         Integer      2  0       -32767        32767 BESS
+01003              8526 BESS P L3                                                        kW         Integer      2  0       -32767        32767 BESS
+01004              8203 BESS Q                                                           kVAr       Integer      2  0       -32767        32767 BESS
+01005              8527 BESS Q L1                                                        kVAr       Integer      2  0       -32767        32767 BESS
+01006              8528 BESS Q L2                                                        kVAr       Integer      2  0       -32767        32767 BESS
+01007              8529 BESS Q L3                                                        kVAr       Integer      2  0       -32767        32767 BESS
+01008              8565 BESS S                                                           kVA        Integer      2  0            0        32767 BESS
+01009              8530 BESS S L1                                                        kVA        Integer      2  0            0        32767 BESS
+01010              8531 BESS S L2                                                        kVA        Integer      2  0            0        32767 BESS
+01011              8532 BESS S L3                                                        kVA        Integer      2  0            0        32767 BESS
+01012             16156 BESS Power Factor                                                           Integer      2  3        -1000         1000 BESS
+01013              8395 BESS Load Character                                                         Char         1  0            -            - BESS
+01014             16160 BESS Power Factor L1                                                        Integer      2  3        -1000         1000 BESS
+01015              8626 BESS Load Character L1                                                      Char         1  0            -            - BESS
+01016             16161 BESS Power Factor L2                                                        Integer      2  3        -1000         1000 BESS
+01017              8627 BESS Load Character L2                                                      Char         1  0            -            - BESS
+01018             16162 BESS Power Factor L3                                                        Integer      2  3        -1000         1000 BESS
+01019              8628 BESS Load Character L3                                                      Char         1  0            -            - BESS
+01020              8198 BESS Current L1                                                  A          Unsigned     2  0            0        32767 BESS
+01021              8199 BESS Current L2                                                  A          Unsigned     2  0            0        32767 BESS
+01022              8200 BESS Current L3                                                  A          Unsigned     2  0            0        32767 BESS
+01023              8192 BESS Voltage L1-N                                                V          Unsigned     2  0            0        65534 BESS
+01024              8193 BESS Voltage L2-N                                                V          Unsigned     2  0            0        65534 BESS
+01025              8194 BESS Voltage L3-N                                                V          Unsigned     2  0            0        65534 BESS
+01026              9628 BESS Voltage L1-L2                                               V          Unsigned     2  0            0        65534 BESS
+01027              9629 BESS Voltage L2-L3                                               V          Unsigned     2  0            0        65534 BESS
+01028              9630 BESS Voltage L3-L1                                               V          Unsigned     2  0            0        65534 BESS
+01029-01030(2)    20799 BESS Frequency                                                   Hz         Integer      4  3            0       400000 BESS
+01031             15857 BESS SOC                                                         %          Unsigned     1  0            0          100 BESS
+01032              8224 Slip Frequency                                                   Hz         Integer      2  2        -7000         7000 BESS
+01033              8225 Slip Angle                                                       °          Integer      2  1        -1800         1800 BESS
+01034             16073 BESS P 10min Avg                                                 kW         Integer      2  0       -32767        32767 BESS
+01035             16080 BESS Q 10min Avg                                                 kVAr       Integer      2  0       -32767        32767 BESS
+01036             16081 BESS S 10min Avg                                                 kVA        Integer      2  0       -32767        32767 BESS
+01037             16158 Load PF                                                                     Integer      2  3        -1000         1000 Load
+01038              9026 Load Character                                                              Char         1  0            -            - Load
+01039             15596 PV Nominal P                                                     kW         Unsigned     2  0            0        32767 PV / PV Aggregated
+01040             15594 PV Actual P                                                      kW         Integer      2  0            0        32767 PV / PV Aggregated
+01041             15595 PV Actual Q                                                      kVAr       Integer      2  0       -32767        32767 PV / PV Aggregated
+01042             15891 PV Actual S                                                      kVA        Integer      2  0            0        32767 PV / PV Aggregated
+01043             20162 PV Actual Power Factor                                                      Integer      2  3        -1000         1000 PV / PV Aggregated
+01044             15678 PV Actual Load Character                                                    Char         1  0            -            - PV / PV Aggregated
+01045             20184 PV Power Factor Request                                                     Integer      2  3        -1000         1000 PV / PV Aggregated
+01046             14364 Curtailment Output                                               %          Integer      2  2            0        10000 PV / PV Aggregated; WT / WT Aggregated
+01047             19735 WT Nominal P                                                     kW         Unsigned     2  0            0        32767 WT / WT Aggregated
+01048             19734 WT Actual P                                                      kW         Integer      2  0            0        32767 WT / WT Aggregated
+01049             19733 WT Actual Q                                                      kVAr       Integer      2  0       -32767        32767 WT / WT Aggregated
+01050             19732 WT Actual S                                                      kVA        Integer      2  0            0        32767 WT / WT Aggregated
+01051             19731 WT Actual Power Factor                                                      Integer      2  3        -1000         1000 WT / WT Aggregated
+01052             19730 WT Actual Load Character                                                    Char         1  0            -            - WT / WT Aggregated
+01053             19713 WT Power Factor Request                                                     Integer      2  3        -1000         1000 WT / WT Aggregated
+01054             19729 REN Nominal P                                                    kW         Unsigned     2  0            0        32767 Renewables
+01055             19728 REN Actual P                                                     kW         Integer      2  0       -32767        32767 Renewables
+01056             19727 REN Actual Q                                                     kVAr       Integer      2  0       -32767        32767 Renewables
+01057             19726 REN Actual S                                                     kVA        Integer      2  0            0        32767 Renewables
+01058             19725 REN Actual Power Factor                                                     Integer      2  3        -1000         1000 Renewables
+01059             19724 REN Actual Load Character                                                   Char         1  0            -            - Renewables
+01060-01061(2)    20169 Total P                                                          kW         Integer      4  0  -2147483647   2147483647 Hybrid System
+01062-01063(2)    20168 Total Q                                                          kVAr       Integer      4  0  -2147483647   2147483647 Hybrid System
+01064-01065(2)    20167 Total S                                                          kVA        Integer      4  0            0   2147483647 Hybrid System
+01066             20166 Total PF                                                                    Integer      2  3        -1000         1000 Hybrid System
+01067             20165 Total Load Character                                                        Char         1  0            -            - Hybrid System
+01068-01069(2)    20183 Gensets P                                                        kW         Integer      4  0            0   2147483647 Gensets
+01070-01071(2)    20182 Gensets Q                                                        kVAr       Integer      4  0  -2147483647   2147483647 Gensets
+01072             20181 Gensets Power Factor                                                        Integer      2  3            0         1000 Gensets
+01073             20180 Gensets Load Character                                                      Char         1  0            -            - Gensets
+01074-01075(2)    20800 Mains/Bus Frequency                                              Hz         Integer      4  3            0       400000 Mains/Bus
+01076              8195 Mains/Bus Voltage L1-N                                           V          Unsigned     2  0            0        65534 Mains/Bus
+01077              8196 Mains/Bus Voltage L2-N                                           V          Unsigned     2  0            0        65534 Mains/Bus
+01078              8197 Mains/Bus Voltage L3-N                                           V          Unsigned     2  0            0        65534 Mains/Bus
+01079              9631 Mains/Bus Voltage L1-L2                                          V          Unsigned     2  0            0        65534 Mains/Bus
+01080              9632 Mains/Bus Voltage L2-L3                                          V          Unsigned     2  0            0        65534 Mains/Bus
+01081              9633 Mains/Bus Voltage L3-L1                                          V          Unsigned     2  0            0        65534 Mains/Bus
+01082             16615 +Mains/Bus Voltage                                               V          Unsigned     2  0            0        65534 Mains/Bus
+01083             16616 +Mains/Bus Voltage Relative                                      %          Integer      2  2            0        10000 Mains/Bus
+01084              8208 Mains L1 Current                                                 A          Unsigned     2  0            0        32767 Mains/Bus
+01085              8703 Mains Import P                                                   kW         Integer      2  0       -32767        32767 Mains/Bus
+01086              8704 Mains Import Q                                                   kVAr       Integer      2  0       -32767        32767 Mains/Bus
+01087             16157 Mains PF                                                                    Integer      2  3        -1000         1000 Mains/Bus
+01088              8709 Mains Load Character                                                        Char         1  0            -            - Mains/Bus
+01089             16060 Mains Voltage THD L1                                             %          Unsigned     2  1            0        10000 Mains/Bus
+01090             16061 Mains Voltage THD L2                                             %          Unsigned     2  1            0        10000 Mains/Bus
+01091             16062 Mains Voltage THD L3                                             %          Unsigned     2  1            0        10000 Mains/Bus
+01092             16064 Mains Current THD L1                                             %          Unsigned     2  1            0        10000 Mains/Bus
+01093              9847 Max Vector Shift                                                 °          Unsigned     2  1            0          450 Mains/Bus
+01094             16651 Mains Voltage 10min Avg L1-N                                     V          Unsigned     2  0            0        65535 Mains/Bus
+01095             16652 Mains Voltage 10min Avg L2-N                                     V          Unsigned     2  0            0        65535 Mains/Bus
+01096             16653 Mains Voltage 10min Avg L3-N                                     V          Unsigned     2  0            0        65535 Mains/Bus
+01097             16654 Mains Voltage 1min Avg L1-N                                      V          Unsigned     2  0            0        65535 Mains/Bus
+01098             16655 Mains Voltage 1min Avg L2-N                                      V          Unsigned     2  0            0        65535 Mains/Bus
+01099             16656 Mains Voltage 1min Avg L3-N                                      V          Unsigned     2  0            0        65535 Mains/Bus
+01100             16082 Mains Voltage 10min Avg L1-L2                                    V          Unsigned     2  0            0        65535 Mains/Bus
+01101             16083 Mains Voltage 10min Avg L2-L3                                    V          Unsigned     2  0            0        65535 Mains/Bus
+01102             16084 Mains Voltage 10min Avg L3-L1                                    V          Unsigned     2  0            0        65535 Mains/Bus
+01103             16085 Mains Voltage 1min Avg L1-L2                                     V          Unsigned     2  0            0        65535 Mains/Bus
+01104             16086 Mains Voltage 1min Avg L2-L3                                     V          Unsigned     2  0            0        65535 Mains/Bus
+01105             16087 Mains Voltage 1min Avg L3-L1                                     V          Unsigned     2  0            0        65535 Mains/Bus
+01106              9848 ROCOF1                                                           Hz/s       Integer      2  2            0         5000 Mains/Bus
+01107             10049 Max ROCOF1                                                       Hz/s       Integer      2  2            0         5000 Mains/Bus
+01108             16153 ROCOF2                                                           Hz/s       Integer      2  2            0         5000 Mains/Bus
+01109             16163 Max ROCOF2                                                       Hz/s       Integer      2  2            0         5000 Mains/Bus
+01110             16154 ROCOF3                                                           Hz/s       Integer      2  2            0         5000 Mains/Bus
+01111             16164 Max ROCOF3                                                       Hz/s       Integer      2  2            0         5000 Mains/Bus
+01112             16155 ROCOF4                                                           Hz/s       Integer      2  2            0         5000 Mains/Bus
+01113             16165 Max ROCOF4                                                       Hz/s       Integer      2  2            0         5000 Mains/Bus
+01114              8624 Engine Priority                                                             Unsigned     1  0            0           32 Power Management
+01115-01116(2)    15805 Actual Reserve                                                   kW         Integer      4  0    -32768000     32767000 Power Management
+01117-01118(2)    15806 Start Reserve                                                    kW         Integer      4  0    -32768000     32767000 Power Management
+01119-01120(2)    15807 Stop Reserve                                                     kW         Integer      4  0    -32768000     32767000 Power Management
+01121             10788 Actual Relative Reserve                                          %          Integer      2  0            0          110 Power Management
+01122             10786 Start Relative Reserve                                           %          Integer      2  0            0          110 Power Management
+01123             10787 Stop Relative Reserve                                            %          Integer      2  0            0          110 Power Management
+01124-01125(2)    10657 Total Running P                                                  kW         Integer      4  0    -32768000     32767000 Power Management
+01126-01127(2)    10656 Total Running Q                                                  kVAr       Integer      4  0    -32768000     32767000 Power Management
+01128-01129(2)    10999 Running Nominal Power In PM                                      kW         Integer      4  0    -32768000     32767000 Power Management
+01130-01131(2)    10658 Running Nominal Power Of All                                     kW         Integer      4  0    -32768000     32767000 Power Management
+01132-01133(2)    10998 Available Nominal Power In PM                                    kW         Integer      4  0    -32768000     32767000 Power Management
+01134             10012 Minimal Running Power                                            kW         Unsigned     2  0            0        32767 Power Management
+01135-01136(2)     8974 Actual Power Band                                                           Binary#1     4  0            -            - Power Management
+01137-01138(2)     8975 Next Power Band                                                             Binary#2     4  0            -            - Power Management
+01139              8663 BESS Required P Target                                           kW         Integer      2  0            0        32000 Frequency/Load Control
+01140             13105 BESS Required P                                                  kW         Integer      2  0            0        32000 Frequency/Load Control
+01141              9052 Frequency Regulator Output                                       V          Integer      2  3       -10000        10000 Frequency/Load Control
+01142             12877 BESS Required Q                                                  kVAr       Integer      2  0       -32000        32000 Voltage/PF Control
+01143             13169 BESS Required Qrel Lim                                           %          Integer      2  0         -320          320 Voltage/PF Control
+01144             16159 BESS Required PF                                                            Integer      2  3            0         1000 Voltage/PF Control
+01145              9033 BESS Required PF Character                                                  Char         1  0            -            - Voltage/PF Control
+01146              9053 Voltage Regulator Output                                         V          Integer      2  3       -10000        10000 Voltage/PF Control
+01147             14997 Voltage Request                                                  %          Integer      2  1            0         1000 Voltage/PF Control
+01148              8213 Battery Volts                                                    V          Integer      2  1            0          360 Controller I/O
+01149              8235 Binary Inputs                                                               Binary#3     2  0            -            - Controller I/O
+01150             15780 E-STOP                                                                      Binary#4     1  0            -            - Controller I/O
+01151              8239 Binary Outputs                                                              Binary#5     2  0            -            - Controller I/O
+01152-01153(2)     8205 PCC kWh                                                          kWh        Integer      4  0  -2147483647   2147483647 Statistics
+01154-01155(2)     8539 PCC kVArh                                                        kVArh      Integer      4  0  -2147483647   2147483647 Statistics
+01156-01157(2)    11025 Mains kWh                                                        kWh        Integer      4  0  -2147483647   2147483647 Statistics
+01158-01159(2)    11026 Mains kVArh                                                      kVArh      Integer      4  0  -2147483647   2147483647 Statistics
+01160-01161(2)     8206 Running Hours                                                    h          Integer      4  1    -32768000     32767000 Statistics
+01162              8207 Num Starts                                                                  Unsigned     2  0            0        65534 Statistics
+01163             11616 Maintenance Timer 1 RunHours                                     h          Integer      2  0       -10000        10000 Statistics
+01164             11617 Maintenance Timer 2 RunHours                                     h          Integer      2  0       -10000        10000 Statistics
+01165             11618 Maintenance Timer 3 RunHours                                     h          Integer      2  0       -10000        10000 Statistics
+01166-01167(2)    16387 Maintenance Timer 1 Interval                                     day        Integer      4  0       -10000        10000 Statistics
+01168-01169(2)    16388 Maintenance Timer 2 Interval                                     day        Integer      4  0       -10000        10000 Statistics
+01170-01171(2)    16389 Maintenance Timer 3 Interval                                     day        Integer      4  0       -10000        10000 Statistics
+01172                   Not Used                                                        
+01173                   Not Used                                                        
+01174                   Not Used                                                        
+01175                   Not Used                                                        
+01176-01177(2)    11195 Num E-Stops                                                                 Unsigned     4  0            0     65535000 Statistics
+01178-01179(2)    11196 Shutdowns                                                                   Unsigned     4  0            0     65535000 Statistics
+01180                   Not Used                                                        
+01181                   Not Used                                                        
+01182                   Not Used                                                        
+01183                   Not Used                                                        
+01184                   Not Used                                                        
+01185                   Not Used                                                        
+01186                   Not Used                                                        
+01187                   Not Used                                                        
+01188                   Not Used                                                        
+01189              9887 Controller Mode                                                             List#1       1  0            0            3 Info
+01190              9591 Load Shedding Status                                                        List#2       1  0            0            5 Info
+01191              9244 BESS state                                                                  List#3       1  0            0           13 Info
+01192              9245 Breaker state                                                               List#4       1  0            0           13 Info
+01193             10040 Timer text                                                                  List#5       1  0            0           24 Info
+01194             12944 Connection Type                                                             List#6       1  0            0            4 Info
+01195             14447 SPI Module A                                                                List#7       1  0            0           15 Info
+01196             14448 SPI Module B                                                                List#7       1  0            0           15 Info
+01197-01212(16)   24501 ID String                                                                   String      32  0            -            - Info
+01213-01220(8)    24339 FW Version                                                                  String      16  0            -            - Info
+01221              8480 Application                                                                 List#8       1  0            0            1 Info
+01222              8707 FW Branch                                                                   List#9       1  0            0            1 Info
+01223              8546 CAN16                                                                       Binary#6     2  0            -            - Info
+01224              8827 CAN32                                                                       Binary#7     2  0            -            - Info
+01225             11081 Reg16                                                                       Binary#8     2  0            -            - Info
+01226             11082 Reg32                                                                       Binary#9     2  0            -            - Info
+01227             10196 Gen Loaded 16                                                               Binary#10    2  0            -            - Info
+01228             10197 Gen Loaded 32                                                               Binary#11    2  0            -            - Info
+01229              8624 Engine Priority                                                             Unsigned     1  0            0           32 Power Management
+01230-01231(2)    15805 Actual Reserve                                                   kW         Integer      4  0    -32768000     32767000 Power Management
+01232-01233(2)    15806 Start Reserve                                                    kW         Integer      4  0    -32768000     32767000 Power Management
+01234-01235(2)    15807 Stop Reserve                                                     kW         Integer      4  0    -32768000     32767000 Power Management
+01236             15673 Dynamic Spinning Reserve                                         kW         Integer      2  0       -32768        32767 Power Management
+01237             15674 Dynamic Spinning Reserve Offset                                  kW         Integer      2  0       -32768        32767 Power Management
+01238             10788 Actual Relative Reserve                                          %          Integer      2  0            0          110 Power Management
+01239             10786 Start Relative Reserve                                           %          Integer      2  0            0          110 Power Management
+01240             10787 Stop Relative Reserve                                            %          Integer      2  0            0          110 Power Management
+01241-01242(2)    10657 Total Running P                                                  kW         Integer      4  0    -32768000     32767000 Power Management
+01243-01244(2)    10656 Total Running Q                                                  kVAr       Integer      4  0    -32768000     32767000 Power Management
+01245-01246(2)    10999 Running Nominal Power In PM                                      kW         Integer      4  0    -32768000     32767000 Power Management
+01247-01248(2)    10658 Running Nominal Power Of All                                     kW         Integer      4  0    -32768000     32767000 Power Management
+01249-01250(2)    10998 Available Nominal Power In PM                                    kW         Integer      4  0    -32768000     32767000 Power Management
+01251             10012 Minimal Running Power                                            kW         Unsigned     2  0            0        32767 Power Management
+01252-01253(2)     8974 Actual Power Band                                                           Binary#1     4  0            -            - Power Management
+01254-01255(2)     8975 Next Power Band                                                             Binary#2     4  0            -            - Power Management
+01256              9143 Log Bout 1                                                                  Binary#12    2  0            -            - Log Bout
+01257              9144 Log Bout 2                                                                  Binary#13    2  0            -            - Log Bout
+01258              9145 Log Bout 3                                                                  Binary#14    2  0            -            - Log Bout
+01259              9146 Log Bout 4                                                                  Binary#15    2  0            -            - Log Bout
+01260              9147 Log Bout 5                                                                  Binary#16    2  0            -            - Log Bout
+01261              9148 Log Bout 6                                                                  Binary#17    2  0            -            - Log Bout
+01262              9149 Log Bout 7                                                                  Binary#18    2  0            -            - Log Bout
+01263              9150 Log Bout 8                                                                  Binary#19    2  0            -            - Log Bout
+01264             11896 Log Bout 9                                                                  Binary#20    2  0            -            - Log Bout
+01265             11897 Log Bout 10                                                                 Binary#21    2  0            -            - Log Bout
+01266             11898 Log Bout 11                                                                 Binary#22    2  0            -            - Log Bout
+01267             11899 Log Bout 12                                                                 Binary#23    2  0            -            - Log Bout
+01268             11900 Log Bout 13                                                                 Binary#24    2  0            -            - Log Bout
+01269             24180 ETH Interface Status                                                        List#10      1  0            0            4 Ethernet
+01270-01277(8)    24184 Current IP Address                                                          String      16  0            -            - Ethernet
+01278-01285(8)    24183 Current Subnet Mask                                                         String      16  0            -            - Ethernet
+01286-01293(8)    24182 Current Gateway                                                             String      16  0            -            - Ethernet
+01294-01301(8)    24181 Primary DNS                                                                 String      16  0            -            - Ethernet
+01302-01309(8)    24100 Secondary DNS                                                               String      16  0            -            - Ethernet
+01310             24332 Last E-mail Result                                                          Unsigned     1  0            0          254 Ethernet
+01311-01326(16)   24333 MAC Address                                                                 String      32  0            -            - Ethernet
+01327             24088 Ethernet PHY mode                                                           List#11      1  0            0            4 Ethernet
+01328             24007 AirGate Status                                                              List#12      1  0            0            8 Ethernet
+01329-01336(8)    24345 AirGate ID                                                                  String      16  0            -            - Ethernet
+01337             23924 ETH Interface Status                                                        List#10      1  0            0            4 CM-Ethernet
+01338-01345(8)    23931 Current IP Address                                                          String      16  0            -            - CM-Ethernet
+01346-01353(8)    23930 Current Subnet Mask                                                         String      16  0            -            - CM-Ethernet
+01354-01361(8)    23929 Current Gateway                                                             String      16  0            -            - CM-Ethernet
+01362-01369(8)    23928 Primary DNS                                                                 String      16  0            -            - CM-Ethernet
+01370-01377(8)    23927 Secondary DNS                                                               String      16  0            -            - CM-Ethernet
+01378             23925 Last E-mail Result                                                          Unsigned     1  0            0          254 CM-Ethernet
+01379-01394(16)   23932 MAC Address                                                                 String      32  0            -            - CM-Ethernet
+01395             23916 Ethernet PHY mode                                                           List#11      1  0            0            4 CM-Ethernet
+01396-01403(8)    23926 AirGate ID                                                                  String      16  0            -            - CM-Ethernet
+01404             23910 AirGate Status                                                              List#13      1  0            0            8 CM-Ethernet
+01405-01436(32)   23915 AirGate Servicing Node                                                      String      64  0            -            - CM-Ethernet
+01437-01444(8)    24309 AirGate ID                                                                  String      16  0            -            - CM-4G-GPS
+01445             23967 AirGate Status                                                              List#14      1  0            0            8 CM-4G-GPS
+01446-01477(32)   23991 AirGate Servicing Node                                                      String      64  0            -            - CM-4G-GPS
+01478-01485(8)    23971 IP Address                                                                  String      16  0            -            - CM-4G-GPS
+01486-01493(8)    23984 Primary DNS                                                                 String      16  0            -            - CM-4G-GPS
+01494-01501(8)    23983 Secondary DNS                                                               String      16  0            -            - CM-4G-GPS
+01502             24307 Last E-mail Result                                                          Unsigned     1  0            0          254 CM-4G-GPS
+01503             24302 Signal Strength                                                  %          Unsigned     1  0            0          100 CM-4G-GPS
+01504             24288 Modem Status                                                                List#15      1  0            0           29 CM-4G-GPS
+01505             23972 Network Status                                                              List#16      1  0            0            2 CM-4G-GPS
+01506             23973 GPS Status                                                                  List#17      1  0            0            2 CM-4G-GPS
+01507-01522(16)   24147 Network Name                                                                String      32  0            -            - CM-4G-GPS
+01523-01530(8)    24146 Network Mode                                                                String      16  0            -            - CM-4G-GPS
+01531-01538(8)    24268 Latitude                                                                    String      16  0            -            - CM-4G-GPS
+01539-01546(8)    24267 Longitude                                                                   String      16  0            -            - CM-4G-GPS
+01547             24265 Active Satellites                                                           Unsigned     1  0            0           15 CM-4G-GPS
+01548             24264 Speed                                                            km/h       Unsigned     2  0            0        65535 CM-4G-GPS
+
+
+========================================================================================================================================================================================
+ Table: Setpoints
+========================================================================================================================================================================================
+
+Allowed MODBUS functions: 03, 04, 06, 16
+
+Register(s)    Com.Obj. Name                                                             Dimension  Type       Len Dec         Min          Max Group / Subgroup
+========================================================================================================================================================================================
+
+
+========================================================================================================================================================================================
+ List# Types Meaning
+========================================================================================================================================================================================
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#1
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  OFF
+    1  MAN
+    2  AUTO
+    3  TEST
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#2
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  No LoadShed
+    1  LdShed S1
+    2  LdShed S2
+    3  LdShed S3
+    4  LdShed S4
+    5  LdShed S5
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#3
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Init
+    1  Ready
+    2  NotReady
+    3  Precharge
+    4  Standby
+    5  Energized
+    6  Loaded
+    7  Soft unld
+    8  Stop
+    9  Shutdown
+   10  EmergMan
+   11  Soft load
+   12  WaitStop
+   13  Offload
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#4
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Init
+    1  BrksOff
+    2  IslOper
+    3  MainsOper
+    4  ParalOper
+    5  RevSync
+    6  Synchro
+    7  MainsFlt
+    8  ValidFlt
+    9  MainsRet
+   10  MultIslOp
+   11  MultParOp
+   12  EmergMan
+   13  StrUpSync
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#5
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  No Timer
+    1  Stop Valve
+    2  MinStabTO
+    3  MaxStabTO
+    4  MCB Close
+    5  TransferDel
+    6  ReturnDelay
+    7  Start Delay
+    8  V Detect
+    9  BCB Delay
+   10  BCB Open
+   11  SyncTOut
+   12  BCB Close
+   13  MCB Open
+   14  WaitToStp
+   15  Syst Start
+   16  Syst Stop
+   17  Next Start
+   18  Next Stop
+   19  LdShedChg
+   20  LdRecChg
+   21  OfL stop
+   22  BESS Start TO
+   23  Synchro Allow
+   24  MainsStab
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#6
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  MonoPhase
+    1  SplitPhase
+    2  3Ph3Wire
+    3  3Ph4Wire
+    4  High Leg D
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#7
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Empty
+    1  EM-AOUT8
+    2  EM-BIO8
+    3  EM-EFCP
+    4  EM-EFCP-8mA
+    5  EM-BIO8-EFCP
+    6  CM-RS232-485
+    7  CM-RS232
+    8  CM-Ethernet
+    9  CM-GPRS
+   10  CM-3G
+   11  CM-3G-GPS
+   12  CM-CAN-RS485
+   13  CM-Ethernet
+   14  CM-4G-GPS
+   15  CM-WIFI
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#8
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Not Used
+    1  GC
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#9
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Not Used
+    1  Standard
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#10
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Unknown
+    1  Disconnected
+    2  Connecting
+    3  Connected
+    4  Failure
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#11
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Link Down
+    1  10-HD
+    2  10-FD
+    3  100-HD
+    4  100-FD
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#12
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Not defined
+    1  Waiting to connect
+    2  Resolving
+    3  Connecting
+    4  Creating secure channel
+    5  Registering
+    6  Connected, inoperable
+    7  Connected, operable
+    8  Suspended, empty key
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#13
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Not defined
+    1  Wait to connect
+    2  Resolving
+    3  Connecting
+    4  Creat sec chan
+    5  Registering
+    6  Conn inoperable
+    7  Conn operable
+    8  Susp AGkeyEmpty
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#14
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Not defined
+    1  Waiting to connect
+    2  Resolving
+    3  Connecting
+    4  Creating secure channel
+    5  Registering
+    6  Connected, inoperable
+    7  Connected, operable
+    8  Susp AGkeyEmpty
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#15
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  
+    1  OK
+    2  E01
+    3  E02
+    4  E SIM
+    5  E04
+    6  E registration
+    7  E registration
+    8  E registration
+    9  E context
+   10  E connect
+   11  E08
+   12  E09
+   13  E10
+   14  E registration
+   15  E12
+   16  E13
+   17  E14
+   18  E SMS send
+   19  Init 1 ERR
+   20  Init 2 ERR
+   21  Init 3 ERR
+   22  E18
+   23  E18
+   24  E18
+   25  E conn lost
+   26  E19
+   27  E18
+   28  Restart-config
+   29  Restart-app
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#16
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Not available
+    1  Available
+    2  Attached
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+List#17
+
+Value  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    0  Undefined
+    1  Searching
+    2  Fixed
+
+
+========================================================================================================================================================================================
+ Binary# Types Meaning
+========================================================================================================================================================================================
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#1
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Actual Power Band 1
+  1  Actual Power Band 2
+  2  Actual Power Band 3
+  3  Actual Power Band 4
+  4  Actual Power Band 5
+  5  Actual Power Band 6
+  6  Actual Power Band 7
+  7  Actual Power Band 8
+  8  Actual Power Band 9
+  9  Actual Power Band 10
+ 10  Actual Power Band 11
+ 11  Actual Power Band 12
+ 12  Actual Power Band 13
+ 13  Actual Power Band 14
+ 14  Actual Power Band 15
+ 15  Actual Power Band 16
+ 16  Actual Power Band 17
+ 17  Actual Power Band 18
+ 18  Actual Power Band 19
+ 19  Actual Power Band 20
+ 20  Actual Power Band 21
+ 21  Actual Power Band 22
+ 22  Actual Power Band 23
+ 23  Actual Power Band 24
+ 24  Actual Power Band 25
+ 25  Actual Power Band 26
+ 26  Actual Power Band 27
+ 27  Actual Power Band 28
+ 28  Actual Power Band 29
+ 29  Actual Power Band 30
+ 30  Actual Power Band 31
+ 31  Actual Power Band 32
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#2
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Next Power Band 1
+  1  Next Power Band 2
+  2  Next Power Band 3
+  3  Next Power Band 4
+  4  Next Power Band 5
+  5  Next Power Band 6
+  6  Next Power Band 7
+  7  Next Power Band 8
+  8  Next Power Band 9
+  9  Next Power Band 10
+ 10  Next Power Band 11
+ 11  Next Power Band 12
+ 12  Next Power Band 13
+ 13  Next Power Band 14
+ 14  Next Power Band 15
+ 15  Next Power Band 16
+ 16  Next Power Band 17
+ 17  Next Power Band 18
+ 18  Next Power Band 19
+ 19  Next Power Band 20
+ 20  Next Power Band 21
+ 21  Next Power Band 22
+ 22  Next Power Band 23
+ 23  Next Power Band 24
+ 24  Next Power Band 25
+ 25  Next Power Band 26
+ 26  Next Power Band 27
+ 27  Next Power Band 28
+ 28  Next Power Band 29
+ 29  Next Power Band 30
+ 30  Next Power Band 31
+ 31  Next Power Band 32
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#3
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  PV1 feedback
+  1  PV2 feedback
+  2  UPS1 feedback
+  3  UPS2 feedback
+  4  Remote OFF
+  5  Remote TEST
+  6  Sd Override
+  7  Not Used
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#4
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  E-STOP
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#5
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  PV CB1 ON
+  1  PV CB2 ON
+  2  UPS1 ON
+  3  PV CB1 OFF
+  4  PV CB2 OFF
+  5  UPS1 OFF
+  6  UPS2 ON
+  7  UPS2 OFF
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#6
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  CAN CU 1
+  1  CAN CU 2
+  2  CAN CU 3
+  3  CAN CU 4
+  4  CAN CU 5
+  5  CAN CU 6
+  6  CAN CU 7
+  7  CAN CU 8
+  8  CAN CU 9
+  9  CAN CU 10
+ 10  CAN CU 11
+ 11  CAN CU 12
+ 12  CAN CU 13
+ 13  CAN CU 14
+ 14  CAN CU 15
+ 15  CAN CU 16
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#7
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  CAN CU 17
+  1  CAN CU 18
+  2  CAN CU 19
+  3  CAN CU 20
+  4  CAN CU 21
+  5  CAN CU 22
+  6  CAN CU 23
+  7  CAN CU 24
+  8  CAN CU 25
+  9  CAN CU 26
+ 10  CAN CU 27
+ 11  CAN CU 28
+ 12  CAN CU 29
+ 13  CAN CU 30
+ 14  CAN CU 31
+ 15  CAN CU 32
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#8
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Reg CU 1
+  1  Reg CU 2
+  2  Reg CU 3
+  3  Reg CU 4
+  4  Reg CU 5
+  5  Reg CU 6
+  6  Reg CU 7
+  7  Reg CU 8
+  8  Reg CU 9
+  9  Reg CU 10
+ 10  Reg CU 11
+ 11  Reg CU 12
+ 12  Reg CU 13
+ 13  Reg CU 14
+ 14  Reg CU 15
+ 15  Reg CU 16
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#9
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Reg CU 17
+  1  Reg CU 18
+  2  Reg CU 19
+  3  Reg CU 20
+  4  Reg CU 21
+  5  Reg CU 22
+  6  Reg CU 23
+  7  Reg CU 24
+  8  Reg CU 25
+  9  Reg CU 26
+ 10  Reg CU 27
+ 11  Reg CU 28
+ 12  Reg CU 29
+ 13  Reg CU 30
+ 14  Reg CU 31
+ 15  Reg CU 32
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#10
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Gen Loaded 1
+  1  Gen Loaded 2
+  2  Gen Loaded 3
+  3  Gen Loaded 4
+  4  Gen Loaded 5
+  5  Gen Loaded 6
+  6  Gen Loaded 7
+  7  Gen Loaded 8
+  8  Gen Loaded 9
+  9  Gen Loaded 10
+ 10  Gen Loaded 11
+ 11  Gen Loaded 12
+ 12  Gen Loaded 13
+ 13  Gen Loaded 14
+ 14  Gen Loaded 15
+ 15  Gen Loaded 16
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#11
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Gen Loaded 17
+  1  Gen Loaded 18
+  2  Gen Loaded 19
+  3  Gen Loaded 20
+  4  Gen Loaded 21
+  5  Gen Loaded 22
+  6  Gen Loaded 23
+  7  Gen Loaded 24
+  8  Gen Loaded 25
+  9  Gen Loaded 26
+ 10  Gen Loaded 27
+ 11  Gen Loaded 28
+ 12  Gen Loaded 29
+ 13  Gen Loaded 30
+ 14  Gen Loaded 31
+ 15  Gen Loaded 32
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#12
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Not Used
+  1  Alarm
+  2  Alarm Flashing
+  3  Horn
+  4  Horn Flashing
+  5  Not Ready
+  6  Ready
+  7  Manual Ready
+  8  Operational
+  9  Reserved
+ 10  Precharge
+ 11  Starting
+ 12  Energized
+ 13  Soft Load
+ 14  Loaded
+ 15  Soft Unload
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#13
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Stopping
+  1  Sd Override
+  2  Inverter Run Request
+  3  BESS Ready To Load
+  4  BESS Parallel Oper
+  5  BESS In Loadsharing
+  6  BESS Active
+  7  MCB Close/Open
+  8  MCB ON Coil
+  9  MCB OFF Coil
+ 10  MCB UV Coil
+ 11  MCB Status
+ 12  BCB Close/Open
+ 13  BCB ON Coil
+ 14  BCB OFF Coil
+ 15  BCB UV Coil
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#14
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  BCB Close/Open Secondary
+  1  BCB ON Coil Secondary
+  2  BCB OFF Coil Secondary
+  3  BCB UV Coil Secondary
+  4  BCB Status
+  5  Reserved
+  6  Reserved
+  7  PVCB Close/Open
+  8  PVCB ON Coil
+  9  PVCB OFF Coil
+ 10  PVCB UV Coil
+ 11  PVCB Status
+ 12  PV/WT Run Request
+ 13  Curtailment Enable
+ 14  SOC Charge Disabled
+ 15  SOC Discharge Disabled
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#15
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Daily Batt Cycles Reached
+  1  BESS Capability C Limit
+  2  BESS Capability L Limit
+  3  Any GCB Closed
+  4  Any Other GCB Closed
+  5  NCB Close/Open
+  6  System Reserve OK
+  7  System Ready
+  8  All Available Gen-sets Run
+  9  Engines Swapped
+ 10  Peripheral Module Comm Fail
+ 11  Reserved
+ 12  Frequency Up
+ 13  Frequency Down
+ 14  Voltage Up
+ 15  Voltage Down
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#16
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Common Warning
+  1  Common Shutdown
+  2  Reserved
+  3  Common Shutdown Override
+  4  Common Slow Stop
+  5  Reserved
+  6  Reserved
+  7  Common PVCB Open
+  8  Common Mains Protection
+  9  Common Alarm Only
+ 10  Common History Record
+ 11  Common Alarm Level 1
+ 12  Common Alarm Level 2
+ 13  Common Alarm Active Level 1
+ 14  Common Alarm Active Level 2
+ 15  External CB Block
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#17
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  AL Maintenance 1
+  1  AL Maintenance 2
+  2  AL Maintenance 3
+  3  AL Maintenance 4
+  4  Forward Synchronization
+  5  Reverse Synchronization
+  6  In Synchronism
+  7  Reserved
+  8  Reserved
+  9  Heartbeat
+ 10  Reserved
+ 11  Not In Auto
+ 12  Mode OFF
+ 13  Mode MAN
+ 14  Mode AUTO
+ 15  Reserved
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#18
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Reserved
+  1  Peak Shaving Active
+  2  Reserved
+  3  Reserved
+  4  Reserved
+  5  Reserved
+  6  BESS Healthy
+  7  Mains/Bus Healthy
+  8  Initialized
+  9  Reserved
+ 10  kWh Pulse
+ 11  Deadbus
+ 12  Logical 0
+ 13  Logical 1
+ 14  Reserved
+ 15  Vector Shift Active
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#19
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Exercise Timer 1
+  1  Exercise Timer 2
+  2  Exercise Timer 3
+  3  Exercise Timer 4
+  4  Exercise Timer 5
+  5  Exercise Timer 6
+  6  Reserved
+  7  Reserved
+  8  Reserved
+  9  Reserved
+ 10  Reserved
+ 11  Reserved
+ 12  ROCOF 1 Active
+ 13  ROCOF 2 Active
+ 14  ROCOF 3 Active
+ 15  ROCOF 4 Active
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#20
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  Alarm BESS Voltage
+  1  Alarm BESS Frequency
+  2  Alarm BESS Overcurrent
+  3  Alarm Mains Fail
+  4  Alarm Mains Frequency
+  5  Alarm Mains Voltage
+  6  Load Shedding Stage 1
+  7  Load Shedding Stage 2
+  8  Load Shedding Stage 3
+  9  Load Shedding Stage 4
+ 10  Load Shedding Stage 5
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#21
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  FltRes Button Echo
+  1  HornRes Button Echo
+  2  Start Button Echo
+  3  Stop Button Echo
+  4  MCB Button Echo
+  5  BCB Button Echo
+  6  PVCB Button Echo
+  7  Event Mains Frequency Rise
+  8  Event Mains Frequency Fall
+  9  Event Load Reduction
+ 10  Event Mains Trip
+ 11  Event P For Q
+ 12  Event Soft Unload
+ 13  Event Post VRT
+ 14  Event Return Over/Under Frequency
+ 15  Event P(Um)
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#22
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  PQ-L Area Limit
+  1  PQ-C Area Limit
+  2  UQ-L Area Limit
+  3  UQ-C Area Limit
+  4  P For Q Active
+  5  Load Reduction Active
+  6  P Over Frequency Active
+  7  P Under Frequency Active
+  8  LVRT Active
+  9  OVRT Active
+ 10  Pave
+ 11  LVRT Severe
+ 12  LVRTCurveTrip
+ 13  OVRTCurveTrip
+ 14  P Over Frequency Curve Invalid
+ 15  P Under Frequency Curve Invalid
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#23
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  OVRT Invalid
+  1  LVRT 1-phase Invalid
+  2  LVRT 2-phase Invalid
+  3  LVRT 3-phase Invalid
+  4  Pave FLS
+  5  Sync To Mains Allowed
+  6  Process Power Limitation
+  7  GridCodes Power Limitation
+  8  Reserved
+  9  Reserved
+ 10  Reserved
+ 11  Reserved
+ 12  PV Operable
+ 13  WT Operable
+ 14  Precharge request
+ 15  DC Circuit Closed
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Binary#24
+
+Bit  Name
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  0  ECU 1 Comm Fail
+  1  ECU 2 Comm Fail
+  2  ECU 3 Comm Fail
+  3  ECU 4 Comm Fail
+  4  ECU 5 Comm Fail
+  5  ECU 6 Comm Fail
+  6  ECU 7 Comm Fail
+  7  ECU 8 Comm Fail
+  8  ECU 9 Comm Fail
+  9  Reserved
+ 10  Reserved
+ 11  Reserved
+ 12  Reserved
+ 13  Reserved
+ 14  Reserved
+ 15  Reserved
+
+

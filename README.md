@@ -52,18 +52,21 @@ window, until the window is closed.
 | File | Use |
 |---|---|
 | `config\site.yaml` | **Demo.** Simulated grid + solar + 3 gensets + meter; government-grid outages included. No hardware, no network traffic. |
-| `config\site.plant.yaml` | **Real plant.** Read-only Modbus polling of the InteliNeo (192.168.0.112) and the SAU (192.168.0.128), **once an hour** (`poll_interval_s: 3600`). Register addresses are `TODO` until the two documents below arrive. |
+| `config\site.plant.yaml` | **Real plant.** Read-only Modbus polling of the InteliNeo (192.168.0.112, unit 1 - mapped from the controller's own Modbus export) and the ten inverters through the SAU (192.168.0.128 - registers pending its point table), **once an hour** (`poll_interval_s: 3600`). |
 
-### To go live (what is still needed from the site)
+### To go live
 
-1. **InteliNeo Modbus register list**: InteliConfig → Modules → *Modbus Registers* tab (export or
-   screenshots), plus the controller's Modbus unit id → fill `profiles\intelineo_master.yaml` and `connection.unit_id`.
-2. **SAU point table** for the inverters (SAU web page → settings/communication, or the Sineng Modbus
-   protocol for the inverter model), plus each inverter's unit id on the SAU → fill
-   `profiles\inverter_sineng.yaml` and the `unit_id`s in `config\site.plant.yaml`.
-3. `CHECK-PLANT.bat`: compare every printed value with the SAU web page / controller screen, fix scale
-   or sign in the profile, repeat until everything is `good`.
-4. `START-PLANT.bat`. Done. The Turkey side reads `http://<pc-ip>:8080/api/v1/tags` or the exported file.
+1. **Plant PC on the ComAp network**: the port with the ComAp switch cable gets a fixed address
+   `192.168.0.200`, mask `255.255.255.0`, no gateway (done on 14 Oct on the USB dongle; at
+   installation move the cable to a built-in LAN port and set the same address there).
+2. `CHECK-PLANT.bat`: the InteliNeo block must come back `good` with `bus_frequency_hz` ≈ 50 and
+   `power_kw` equal to the kW on the controller screen (if the values look shifted by one register, set
+   `address_offset: -1` on `neo-01`). The inverters show `registers pending` until step 3.
+3. **SAU Modbus TCP point table** (SAU-WEB → Setting with the advanced login, or Sineng support) →
+   add `address` / `kind` / `scale` next to each `sau_id` in `profiles\inverter_sineng.yaml`, run
+   `CHECK-PLANT.bat` again, compare with the SAU's Device Monitor page.
+4. `START-PLANT.bat`. Done. The Turkey platform reads the Modbus server (`docs\TURKEY_MODBUS.md`)
+   over the VPN, or `http://<pc-ip>:8080/api/v1/tags` / the exported file.
 
 Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, never more often, saved in `data\settings.json`), or `poll_interval_s` in `config\site.plant.yaml`. "Read devices now" in the top bar reads everything once, at any time.
 
@@ -83,7 +86,8 @@ plantcollector\                     the program: adapters (modbus_tcp, intelisca
 docs\turkey\*.xlsx                  the two tag-list workbooks (Rev. 1.2) from DT Turkey
 docs\DATA_FLOW.md                   how the data moves and how Turkey gets it
 docs\TURKEY_MODBUS.md               the Modbus register map served to the Turkey platform
-docs\DEVICES.md                     what the SAU and InteliConfig manuals say, and what it means for us
+docs\DEVICES.md                     what the manuals and the site sessions say, and what it means for us
+docs\site\                          exports taken on site (the InteliNeo Modbus table of 2026-10-14)
 tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks
 docs\SAFETY.md                      why it cannot touch the plant
 docs\INFO_NEEDED.md                 the open questions for the site
