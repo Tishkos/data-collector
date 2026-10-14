@@ -4,6 +4,7 @@ Writes the Modbus register map for the DT Turkey / CCI platform:
   docs/TURKEY_MODBUS.md                          the map as a document
   docs/turkey/Solar_Tag_List_Rev.1.2.xlsx        "PLC Address" and connection columns filled in
   docs/turkey/Solar_Inverter_Tag_List_Rev.1.2.xlsx
+  docs/turkey/Solar_Modbus_Register_Map_Rev.1.0.xlsx   the map as a workbook (Connection + Tags)
 
 Run from the repository root:  python tools/turkey_register_map.py [--host <plant-pc-vpn-ip>]
 The addresses come from plantcollector.publish.build_map, so they are the same ones the
@@ -26,6 +27,59 @@ from plantcollector.registry import load_registry  # noqa: E402
 from plantcollector.views import load_tag_catalog  # noqa: E402
 
 WORKBOOKS = ["docs/turkey/Solar_Tag_List_Rev.1.2.xlsx", "docs/turkey/Solar_Inverter_Tag_List_Rev.1.2.xlsx"]
+MAP_WORKBOOK = "docs/turkey/Solar_Modbus_Register_Map_Rev.1.0.xlsx"
+
+
+def write_map_workbook(path: str, tags: list[dict], host: str, port: int, unit: int, reg=None) -> None:
+    """The register map as a workbook: a Connection sheet and the Tags sheet with a readiness column."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Connection"
+    rows = [
+        ("Erbil solar plant - Modbus TCP register map for the CCI monitoring platform", None, None), (None, None, None),
+        ("Server", "Plant data collector on the plant PC (read-only Modbus TCP server)", None),
+        ("IP address", host if not host.startswith("<") else "to be provided once the connection method (VPN) is agreed", None),
+        ("Port", str(port), None), ("Unit ID", str(unit), None),
+        ("Function codes", "03 Read Holding Registers (04 returns the same registers). Writes are refused.", None),
+        ("Addressing", "0-based protocol addresses (address 100 = holding register 40101 in 1-based notation)", None),
+        ("Float tags", "float32, 2 registers, high word first (ABCD), engineering units, scale 1", None),
+        ("Boolean tags", "uint16, 1 register, 0 / 1", None),
+        ("Quality registers", f"one uint16 per tag at {QUALITY_START} + index: 1 good, 2 stale, 0 bad / not available", None),
+        ("Data refresh", "values are read from the site devices once per hour (30 min at the fastest); please poll every 30-60 minutes", None),
+        ("Register map version", str(MAP_VERSION), None), (None, None, None),
+        ("Header registers", None, None),
+        (f"{HEADER['last_read_time']}-{HEADER['last_read_time'] + 1}", "uint32 (high word first)", "Unix time (UTC seconds) of the last site read"),
+        (str(HEADER["minutes_since_read"]), "uint16", "Minutes since the last site read (65535 = never)"),
+        (str(HEADER["good_tags"]), "uint16", "Number of tags with quality good"),
+        (str(HEADER["total_tags"]), "uint16", f"Total number of tags ({len(tags)})"),
+        (str(HEADER["map_version"]), "uint16", "Register map version"),
+        (str(HEADER["heartbeat"]), "uint16", "Heartbeat, +1 at every site read"),
+        (None, None, None),
+        ("Status column (Tags sheet)", "Ready = the source signal is wired on site; Pending = address fixed, value stays quality 0 until the source is mapped", None),
+    ]
+    for r in rows:
+        ws.append(r)
+    ws["A1"].font = Font(bold=True, size=12)
+    ws.column_dimensions["A"].width = 26; ws.column_dimensions["B"].width = 70; ws.column_dimensions["C"].width = 50
+    ts = wb.create_sheet("Tags")
+    ts.append(["#", "Tag name", "Address", "Registers", "Data type", "Unit", "Quality address", "Source", "Status"])
+    for c in ts[1]:
+        c.font = Font(bold=True)
+    pending = PatternFill("solid", fgColor="FFF2CC")
+    for t in tags:
+        st = source_status(reg, t)
+        ts.append([t["index"], t["name"], t["address"], t["registers"], "Float32 (ABCD)" if t["type"] == "float32" else "Boolean (uint16 0/1)",
+                   t["unit"], t["quality_address"], f"{t['device']}.{t['point']}", st])
+        if st != "Ready":
+            ts.cell(row=ts.max_row, column=9).fill = pending
+    for i, w in enumerate((6, 44, 10, 10, 20, 8, 15, 30, 62), start=1):
+        ts.column_dimensions[get_column_letter(i)].width = w
+    ts.freeze_panes = "A2"
+    wb.save(path)
 
 
 def write_markdown(tags: list[dict], host: str, port: int, unit: int, reg=None) -> str:
@@ -136,6 +190,8 @@ def main() -> int:
     for wb in WORKBOOKS:
         n = fill_workbook(os.path.join(ROOT, wb), by_name, a.host, a.port, a.unit, reg)
         print(f"filled {n} rows in {wb}")
+    write_map_workbook(os.path.join(ROOT, MAP_WORKBOOK), tags, a.host, a.port, a.unit, reg)
+    print(f"wrote {MAP_WORKBOOK}")
     return 0
 
 
