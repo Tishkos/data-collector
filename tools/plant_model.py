@@ -337,7 +337,7 @@ def write_outputs(results: list[Result], outdir: str) -> None:
     ax.axhline(25, color=grey, lw=1, ls=":"); ax.text(23.9, 27, "Gen P Min 25 %", ha="right", fontsize=8, color=grey)
     ax.axhline(70, color=grey, lw=1, ls=":"); ax.text(23.9, 72, "UPS 1 shedding 70 %", ha="right", fontsize=8, color=grey)
     ax.axvspan(0, 6.2, color=blue, alpha=0.06, lw=0); ax.axvspan(18.08, 24, color=blue, alpha=0.06, lw=0)
-    ax.text(0.2, 100, "on government grid", fontsize=8, color=blue); ax.text(18.3, 100, "on grid", fontsize=8, color=blue)
+    ax.text(0.2, 6, "on government grid", fontsize=8, color=blue); ax.text(18.3, 6, "on government grid", fontsize=8, color=blue)
     ax.set_ylabel("genset load %"); ax.set_ylim(0, 110); ax.grid(alpha=0.25); ax.legend(loc="upper left", fontsize=9, frameon=False)
     ax = axes[2]
     for r, c in zip(picks, (orange, blue, purple)):
