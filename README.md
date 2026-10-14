@@ -92,6 +92,7 @@ docs\NEO_CONFIGURATION.md           how the InteliNeo configuration works (PLC p
 docs\SIMULATION.md                  the behaviour model: what is exact, what is assumed, scenarios and results
 tools\neo_archive.py                reads the readable parts of a controller archive (.aig4), read-only
 tools\neo_plc.py                    lists and executes the controller's PLC program from the sheet exports
+tools\neo_plc_change01.py           builds the modified sheets of change 01 (docs\changes) in InteliConfig's export format
 tools\plant_model.py                runs a day of the plant under today's settings and proposed changes
 tools\neo_history.py                turns a History export into CSV tables
 tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks

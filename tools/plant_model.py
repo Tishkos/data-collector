@@ -68,6 +68,7 @@ class Scenario:
     curtail_rate: float = 0.03          # CALIBRATED on 14 Oct: 8-13 overproduction warnings a day like the history
     pv_response_s: float = 10           # ASSUMED SAU/inverter first-order response to a setpoint
     plc_setpoints: dict = field(default_factory=dict)   # PLC user setpoint overrides {comobj: value}
+    program_dir: str | None = None      # a modified program (folder of sheet exports) instead of the plant's
     comm_hold_s: float = 0              # PROPOSED: Modbus timeout/retries so that fails shorter than this are not declared
     ups_math_fix: bool = False          # PROPOSED: UPS sheet uses the genset nominal directly (no stale-PV artefact)
     ups_shed_delay_s: float = 0         # PROPOSED: delay before a UPS shedding command acts
@@ -170,7 +171,7 @@ def simulate(sc: Scenario, day: Day) -> Result:
     rnd = random.Random(day.seed)
     clouds = make_clouds(day, rnd)
     r = Result(sc.name, day.name)
-    plc = Plc(program(), sc.plc_setpoints, breaker_timeout_s=15)   # breakers answer within a PLC step here
+    plc = Plc(load_program(sc.program_dir) if sc.program_dir else program(), sc.plc_setpoints, breaker_timeout_s=15)
     nom_of = lambda n: sum(GEN_NOMS_KW[:n])        # gensets start in the order of the list
     running = sc.manual_gensets if sc.manual_gensets is not None else 2
     start_timer = stop_timer = 0

@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-16"?>
+<PlcSheetExport PlcFormatVersion="4" ExportFormatVersion="1" ConfigurationVersion="12" ControllerType="Ih500" ConfigFormatTerminal="9" ConfigFormatTerminalWithFont="9">
+  <Sheet Name="PV Q request" Comment="" Height="540" Width="1440" />
+  <PlcProgramExport>
+    <FunctionBlocks>
+      <FunctionBlockExport Identification="17">
+        <Position X="4" Y="0" />
+        <Inputs>
+          <Input Name="PV Actual Q" BitIndex="0" ComObject="15595" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="Mains Import Q site" BitIndex="0" ComObject="21254" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="Gensets Q" BitIndex="0" ComObject="20182" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Site Q" BitIndex="0" ValueIndex="0" ComObject="21266" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="kVAr" />
+        </Outputs>
+        <Properties>
+          <Property Identification="12" Value="0" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="17">
+        <Position X="4" Y="9" />
+        <Inputs>
+          <Input Name="Site Q" BitIndex="0" ComObject="21266" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="PV Q min import" BitIndex="0" ComObject="65524" ValueOfConstant="0" ConnectedFunctionType="2" IsHidden="false" ComObjCategory="AllSetpoint" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Q min math" BitIndex="0" ValueIndex="0" ComObject="21250" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="kVAr" />
+        </Outputs>
+        <Properties>
+          <Property Identification="12" Value="1" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="3">
+        <Position X="12" Y="5" />
+        <Inputs>
+          <Input Name="Q min math" BitIndex="0" ComObject="21250" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Q min comp" BitIndex="0" ValueIndex="0" ComObject="10424" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="3">
+        <Position X="12" Y="12" />
+        <Inputs>
+          <Input Name="PV Actual P" BitIndex="0" ComObject="15594" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="100" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="100" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="PV Actual &gt; 100kW" BitIndex="7" ValueIndex="0" ComObject="10431" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="3">
+        <Position X="12" Y="17" />
+        <Inputs>
+          <Input Name="Gensets Q" BitIndex="0" ComObject="20182" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="-1" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="-1" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Q &gt; 0" BitIndex="3" ValueIndex="0" ComObject="10435" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="1">
+        <Position X="19" Y="7" />
+        <Inputs>
+          <Input Name="Q min comp" BitIndex="0" ComObject="10424" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="PV Actual &gt; 100kW" BitIndex="7" ComObject="10431" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="Q &gt; 0" BitIndex="3" ComObject="10435" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Q fucntion start" BitIndex="0" ValueIndex="0" ComObject="10432" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties>
+          <Property Identification="0" Value="0" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="5">
+        <Position X="27" Y="2" />
+        <Inputs>
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="Q min math" BitIndex="0" ComObject="21250" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="Q fucntion start" BitIndex="0" ComObject="10432" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Q min req" BitIndex="0" ValueIndex="0" ComObject="21251" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="kVAr" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="52">
+        <Position X="27" Y="10" />
+        <Inputs>
+          <Input Name="Q min req" BitIndex="0" ComObject="21251" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Q min req (kvar)" BitIndex="0" ValueIndex="0" ComObject="21252" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="1" Dimension="kVAr" />
+          <Output Name="" BitIndex="1" ValueIndex="0" ComObject="10424" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="5">
+        <Position X="36" Y="18" />
+        <Inputs>
+          <Input Name="Q min req (kvar)" BitIndex="0" ComObject="21252" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="Logical 1" BitIndex="13" ComObject="9149" ValueOfConstant="0" ConnectedFunctionType="1" IsHidden="false" ComObjCategory="BinValue" />
+        </Inputs>
+        <Outputs>
+          <Output Name="PV Q req" BitIndex="0" ValueIndex="0" ComObject="21248" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="1" Dimension="kVAr" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="61">
+        <Position X="42" Y="2" />
+        <Inputs>
+          <Input Name="PV Q req" BitIndex="0" ComObject="21248" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="50" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="2500" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="PV Q req out ramp" BitIndex="0" ValueIndex="0" ComObject="21249" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="1" Dimension="kVAr" />
+        </Outputs>
+        <Properties>
+          <Property Identification="16" Value="3" ValueType="UInt" ValueIdentification="-1" />
+          <Property Identification="42" Value="0" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+    </FunctionBlocks>
+    <PlcSheetInputs>
+      <SheetInput BitIndex="0" Index="0" Type="Analog" ComObjectNumber="15595" />
+      <SheetInput BitIndex="0" Index="1" Type="Analog" ComObjectNumber="21254" />
+      <SheetInput BitIndex="0" Index="2" Type="Analog" ComObjectNumber="20182" />
+      <SheetInput BitIndex="0" Index="4" Type="Analog" ComObjectNumber="65524" />
+      <SheetInput BitIndex="0" Index="6" Type="Analog" ComObjectNumber="15594" />
+      <SheetInput BitIndex="0" Index="7" Type="Analog" ComObjectNumber="65526" />
+      <SheetInput BitIndex="13" Index="8" Type="Binary" ComObjectNumber="9149" />
+    </PlcSheetInputs>
+    <PlcSheetOutputs>
+      <SheetOutput BitIndex="0" Index="2" Type="Analog" ComObject="21249">
+        <ExternalOutput>
+          <int>200042</int>
+        </ExternalOutput>
+      </SheetOutput>
+    </PlcSheetOutputs>
+    <Wires>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="140" Y="30" />
+          <XmlPosition X="140" Y="37" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="140" Y="90" />
+          <XmlPosition X="140" Y="49" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="172" Y="150" />
+          <XmlPosition X="172" Y="61" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="172" Y="150" />
+          <XmlPosition X="172" Y="445" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="140" Y="270" />
+          <XmlPosition X="140" Y="265" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="356" Y="390" />
+          <XmlPosition X="356" Y="325" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="910" Y="510" />
+          <XmlPosition X="910" Y="493" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="1268" Y="97" />
+          <XmlPosition X="1268" Y="150" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="356" Y="85" />
+          <XmlPosition X="356" Y="218" />
+          <XmlPosition X="244" Y="218" />
+          <XmlPosition X="244" Y="253" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="407" Y="301" />
+          <XmlPosition X="407" Y="157" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="407" Y="301" />
+          <XmlPosition X="407" Y="97" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="548" Y="169" />
+          <XmlPosition X="548" Y="205" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="548" Y="337" />
+          <XmlPosition X="548" Y="217" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="580" Y="457" />
+          <XmlPosition X="580" Y="229" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="716" Y="253" />
+          <XmlPosition X="716" Y="109" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="908" Y="97" />
+          <XmlPosition X="908" Y="198" />
+          <XmlPosition X="796" Y="198" />
+          <XmlPosition X="796" Y="289" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="908" Y="277" />
+          <XmlPosition X="908" Y="469" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="11">
+        <Points>
+          <XmlPosition X="1124" Y="481" />
+          <XmlPosition X="1124" Y="85" />
+        </Points>
+      </WirePlcSheetExport>
+    </Wires>
+  </PlcProgramExport>
+  <CommunicationObjectsExport>
+    <ComObjectExport Name="PV Actual Q" Dimension="kVAr" IsUserSetpoint="false" Resolution="0" ComObjectNumber="15595" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Mains Import Q site" Dimension="kVAr" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21254" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Gensets Q" Dimension="kVAr" IsUserSetpoint="false" Resolution="0" ComObjectNumber="20182" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Site Q" Dimension="kVAr" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21266" Type="Value" BitIndex="" />
+    <ComObjectExport Name="PV Q min import" Dimension="kVAr" IsUserSetpoint="true" Resolution="0" ComObjectNumber="65524" Type="Setpoint" BitIndex="" />
+    <ComObjectExport Name="Q min math" Dimension="kVAr" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21250" Type="Value" BitIndex="" />
+    <ComObjectExport Name="PV Actual P" Dimension="kW" IsUserSetpoint="false" Resolution="0" ComObjectNumber="15594" Type="Value" BitIndex="" />
+    <ComObjectExport Name="PLC-BOUT 1" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10424" Type="Value" BitIndex="0" />
+    <ComObjectExport Name="PLC-BOUT 8" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10431" Type="Value" BitIndex="7" />
+    <ComObjectExport Name="PLC-BOUT 12" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10435" Type="Value" BitIndex="3" />
+    <ComObjectExport Name="PLC-BOUT 9" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10432" Type="Value" BitIndex="0" />
+    <ComObjectExport Name="Q min req" Dimension="kVAr" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21251" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Q min req (kvar)" Dimension="kVAr" IsUserSetpoint="false" Resolution="1" ComObjectNumber="21252" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Log Bout 7" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="9149" Type="Value" BitIndex="13" />
+    <ComObjectExport Name="PV Q req" Dimension="kVAr" IsUserSetpoint="false" Resolution="1" ComObjectNumber="21248" Type="Value" BitIndex="" />
+  </CommunicationObjectsExport>
+</PlcSheetExport>

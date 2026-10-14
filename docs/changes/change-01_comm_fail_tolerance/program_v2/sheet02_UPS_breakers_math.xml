@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-16"?>
+<PlcSheetExport PlcFormatVersion="4" ExportFormatVersion="1" ConfigurationVersion="12" ControllerType="Ih500" ConfigFormatTerminal="9" ConfigFormatTerminalWithFont="9">
+  <Sheet Name="UPS breakers math" Comment="" Height="840" Width="1440" />
+  <PlcProgramExport>
+    <FunctionBlocks>
+      <FunctionBlockExport Identification="17">
+        <Position X="6" Y="2" />
+        <Inputs>
+          <Input Name="Running Nominal Power Of All" BitIndex="0" ComObject="10658" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="PV Actual P" BitIndex="0" ComObject="15594" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Running nominal Gensets" BitIndex="0" ValueIndex="0" ComObject="21284" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="kW" />
+        </Outputs>
+        <Properties>
+          <Property Identification="12" Value="1" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="59">
+        <Position X="19" Y="4" />
+        <Inputs>
+          <Input Name="Gensets P" BitIndex="0" ComObject="20183" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="Running nominal Gensets" BitIndex="0" ComObject="21284" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="100" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Gen load" BitIndex="0" ValueIndex="0" ComObject="21285" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="%" />
+          <Output Name="PLC-BOUT 12.5" BitIndex="4" ValueIndex="0" ComObject="10435" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="PLC-BOUT 12.6" BitIndex="5" ValueIndex="0" ComObject="10435" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="5">
+        <Position X="29" Y="11" />
+        <Inputs>
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="1" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="Gen load" BitIndex="0" ComObject="21285" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="Any GCB close" BitIndex="3" ComObject="10433" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Gen Load" BitIndex="0" ValueIndex="0" ComObject="21263" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="%" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="3">
+        <Position X="36" Y="17" />
+        <Inputs>
+          <Input Name="Gen Load" BitIndex="0" ComObject="21263" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="UPS 1 Load Shedd OFF" BitIndex="0" ComObject="65520" ValueOfConstant="0" ConnectedFunctionType="2" IsHidden="false" ComObjCategory="AllSetpoint" />
+          <Input Name="UPS 1 Load Shedd ON" BitIndex="0" ComObject="65521" ValueOfConstant="0" ConnectedFunctionType="2" IsHidden="false" ComObjCategory="AllSetpoint" />
+        </Inputs>
+        <Outputs>
+          <Output Name="UPS 1 CB command" BitIndex="6" ValueIndex="0" ComObject="10435" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="3">
+        <Position X="36" Y="28" />
+        <Inputs>
+          <Input Name="Gen Load" BitIndex="0" ComObject="21263" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="UPS 2 Load Shedd OFF" BitIndex="0" ComObject="65518" ValueOfConstant="0" ConnectedFunctionType="2" IsHidden="false" ComObjCategory="AllSetpoint" />
+          <Input Name="UPS 2 Load Shedd ON" BitIndex="0" ComObject="65519" ValueOfConstant="0" ConnectedFunctionType="2" IsHidden="false" ComObjCategory="AllSetpoint" />
+        </Inputs>
+        <Outputs>
+          <Output Name="UPS 2 CB command" BitIndex="7" ValueIndex="0" ComObject="10435" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+    </FunctionBlocks>
+    <PlcSheetInputs>
+      <SheetInput BitIndex="0" Index="0" Type="Analog" ComObjectNumber="10658" />
+      <SheetInput BitIndex="0" Index="2" Type="Analog" ComObjectNumber="15594" />
+      <SheetInput BitIndex="0" Index="4" Type="Analog" ComObjectNumber="20183" />
+      <SheetInput BitIndex="3" Index="6" Type="Binary" ComObjectNumber="10433" />
+      <SheetInput BitIndex="0" Index="8" Type="Analog" ComObjectNumber="65520" />
+      <SheetInput BitIndex="0" Index="9" Type="Analog" ComObjectNumber="65521" />
+      <SheetInput BitIndex="0" Index="12" Type="Analog" ComObjectNumber="65518" />
+      <SheetInput BitIndex="0" Index="13" Type="Analog" ComObjectNumber="65519" />
+    </PlcSheetInputs>
+    <PlcSheetOutputs>
+      <SheetOutput BitIndex="0" Index="0" Type="Analog" ComObject="21284">
+        <ExternalOutput />
+      </SheetOutput>
+      <SheetOutput BitIndex="0" Index="3" Type="Analog" ComObject="21285">
+        <ExternalOutput />
+      </SheetOutput>
+      <SheetOutput BitIndex="6" Index="8" Type="Binary" ComObject="10435">
+        <ExternalOutput />
+      </SheetOutput>
+      <SheetOutput BitIndex="7" Index="12" Type="Binary" ComObject="10435">
+        <ExternalOutput />
+      </SheetOutput>
+    </PlcSheetOutputs>
+    <Wires>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="140" Y="30" />
+          <XmlPosition X="140" Y="85" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="140" Y="150" />
+          <XmlPosition X="140" Y="97" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="546" Y="270" />
+          <XmlPosition X="546" Y="133" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="140" Y="390" />
+          <XmlPosition X="140" Y="454" />
+          <XmlPosition X="774" Y="454" />
+          <XmlPosition X="774" Y="325" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="902" Y="510" />
+          <XmlPosition X="902" Y="457" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="962" Y="570" />
+          <XmlPosition X="962" Y="469" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="898" Y="750" />
+          <XmlPosition X="898" Y="721" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="958" Y="810" />
+          <XmlPosition X="958" Y="733" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="498" Y="133" />
+          <XmlPosition X="498" Y="30" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="772" Y="157" />
+          <XmlPosition X="772" Y="210" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="1124" Y="457" />
+          <XmlPosition X="1124" Y="510" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="1124" Y="721" />
+          <XmlPosition X="1124" Y="750" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="498" Y="133" />
+          <XmlPosition X="498" Y="181" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="772" Y="157" />
+          <XmlPosition X="772" Y="313" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="956" Y="313" />
+          <XmlPosition X="956" Y="445" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="2">
+        <Points>
+          <XmlPosition X="956" Y="313" />
+          <XmlPosition X="956" Y="447" />
+          <XmlPosition X="848" Y="447" />
+          <XmlPosition X="848" Y="709" />
+        </Points>
+      </WirePlcSheetExport>
+    </Wires>
+  </PlcProgramExport>
+  <CommunicationObjectsExport>
+    <ComObjectExport Name="Running Nominal Power Of All" Dimension="kW" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10658" Type="Value" BitIndex="" />
+    <ComObjectExport Name="PV Actual P" Dimension="kW" IsUserSetpoint="false" Resolution="0" ComObjectNumber="15594" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Gensets P" Dimension="kW" IsUserSetpoint="false" Resolution="0" ComObjectNumber="20183" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Running nominal Gensets" Dimension="kW" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21284" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Gen load" Dimension="%" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21285" Type="Value" BitIndex="" />
+    <ComObjectExport Name="PLC-BOUT 10" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10433" Type="Value" BitIndex="3" />
+    <ComObjectExport Name="Gen Load" Dimension="%" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21263" Type="Value" BitIndex="" />
+    <ComObjectExport Name="UPS 1 Load Shedd OFF" Dimension="%" IsUserSetpoint="true" Resolution="0" ComObjectNumber="65520" Type="Setpoint" BitIndex="" />
+    <ComObjectExport Name="UPS 1 Load Shedd ON" Dimension="%" IsUserSetpoint="true" Resolution="0" ComObjectNumber="65521" Type="Setpoint" BitIndex="" />
+    <ComObjectExport Name="UPS 2 Load Shedd OFF" Dimension="%" IsUserSetpoint="true" Resolution="0" ComObjectNumber="65518" Type="Setpoint" BitIndex="" />
+    <ComObjectExport Name="UPS 2 Load Shedd ON" Dimension="%" IsUserSetpoint="true" Resolution="0" ComObjectNumber="65519" Type="Setpoint" BitIndex="" />
+  </CommunicationObjectsExport>
+</PlcSheetExport>
