@@ -57,6 +57,7 @@ class Scenario:
     name: str
     manual_gensets: int | None = None   # None = automatic power management; n = n gensets kept running
     manual_extra_from_h: float | None = None   # manual operation: one more genset from this hour
+    min_gensets: int = 1                # PROPOSED: power management never runs fewer than this ("minimal running power")
     gen_p_min: float = 0.25             # REAL 25 %
     start_reserve_kw: float = 300       # REAL
     stop_reserve_kw: float = 400        # REAL
@@ -73,6 +74,7 @@ class Scenario:
     ups_bridge: bool = False            # PROPOSED: UPS carries its load on battery for a few minutes after a PV drop
     ups_bridge_minutes: int = 8
     ups_critical_share: float = 0.05    # ASSUMED each UPS carries 5 % of the plant load
+    ups_kw: tuple | None = None         # or a fixed load per UPS in kW (e.g. (350, 350)) instead of the share
     ups_autonomy_min: float = 30        # ASSUMED battery autonomy at full critical load
 
 
@@ -105,11 +107,14 @@ class Result:
     grid_kwh: float = 0
     load_kwh: float = 0
     avg_gen_load_pct: float = 0
-    overload_minutes: int = 0
+    overload_minutes: int = 0           # minutes containing seconds with gensets above 100 % (a genset start takes 20-40 s)
+    max_gen_load_pct: float = 0
     overproduction_warnings: int = 0    # PLC "PV prod > PV req Warning" rising edges
     ups_shed_minutes: int = 0           # minutes with a UPS shed (breaker opened by the PLC or on battery)
     ups_shed_events: int = 0            # PLC UPS shedding commands
     starts: int = 0
+    max_gen_load_pct: float = 0
+    overload_seconds: int = 0           # sub-step seconds with the gensets above 100 %
     timeline: dict = field(default_factory=dict)
 
 
@@ -180,7 +185,7 @@ def simulate(sc: Scenario, day: Day) -> Result:
     last_transfer = -1e9
     warn_timer = 0
     bridge_until = -1
-    pv_prev_available = 0.0
+    pv_prev_actual = 0.0
     gen_load_sum = 0.0
     gen_kw = 0.0
     tl = {k: [] for k in ("load", "pv_available", "pv_used", "pv_request", "gensets", "gen_load_pct", "grid", "ups_shed")}
@@ -205,11 +210,12 @@ def simulate(sc: Scenario, day: Day) -> Result:
             run_nom = nom_of(running)
 
         # --- UPS batteries and the proposed bridge
-        if sc.ups_bridge and avail < pv_prev_available - 250 and m > 0:
+        if sc.ups_bridge and pv_actual < pv_prev_actual - 250 and m > 0:   # a PV drop of more than 250 kW within a minute
             bridge_until = m + sc.ups_bridge_minutes
 
         shed_any = False
         ups_shed_now = 0
+        overload_in_minute = False
         for s in range(STEP_S // SUB_S):
             t = m + s * SUB_S / 60
             # controller-side PV logic: PVCB close/open is off for 2 minutes around a transfer and during an OFF toggle
@@ -228,10 +234,14 @@ def simulate(sc: Scenario, day: Day) -> Result:
             neo_pv_term = sau_reading if pv_live else 0.0
             if sc.ups_math_fix:
                 neo_pv_term = sau_reading      # the PLC then subtracts the same value -> genset nominal exactly
-            shed_load = sum(sc.ups_critical_share * load for i in range(2) if not ups_closed[i])
+            shed_load = sum((sc.ups_kw[i] if sc.ups_kw else sc.ups_critical_share * load) for i in range(2) if not ups_closed[i])
             load_on_bus = load - shed_load
             gen_kw = 0.0 if on_grid else max(0.0, load_on_bus - pv_actual)
             mains_each = (load_on_bus - pv_actual) / 3 if on_grid else 0.0
+            if run_nom:
+                r.max_gen_load_pct = max(r.max_gen_load_pct, 100 * gen_kw / run_nom)
+                if gen_kw > run_nom:
+                    r.overload_seconds += SUB_S
             inputs = plant_inputs(pv_kw=sau_reading, max_avail_kw=SAU_MAX_AVAILABLE_KW, curtailment_pct=curtail,
                                   gensets_kw=gen_kw, running_nominal_kw=run_nom, mains_import_kw=(mains_each,) * 3,
                                   on_grid=on_grid, gens_loaded=running, pv_cb=tuple(pv_cb), ups_fb=tuple(ups_closed),
@@ -283,6 +293,10 @@ def simulate(sc: Scenario, day: Day) -> Result:
             if not all(ups_closed):
                 shed_any = True
                 ups_shed_now = 1
+            if run_nom:
+                r.max_gen_load_pct = max(r.max_gen_load_pct, 100 * gen_kw / run_nom)
+                if gen_kw > run_nom:
+                    overload_in_minute = True
 
         # --- UPS on battery: drain while shed, recharge while closed; the bridge keeps UPS 1 on battery deliberately
         for i in range(2):
@@ -305,20 +319,20 @@ def simulate(sc: Scenario, day: Day) -> Result:
                     running += 1; r.starts += 1; start_timer = 0
             else:
                 start_timer = 0
-            if running > 1 and nom_of(running - 1) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * pv_actual \
+            if running > sc.min_gensets and nom_of(running - 1) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * pv_actual \
                     and gen_kw >= sc.min_run_power_kw:
                 stop_timer += STEP_S
                 if stop_timer >= sc.next_stop_delay_s:
                     running -= 1; stop_timer = 0
             else:
                 stop_timer = 0
-            running = max(1, running)
+            running = max(sc.min_gensets, running)
             run_nom = nom_of(running)
 
         gen_load_pct = gen_kw / run_nom if run_nom else 0.0
-        if run_nom and gen_kw > run_nom:
+        if overload_in_minute:
             r.overload_minutes += 1
-        grid_kw = load - (sum(sc.ups_critical_share * load for i in range(2) if not ups_closed[i])) - pv_actual if on_grid else 0.0
+        grid_kw = load - sum((sc.ups_kw[i] if sc.ups_kw else sc.ups_critical_share * load) for i in range(2) if not ups_closed[i]) - pv_actual if on_grid else 0.0
 
         # --- bookkeeping
         dt_h = 1 / 60
@@ -332,7 +346,7 @@ def simulate(sc: Scenario, day: Day) -> Result:
             share = GEN_NOMS_KW[i] / nom_of(running)
             r.fuel_l += fuel_l_per_min(gen_kw * share, GEN_NOMS_KW[i])
         gen_load_sum += gen_load_pct
-        pv_prev_available = avail
+        pv_prev_actual = pv_actual
         for k, v in (("load", load), ("pv_available", avail), ("pv_used", pv_actual), ("pv_request", plc.get(21267) or 0.0),
                      ("gensets", running), ("gen_load_pct", round(100 * gen_load_pct, 1)), ("grid", int(on_grid)),
                      ("ups_shed", ups_shed_now)):
@@ -352,12 +366,14 @@ SCENARIOS = [
     Scenario("S3 AUTO + PLC fixes (comm hold, UPS math, shed delay)", **FIXES),
     Scenario("S4 AUTO + PLC fixes + Gen P Min 20 %", gen_p_min=0.20, **FIXES),
     Scenario("S5 AUTO + PLC fixes + UPS bridge, coverage 10 %", ups_bridge=True, solar_coverage=0.10, **FIXES),
+    Scenario("S6 AUTO + PLC fixes, two gensets minimum", min_gensets=2, **FIXES),
 ]
 DAYS = [
     Day("14 Oct as recorded (interruptions)", clearness=1.0, interruptions=INTERRUPTIONS_14_OCT),
     Day("clear day, no interruptions", clearness=1.0),
     Day("cloudy day", clearness=0.9, cloud_events=8, seed=7),
     Day("no grid at all", clearness=1.0, grid_hours=()),
+    Day("clear day, full PV loss at 14:30 for 3 min", clearness=1.0, interruptions=((14 * 60 + 30, 3, "off"),)),
 ]
 
 
