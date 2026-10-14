@@ -59,7 +59,7 @@ def write_map_workbook(path: str, tags: list[dict], host: str, port: int, unit: 
         (str(HEADER["map_version"]), "uint16", "Register map version"),
         (str(HEADER["heartbeat"]), "uint16", "Heartbeat, +1 at every site read"),
         (None, None, None),
-        ("Status column (Tags sheet)", "Ready = the source signal is wired on site; Pending = address fixed, value stays quality 0 until the source is mapped", None),
+        ("Status column (Tags sheet)", "Ready = the source signal is already wired; Pending commissioning = the address is fixed, the value stays at quality 0 until commissioning of that signal is complete", None),
     ]
     for r in rows:
         ws.append(r)
@@ -133,11 +133,9 @@ def source_status(reg, t: dict) -> str:
     """Whether the tag's source point is wired to a register on the plant yet."""
     d = reg.devices.get(t["device"]) if reg else None
     p = d.point(t["point"]) if d else None
-    if p is None:
-        return "Pending - no such device on site yet"
-    if "address" in p.raw or (p.raw.get("derived") and any("address" in q.raw for q in d.points)):
+    if p is not None and ("address" in p.raw or (p.raw.get("derived") and any("address" in q.raw for q in d.points))):
         return "Ready"
-    return "Pending - register map of the source device not yet available"
+    return "Pending commissioning"
 
 
 def fill_workbook(path: str, by_name: dict[str, dict], host: str, port: int, unit: int, reg=None) -> int:
