@@ -7,11 +7,15 @@ today's settings and under proposed modifications. Pure Python, 1-minute steps, 
 
 Where the numbers come from (see docs/SIMULATION.md):
   REAL  - archive / exports of 2026-10-14: Gen P Min 25 %, start/stop reserve 300/400 kW, min run power 210 kW,
-          solar coverage ratio 20 %, PV step 100 kW, watchdog 75 kW / 60 s, caps 2,200 kW (one PV breaker)
-          and 1,300 kW (one transformer), UPS shedding 70/35 % and 80/35 %, fuel 237.3 g/kWh, 4 gensets loaded
-          = 3,851 kW running nominal, PV 3.2 MW; inverter 1 produced 601.6 kWh on 14 Oct (so ~6 MWh for the plant)
-  ASSUMED - load profile (anchored on 1,859 kW at 05:28 and 1,482 kW at 17:28), clear-sky PV shape for Erbil in
-          October, genset fuel curve shape, UPS critical load share and autonomy, cloud events, PV response delay
+          solar coverage ratio 20 %, watchdog 75 kW / 60 s, caps 2,200 kW (one PV breaker) and 1,300 kW (one
+          transformer), UPS shedding 70/35 % and 80/35 %, fuel 237.3 g/kWh, PV 3.2 MW
+  REAL  - controller history 29 Sep - 14 Oct (750 events): the plant is on the government grid from ~18:05 to
+          ~06:12 (night load 570-680 kW) and on gensets by day; 3 gensets (3,150 kW running nominal) most of the
+          day at 21-33 % load; PV = load - 25 % x running nominal (1,041 kW at 12:25 on 14 Oct, exactly);
+          PV ramps back at ~300 kW/min after a trip; genset nominal steps 1,150 / 1,000 / 700 kW;
+          PV interruptions of 14 Oct (OFF/AUTO toggles, comm-fail resets); inverter 1 made 601.6 kWh = ~6 MWh plant
+  ASSUMED - daytime load between the recorded points, clear-sky PV shape for Erbil in October, genset fuel
+          curve shape, UPS critical load share and autonomy, cloud events, PV response delay
 """
 
 from __future__ import annotations
@@ -26,8 +30,9 @@ from dataclasses import dataclass, field, replace
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ----------------------------------------------------------------------------- plant (REAL unless marked)
-GEN_NOM_KW = 3851 / 4            # ASSUMED equal gensets: 3,851 kW running nominal with 4 loaded on 14 Oct
-GENSETS = 5
+GEN_NOMS_KW = [1150, 1000, 1000, 1000, 700]   # from the "Gen Nom" steps in the history (nameplates to confirm)
+GENSETS = len(GEN_NOMS_KW)
+GEN_NOM_KW = sum(GEN_NOMS_KW) / GENSETS       # only used for the fuel curve of an "average" genset
 PV_RATED_KW = 3200
 FUEL_L_PER_KWH_FULL = 237.3 / 1000 / 0.84      # 237.3 g/kWh (Neo setpoint), diesel 0.84 kg/l -> 0.283 l/kWh
 FUEL_IDLE_FRACTION = 0.10        # ASSUMED Willans line: l/h = nom * (0.10*full + (1-0.10)*full*load) -> 0.37 l/kWh at 25 %
@@ -45,11 +50,13 @@ class Scenario:
     solar_coverage: float = 0.20        # REAL dynamic spinning reserve: 20 % of PV output kept as reserve
     next_start_delay_s: int = 20        # REAL
     next_stop_delay_s: int = 180        # REAL
-    pv_step_kw: float = 100             # REAL ramp step per control cycle (taken as per minute)
+    pv_step_kw: float = 300             # REAL: ~300 kW/min recovery seen in the history (100 kW per control cycle)
     watchdog_kw: float = 75             # REAL PV prod > PV req
     watchdog_s: int = 60                # REAL
     pv_follow_delay_s: int = 30         # ASSUMED SAU/inverter response to a lower setpoint
     pv_breakers_closed: int = 2         # REAL both closed on 14 Oct
+    pv_margin_kw: float = 250           # CALIBRATED: the PLC's request runs ~240 kW below "load - floor" (median gap at 91 warnings)
+    manual_extra_from_h: float | None = None   # manual operation: one more genset from this hour (14 Oct: 4th genset in the afternoon)
     ups_shed_on: tuple = (0.70, 0.80)   # REAL UPS 1 / UPS 2 Load Shedd ON
     ups_shed_off: float = 0.35          # REAL
     ups_bridge: bool = False            # PROPOSED: UPS takes critical load for a few minutes after a PV drop
@@ -63,8 +70,15 @@ class Day:
     name: str
     clearness: float = 1.0              # 1 = clear sky
     cloud_events: int = 0               # number of cloud passages
-    grid_hours: tuple = ()              # (start_h, end_h) windows with government grid available
+    grid_hours: tuple = ((0, 6.2), (18.08, 24))   # REAL typical: grid from ~18:05 to ~06:12 (history)
+    interruptions: tuple = ()           # (start_minute, minutes) PV forced to zero: OFF/AUTO toggles, comm-fail resets
     seed: int = 1
+
+
+# PV interruptions of 14 Oct 2026 from the controller history (REAL): operator OFF->AUTO toggles and
+# "PV Logger Comm Fail" resets, each taking the PV to zero and then ramping back
+INTERRUPTIONS_14_OCT = ((8 * 60 + 5, 9), (8 * 60 + 52, 8), (9 * 60 + 17, 2), (9 * 60 + 20, 1), (9 * 60 + 23, 4),
+                        (9 * 60 + 37, 2), (9 * 60 + 58, 2), (12 * 60 + 25, 1))
 
 
 @dataclass
@@ -88,13 +102,16 @@ class Result:
 
 
 def load_profile_kw(minute: int) -> float:
-    """ASSUMED bottling-plant day, anchored on the two readings of 14 Oct (1,859 kW 05:28, 1,482 kW 17:28)."""
-    anchors = [(0, 1500), (4.5, 1550), (5.5, 1860), (7, 1900), (12, 1880), (14, 1750), (17, 1500), (17.5, 1480), (21, 1480), (24, 1500)]
+    """Night 570-680 kW on the grid (REAL, mains import at the transfers); daytime points from the history
+    (genset load % x running nominal + PV): 1,590 kW 07:16, 1,850 kW ~10:30, 1,830 kW 12:25, 1,640 kW 13:06,
+    1,482 kW 17:28 (REAL points, ASSUMED in between)."""
+    anchors = [(0, 650), (6.1, 650), (6.3, 1450), (7.3, 1590), (9, 1650), (10.5, 1850), (12.4, 1830), (13.1, 1640),
+               (15, 1520), (17.5, 1480), (18.0, 1300), (18.2, 650), (24, 650)]
     h = minute / 60
     for (h0, p0), (h1, p1) in zip(anchors, anchors[1:]):
         if h0 <= h <= h1:
             return p0 + (p1 - p0) * (h - h0) / (h1 - h0)
-    return 1500
+    return 650
 
 
 def pv_available_kw(minute: int, day: Day, rnd: random.Random, clouds: list) -> float:
@@ -137,6 +154,7 @@ def simulate(sc: Scenario, day: Day) -> Result:
     clouds = make_clouds(day, rnd)
     r = Result(sc.name, day.name)
     running = sc.manual_gensets if sc.manual_gensets is not None else 2
+    nom_of = lambda n: sum(GEN_NOMS_KW[:n])        # gensets start in the order of the list
     pv_actual = 0.0
     pv_request_prev = 0.0
     start_timer = stop_timer = 0
@@ -170,19 +188,22 @@ def simulate(sc: Scenario, day: Day) -> Result:
                 r.ups_shed_minutes += 1
         load_on_bus = load - shed_kw
 
+        interrupted = any(t0 <= m < t0 + n for t0, n in day.interruptions)
         if on_grid:
-            # gensets off, PV free up to the transformer export limit, grid takes the rest
+            # on the government grid the PV breakers are open at this plant ("Other CB Trip" at every transfer)
             running = 0
-            pv_req = min(avail, PV_RATED_KW)
-            pv_actual = pv_req
-            grid_kw = load_on_bus - pv_actual
+            pv_req = pv_actual = 0.0
+            pv_request_prev = 0.0
+            grid_kw = load_on_bus
             gen_kw = 0.0
             run_nom = 0.0
         else:
-            run_nom = running * GEN_NOM_KW
+            if running == 0:
+                running = sc.manual_gensets if sc.manual_gensets is not None else 3   # morning transfer: 3 gensets started
+            run_nom = nom_of(running)
             cap = PV_RATED_KW if sc.pv_breakers_closed == 2 else 2200
             # curtailment: gensets must keep Gen P Min of the running nominal
-            pv_req = max(0.0, min(avail, cap, load_on_bus - sc.gen_p_min * run_nom))
+            pv_req = max(0.0, min(avail, cap, load_on_bus - sc.gen_p_min * run_nom - sc.pv_margin_kw))
             # step protection: the request may rise only pv_step_kw per cycle
             pv_req = min(pv_req, pv_request_prev + sc.pv_step_kw)
             # watchdog: a request drop is followed by the plant only after the response delay
@@ -192,6 +213,8 @@ def simulate(sc: Scenario, day: Day) -> Result:
                     r.watchdog_trips += 1
                     tripped_until = m + 30           # PV breakers open, operator resets after ~30 min (OFF -> AUTO)
             pending_drop = [(t, kw) for t, kw in pending_drop if t > m]
+            if interrupted:
+                pv_req = 0.0
             pv_actual = 0.0 if m <= tripped_until else pv_req
             pv_request_prev = pv_req if m > tripped_until else 0.0
             gen_kw = max(0.0, load_on_bus - pv_actual)
@@ -206,7 +229,7 @@ def simulate(sc: Scenario, day: Day) -> Result:
                         running += 1; r.starts += 1; start_timer = 0
                 else:
                     start_timer = 0
-                if running > 1 and (run_nom - GEN_NOM_KW) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * pv_actual \
+                if running > 1 and nom_of(running - 1) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * pv_actual \
                         and gen_kw >= sc.min_run_power_kw:
                     stop_timer += STEP_S
                     if stop_timer >= sc.next_stop_delay_s:
@@ -215,7 +238,7 @@ def simulate(sc: Scenario, day: Day) -> Result:
                     stop_timer = 0
                 running = max(1, running)
             else:
-                running = sc.manual_gensets
+                running = sc.manual_gensets + (1 if sc.manual_extra_from_h is not None and m >= sc.manual_extra_from_h * 60 else 0)
 
         gen_load_pct = gen_kw / run_nom if run_nom else 0.0
         if run_nom and gen_kw > run_nom:
@@ -237,7 +260,10 @@ def simulate(sc: Scenario, day: Day) -> Result:
         r.genset_kwh += gen_kw * dt_h
         r.grid_kwh += grid_kw * dt_h
         r.engine_hours += running * dt_h
-        r.fuel_l += fuel_l_per_min(gen_kw / running, GEN_NOM_KW) * running if running else 0.0
+        if running:
+            for i in range(running):                      # load shared in proportion to nominal (load sharing)
+                share = GEN_NOMS_KW[i] / nom_of(running)
+                r.fuel_l += fuel_l_per_min(gen_kw * share, GEN_NOMS_KW[i])
         gen_load_sum += gen_load_pct
         pv_prev_available = avail
         for k, v in (("load", load), ("pv_available", avail), ("pv_used", pv_actual), ("gensets", running),
@@ -251,15 +277,16 @@ def simulate(sc: Scenario, day: Day) -> Result:
 
 
 SCENARIOS = [
-    Scenario("S0 today: 4 gensets by hand", manual_gensets=4),
+    Scenario("S0 today: 3 gensets by hand, 4 from 14:00", manual_gensets=3, manual_extra_from_h=14),
     Scenario("S1 power management AUTO, settings as they are"),
     Scenario("S2 AUTO + Gen P Min 20 %", gen_p_min=0.20),
     Scenario("S3 AUTO + UPS bridge, solar coverage 10 %", ups_bridge=True, solar_coverage=0.10),
 ]
 DAYS = [
-    Day("clear, no grid", clearness=1.0, cloud_events=0),
-    Day("cloudy, no grid", clearness=0.9, cloud_events=8, seed=7),
-    Day("clear, grid 22-06 h", clearness=1.0, grid_hours=((0, 6), (22, 24))),
+    Day("14 Oct as recorded (interruptions)", clearness=1.0, interruptions=INTERRUPTIONS_14_OCT),
+    Day("clear day, no interruptions", clearness=1.0),
+    Day("cloudy day", clearness=0.9, cloud_events=8, seed=7),
+    Day("no grid at all", clearness=1.0, grid_hours=()),
 ]
 
 
@@ -289,7 +316,7 @@ def write_outputs(results: list[Result], outdir: str) -> None:
         import matplotlib.pyplot as plt
     except Exception:
         return
-    day = DAYS[1].name
+    day = DAYS[2].name
     picks = [r for r in results if r.day == day and r.scenario.startswith(("S0", "S1", "S3"))]
     if not picks:
         return
@@ -309,14 +336,16 @@ def write_outputs(results: list[Result], outdir: str) -> None:
         ax.plot(t, r.timeline["gen_load_pct"], color=c, lw=1.6, label=r.scenario)
     ax.axhline(25, color=grey, lw=1, ls=":"); ax.text(23.9, 27, "Gen P Min 25 %", ha="right", fontsize=8, color=grey)
     ax.axhline(70, color=grey, lw=1, ls=":"); ax.text(23.9, 72, "UPS 1 shedding 70 %", ha="right", fontsize=8, color=grey)
+    ax.axvspan(0, 6.2, color=blue, alpha=0.06, lw=0); ax.axvspan(18.08, 24, color=blue, alpha=0.06, lw=0)
+    ax.text(0.2, 100, "on government grid", fontsize=8, color=blue); ax.text(18.3, 100, "on grid", fontsize=8, color=blue)
     ax.set_ylabel("genset load %"); ax.set_ylim(0, 110); ax.grid(alpha=0.25); ax.legend(loc="upper left", fontsize=9, frameon=False)
     ax = axes[2]
     for r, c in zip(picks, (orange, blue, purple)):
         ax.step(t, r.timeline["gensets"], color=c, lw=1.6, where="post", label=r.scenario)
     ax.set_ylabel("gensets running"); ax.set_ylim(0, 5.5); ax.set_yticks(range(0, 6)); ax.grid(alpha=0.25)
     ax.set_xlabel("hour of day (plant time)"); ax.set_xlim(0, 24); ax.set_xticks(range(0, 25, 2))
-    fig.text(0.01, 0.005, "Model of the controller's rules, not the firmware. Load profile, clear-sky shape, fuel curve and UPS shares are assumptions; "
-             "setpoints and capacities are the plant's (archive of 2026-10-14).", fontsize=8, color=grey)
+    fig.text(0.01, 0.005, "Model of the controller's rules, not the firmware. Grid hours, night load, genset steps, Gen P Min and the PV ramp are from the "
+             "controller history (29 Sep - 14 Oct); daytime load shape, sun curve, fuel curve and UPS shares are assumptions.", fontsize=8, color=grey)
     fig.tight_layout(rect=(0, 0.02, 1, 1))
     fig.savefig(os.path.join(outdir, "one_day.png"), dpi=150)
 
@@ -329,9 +358,12 @@ def main() -> int:
     days = DAYS if a.seed is None else [replace(d, seed=a.seed) if d.cloud_events else d for d in DAYS]
     results = [simulate(sc, d) for d in days for sc in SCENARIOS]
     print(table(results))
-    s0 = next(r for r in results if r.scenario.startswith("S0") and r.day == days[0].name)
-    s1 = next(r for r in results if r.scenario.startswith("S1") and r.day == days[0].name)
-    print(f"\nclear day, S0 -> S1: fuel {s0.fuel_l:.0f} -> {s1.fuel_l:.0f} l ({100 * (s1.fuel_l - s0.fuel_l) / s0.fuel_l:+.0f} %), "
+    v = next(r for r in results if r.scenario.startswith("S0") and r.day == days[0].name)
+    print(f"\nvalidation 14 Oct: model PV used {v.pv_used_kwh:.0f} kWh vs ~6,000 kWh from the inverter counters; "
+          f"engine hours {v.engine_hours:.0f} (3 gensets x ~12 h = 36 expected)")
+    s0 = next(r for r in results if r.scenario.startswith("S0") and r.day == days[1].name)
+    s1 = next(r for r in results if r.scenario.startswith("S1") and r.day == days[1].name)
+    print(f"clear day, S0 -> S1: fuel {s0.fuel_l:.0f} -> {s1.fuel_l:.0f} l ({100 * (s1.fuel_l - s0.fuel_l) / s0.fuel_l:+.0f} %), "
           f"PV used {s0.pv_used_kwh:.0f} -> {s1.pv_used_kwh:.0f} kWh, engine hours {s0.engine_hours:.0f} -> {s1.engine_hours:.0f}")
     write_outputs(results, a.out)
     print(f"written: {a.out}/scenarios.csv, one_day.png")

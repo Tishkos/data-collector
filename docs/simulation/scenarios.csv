@@ -1,13 +1,17 @@
 scenario,day,engine_hours,fuel_l,pv_used_kwh,pv_available_kwh,pv_curtailed_kwh,genset_kwh,grid_kwh,load_kwh,avg_gen_load_pct,overload_minutes,watchdog_trips,ups_shed_minutes,starts
-S0 today: 4 gensets by hand,"clear, no grid",96.0,10606,8291,17035,8744,31446,0,39737,34.0,0,0,0,0
-"S1 power management AUTO, settings as they are","clear, no grid",50.42,8376,12034,17035,5001,27549,0,39737,56.6,0,0,115,1
-S2 AUTO + Gen P Min 20 %,"clear, no grid",50.42,8210,12684,17035,4351,26900,0,39737,55.2,0,0,115,1
-"S3 AUTO + UPS bridge, solar coverage 10 %","clear, no grid",50.32,8373,12034,17035,5001,27551,0,39737,56.7,0,0,114,1
-S0 today: 4 gensets by hand,"cloudy, no grid",96.0,10759,7690,14161,6471,32047,0,39737,34.7,0,0,0,0
-"S1 power management AUTO, settings as they are","cloudy, no grid",50.87,8718,10670,14161,3491,28849,0,39737,58.9,0,0,156,4
-S2 AUTO + Gen P Min 20 %,"cloudy, no grid",50.87,8589,11177,14161,2984,28342,0,39737,57.8,0,0,156,4
-"S3 AUTO + UPS bridge, solar coverage 10 %","cloudy, no grid",50.57,8697,10670,14161,3491,28798,0,39737,59.1,0,0,192,2
-S0 today: 4 gensets by hand,"clear, grid 22-06 h",64.0,6562,8291,17035,8744,18962,12484,39737,20.5,0,0,0,0
-"S1 power management AUTO, settings as they are","clear, grid 22-06 h",33.12,4731,12034,17035,5001,15079,12484,39737,31.3,1,0,95,3
-S2 AUTO + Gen P Min 20 %,"clear, grid 22-06 h",33.12,4566,12684,17035,4351,14430,12484,39737,29.9,1,0,95,3
-"S3 AUTO + UPS bridge, solar coverage 10 %","clear, grid 22-06 h",33.02,4729,12034,17035,5001,15083,12484,39737,31.4,1,0,93,3
+"S0 today: 3 gensets by hand, 4 from 14:00",14 Oct as recorded (interruptions),39.73,4723,5316,17035,11719,13963,7918,27196,16.8,0,0,0,0
+"S1 power management AUTO, settings as they are",14 Oct as recorded (interruptions),23.8,3546,7999,17035,9036,11106,7918,27196,21.5,0,0,121,0
+S2 AUTO + Gen P Min 20 %,14 Oct as recorded (interruptions),23.8,3331,8941,17035,8094,10259,7918,27196,19.8,0,0,55,0
+"S3 AUTO + UPS bridge, solar coverage 10 %",14 Oct as recorded (interruptions),23.8,3546,7999,17035,9036,11106,7918,27196,21.5,0,0,121,0
+"S0 today: 3 gensets by hand, 4 from 14:00","clear day, no interruptions",39.73,4630,5683,17035,11352,13596,7918,27196,16.3,0,0,0,0
+"S1 power management AUTO, settings as they are","clear day, no interruptions",23.8,3417,8681,17035,8354,10598,7918,27196,20.5,0,0,0,0
+S2 AUTO + Gen P Min 20 %,"clear day, no interruptions",23.8,3187,9585,17035,7450,9693,7918,27196,18.8,0,0,0,0
+"S3 AUTO + UPS bridge, solar coverage 10 %","clear day, no interruptions",23.8,3417,8681,17035,8354,10598,7918,27196,20.5,0,0,0,0
+"S0 today: 3 gensets by hand, 4 from 14:00",cloudy day,39.73,4668,5532,14161,8629,13747,7918,27196,16.5,0,0,0,0
+"S1 power management AUTO, settings as they are",cloudy day,23.8,3545,8176,14161,5985,11102,7918,27196,21.5,0,0,0,0
+S2 AUTO + Gen P Min 20 %,cloudy day,23.8,3356,8921,14161,5240,10358,7918,27196,20.0,0,0,0,0
+"S3 AUTO + UPS bridge, solar coverage 10 %",cloudy day,23.8,3532,8107,14161,6054,11049,7918,27196,21.4,0,0,90,0
+"S0 today: 3 gensets by hand, 4 from 14:00",no grid at all,82.0,7888,5683,17035,11352,21514,0,27196,25.5,0,0,0,0
+"S1 power management AUTO, settings as they are",no grid at all,36.08,5820,8682,17035,8353,18481,0,27196,48.9,0,0,29,1
+S2 AUTO + Gen P Min 20 %,no grid at all,36.08,5590,9587,17035,7448,17577,0,27196,47.1,0,0,29,1
+"S3 AUTO + UPS bridge, solar coverage 10 %",no grid at all,36.08,5820,8682,17035,8353,18481,0,27196,48.9,0,0,29,1

@@ -107,32 +107,45 @@ Other PLC bits worth knowing: *PV Actual > 100 kW* and *GroupLink* (see §4), *A
 
 ## 4. What the history log shows [fact], and what it means [inferred]
 
-The archive holds 750 history records from 29 Sep to 14 Oct; the text ones are user and system events.
+Two sources: the 750 records inside the archive (text reasons only) and the full InteliConfig history
+export of the same period (`docs/site/neo_history_2026-09-29_2026-10-14.csv`, with the value snapshot of
+every event; `tools/neo_history.py` makes these files from any History.xls).
 
-**Every day, the same two events** (times in plant time):
+**The daily cycle is a grid cycle, not a sun cycle.** Every evening at about 18:05 the plant transfers to
+the **government grid**: gensets stop, `Groups Unlinked` ("2 - 1"), `Forced Value(1)` pulses, and `Other
+CB Trip` records the PV breakers opening on the transfer (MCB 1 and 2 closed, 574 kW import). Every
+morning (06:12 in mid-October, 08:00-10:30 earlier in the month — the grid's own schedule) the plant
+transfers back to gensets with an **open transition**: the bus is dead for a few seconds (`Mains/Bus <f`,
+all voltages 0), `BO PV Anti Islanding`, `PVCB Opened`, `Groups Linked` ("2 + 1"), then three gensets
+(running nominal 3,150 kW) and `PVCB Closed` a few minutes later. Night load on the grid: 570-680 kW.
+Some days have extra grid windows in the afternoon. So the gensets run about 12 hours a day — exactly the
+solar hours — which is why curtailment hurts so much here.
 
-| Morning (06:12 … 10:30) | Evening (18:00 … 18:15) |
-|---|---|
-| `2 + 1` — control groups 2 and 1 **linked** | `2 - 1` — groups **unlinked**, and in the same second `Forced Value(1) ON`, then `Forced Value(1) OFF` 30-160 s later |
+**Daytime operation**: 3 gensets by hand most of the day (3,150 kW), a 4th at times (4,150 / 3,851 kW),
+genset load 21-33 %. The curtailment rule reproduces the records exactly: at 12:25 on 14 Oct the load was
+1,829 kW, the running nominal 3,151 kW, and the PV 1,041 kW = load − 25 % × running nominal. The PLC's
+*request* usually sits ~240 kW below that (median of 91 warnings), so the inverters often produce more
+than requested → `AHI PV prod > PV req Warning` (93 in 16 days; a warning only, the breakers stayed closed).
 
-The morning time moves with the weather, the evening time is sunset. The Neo's setpoints are "Control
-Group 2, Group Link L 2, Group Link R 1" and the PLC has a *GroupLink* output and a *PV Actual >
-100 kW* bit. Reading: the PLC joins the hybrid controller's power-management group to the gensets'
-group only while the PV is producing, and separates it at night, pulsing *Forced Value 1* at that
-moment (what the forced value changes is not readable from the archive — [open]). This is automation
-that already exists and works; it is not an operator action.
+**Mode switching by hand**: `SetpointChange CON(8315)=0 → =2` = controller OFF then AUTO from
+InteliConfig, up to **ten times a day** (14 Oct: 08:04, 09:19, 09:23, 09:37, 12:25). Each OFF opens the
+PV breakers at once (0.3-1.0 MW dumped on the gensets), each AUTO re-closes them with a **voltage dip to
+175-216 V** (−10 to −24 %), and on 12:25 the genset load jumped to 57 % and both UPS shed. The toggles
+follow `PV Logger Comm Fail` bursts — the operators use OFF/AUTO as a "reset" for the PV communication.
 
-**Mode switching by hand**: `U=255,T=ICD,CON(8315)=0` then `=2` — the controller mode set to **OFF and
-back to AUTO** from InteliConfig: 4 Oct 16:07, 7 Oct 16:29, 8 Oct 09:40, 9 Oct 11:14, 10 Oct 07:05,
-13 Oct 11:01, and on 14 Oct at 08:04, 09:19, 09:23, 09:37 and 12:25 — five times in one morning.
-Someone uses OFF→AUTO as a reset [inferred]; what they are resetting is a question for the site
-(the SAU log shows "AC volt low" on all ten inverters at 13:21 that day).
+**PV logger communication failures**: 2-33 per day (26 on 5 Oct, 33 on 9 Oct, 23 on 10 Oct, 20 on 14 Oct).
+Each one makes the validation sheet force the PV request to 0; the PV recovers at ~300 kW/min. That is the
+RS485/SAU problem seen from the controller's side.
+
+**UPS shedding** on 8 of 15 days — always right after a PV loss (trip, toggle, comm fail), when the gensets
+suddenly carry the whole load.
 
 **Setpoint trials on 1 Oct** by an Ethernet client (`U=0,T=ETH CA1`): **Gen P Min** 25 → 20 → 15 → 25 %
 within six minutes, and **Min Run Power** 210 → 50 → 210 kW. Somebody already tried lowering the genset
 floor to let more PV in and went back. Before step 2 of the modification plan, ask what they saw.
 
-**Fault resets** from Ethernet on 4 Oct 07:01 and 10 Oct 09:36.
+**Fault resets** from Ethernet on 4 Oct 07:01 and 10 Oct 09:36. Two `Wrn Production Mode` records (1 Oct
+08:07, a controller start with everything at zero) — a firmware message at power-up, not a plant alarm.
 
 ## 5. Settings that decide the plant's behaviour [fact]
 
