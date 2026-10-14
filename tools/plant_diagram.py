@@ -120,5 +120,7 @@ foot = ["we engineer it on a copy of the archive and prove it in the ComAp emula
 for i, l in enumerate(foot):
     text(RX+36, y+54+i*20, "• " + l, 13.5)
 add('</svg>')
-open("/home/claude/data-collector/docs/diagrams/plant_today_and_next.svg", "w").write("\n".join(out))
+import os
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+open(os.path.join(ROOT, "docs", "diagrams", "plant_today_and_next.svg"), "w").write("\n".join(out))
 print("svg written")
