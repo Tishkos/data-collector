@@ -55,6 +55,9 @@ the inverter register map and a few confirmations on the first live read.
       plant config (unit id 1 assumed - CHECK)
 - [ ] Per-genset detail (fuel level, hours, alarms): Modbus export of one IG4 200 the same way as the Neo's,
       then the commented genset devices in `config\site.plant.yaml`
-- [ ] PLC editor screenshots (one per sheet) on the plant PC: confirms docs\NEO_CONFIGURATION.md §3 and shows
-      what Forced Value 1 and User Buttons 1-4 do
+- [x] PLC program: all eleven sheets exported from InteliConfig (docs\site\neo_plc_2026-10-14, read by
+      tools\neo_plc.py). User Buttons 1-4 enable PV CB1/CB2/UPS1/UPS2, Button 10 = manual PV request.
+- [ ] Still to confirm in the PLC editor: the select order of the Mux in sheet 8 (which single PV breaker
+      gets the 2,200 kW cap), the Math operation code 4 (site PF), the breaker-block timeout; and what
+      Forced Value 1 does at the transfers (not in the sheets - a controller function)
 - [ ] SAU advanced login also gives the Setup Wizard pages (RS485 settings - the 53-77 % success rate)

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-16"?>
+<PlcSheetExport PlcFormatVersion="4" ExportFormatVersion="1" ConfigurationVersion="12" ControllerType="Ih500" ConfigFormatTerminal="9" ConfigFormatTerminalWithFont="9">
+  <Sheet Name="Validation" Comment="" Height="480" Width="1440" />
+  <PlcProgramExport>
+    <FunctionBlocks>
+      <FunctionBlockExport Identification="54">
+        <Position X="6" Y="1" />
+        <Inputs>
+          <Input Name="AP(Active Power)" BitIndex="0" ComObject="19433" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="AP(active Power) validate" BitIndex="0" ValueIndex="0" ComObject="21281" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="1" Dimension="kW" />
+          <Output Name="PLC-BOUT 9.8" BitIndex="7" ValueIndex="0" ComObject="10432" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="54">
+        <Position X="6" Y="11" />
+        <Inputs>
+          <Input Name="Maximum Active Power Available" BitIndex="0" ComObject="19424" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" IsConst="true" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="false" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Max Active Power Available valid" BitIndex="0" ValueIndex="0" ComObject="21282" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="1" Dimension="kW" />
+          <Output Name="PLC-BOUT 10.1" BitIndex="0" ValueIndex="0" ComObject="10433" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+    </FunctionBlocks>
+    <PlcSheetInputs>
+      <SheetInput BitIndex="0" Index="0" Type="Analog" ComObjectNumber="19433" />
+      <SheetInput BitIndex="0" Index="4" Type="Analog" ComObjectNumber="19424" />
+    </PlcSheetInputs>
+    <PlcSheetOutputs>
+      <SheetOutput BitIndex="0" Index="1" Type="Analog" ComObject="21281">
+        <ExternalOutput />
+      </SheetOutput>
+      <SheetOutput BitIndex="0" Index="5" Type="Analog" ComObject="21282">
+        <ExternalOutput />
+      </SheetOutput>
+    </PlcSheetOutputs>
+    <Wires>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="6">
+        <Points>
+          <XmlPosition X="140" Y="30" />
+          <XmlPosition X="140" Y="61" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="6">
+        <Points>
+          <XmlPosition X="140" Y="270" />
+          <XmlPosition X="140" Y="301" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="6">
+        <Points>
+          <XmlPosition X="404" Y="61" />
+          <XmlPosition X="404" Y="90" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="6">
+        <Points>
+          <XmlPosition X="404" Y="301" />
+          <XmlPosition X="404" Y="330" />
+        </Points>
+      </WirePlcSheetExport>
+    </Wires>
+  </PlcProgramExport>
+  <CommunicationObjectsExport>
+    <ComObjectExport Name="AP(Active Power)" Dimension="kW" IsUserSetpoint="false" Resolution="1" ComObjectNumber="19433" Type="Value" BitIndex="" />
+    <ComObjectExport Name="Maximum Active Power Available" Dimension="kW" IsUserSetpoint="false" Resolution="1" ComObjectNumber="19424" Type="Value" BitIndex="" />
+  </CommunicationObjectsExport>
+</PlcSheetExport>

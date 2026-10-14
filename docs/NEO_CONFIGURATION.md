@@ -59,51 +59,87 @@ coil 0 MCB feedback.
 The connection table also holds a sixth target, 192.168.0.1:502, with no definition attached [fact]
 — probably a leftover entry (the old router address), not a device [inferred].
 
-## 3. The PLC program [inferred from sheet names, PLC values, setpoints and protections]
+## 3. The PLC program [fact — the eleven sheets exported from InteliConfig on 14 Oct]
 
-The program body is encrypted in the archive; InteliConfig's PLC editor shows it on the plant PC.
-What its vocabulary says it does, sheet by sheet:
+The sheet exports (`docs/site/neo_plc_2026-10-14/*.xml`) contain every block, its inputs, outputs,
+properties and wiring. `tools/neo_plc.py` lists them block by block (`program.md` in the same folder) and
+executes them, so the behaviour model runs the plant's own logic. In plain words, in execution order:
 
-1. **IM210 data aquisition** — collects the three InteliMains readings into site totals: *Mains Import
-   P/Q/PF site*, *Load P/Q/PF site*, *MCB feedback numbers*, *Any MCB close*. On 14 Oct the three LAOD P
-   were 1,472 / 1,471 / 1,442 kW while the gensets carried 1,482 kW in total: the three units very
-   probably measure the same bus, and *Load P site* = 4,425 kW is the triple sum [inferred]. Several
-   downstream values were negative (−1,473) as a result.
-2. **UPS breakers math** — *UPS1 ON / UPS1 OFF / UPS 1 CB command* with *UPS1 ON cmd del* (setpoint
-   "UPS1 ON command delay" 10 s), fail-to-close / fail-to-open / other-fail protections with "Short
-   Del", and the warnings **UPS 1 Shedding / UPS 2 Shedding**. Setpoints "UPS 1 Load Shedd ON 70 % /
-   OFF 35 %" and "UPS 2 Load Shedd ON 80 % / OFF 35 %" act on *Gen Load %* (gensets P ÷ running nominal:
-   38 % on 14 Oct). Reading: when the gensets are loaded above 70 % (UPS 1) or 80 % (UPS 2) the Neo
-   commands the UPS breaker so that its critical loads are shed from the bus, and reconnects below
-   35 %. On 14 Oct both OFF commands were active and both feedbacks were 1, consistent with 38 % load.
-3. **PV Breaker controll** — *PV CB1 command / PV CB2 command*, *Any PV CB on*, *PV feedback number*
-   (2 = both closed), the fail-to-close/open protections for PV CB1 and PV CB2. The breakers are also
-   opened by the protection **PV prod > PV req BRKR open** (see sheet 9).
-4. **MCB & PV Breakers restriction power** and 7. **PV breakers restriction** — limits that depend on how
-   many breakers are closed: "MAX P req 1 PV breaker" 2,200 kW when only one PV breaker is in, "Max
-   Export 1 transf" 1,300 kW per transformer towards the mains (*Max Export transformers*,
-   *PV req PV CB restriction*).
-5. **Validation** — checks the SAU data (*AP validate*, *Max Active Power Available valid*) and produces
-   *PV req prot comm fail*: when the PV logger communication fails, the PV request is forced to 0
-   [inferred from the value being 0.0 and the protection names]. This is why a Modbus problem on the
-   SAU shows up as a PV trip.
-6. **Grid || request** — the PV request when the plant is parallel with the mains: *PV P req grid*,
-   *Site load no gen*, *Site Load with GEN*, *GCB and MCB close*, with the setpoints "MCB and GCB close
-   exp request" and "PV Q min import" 1,000 kVAr. Not active on 14 Oct (no mains).
-8. **PV request Mains/Gen** — selects the request source: *PV Output req gen kW* when on gensets (the
-   firmware's own curtailment with "Gen P Min 25 %" also applies), the grid request when on mains,
-   "MAN PV P req" when forced manually; result *PV req (kW)*.
-9. **PV req step protection** — ramps the request: *PV AP + step prot* = actual PV + "PV req step
-   protection" 100 kW, *PV req protected*, *PV req out ramp* → written to the SAU as AP Set. Watchdog:
-   if the PV produces more than requested by "PV Prod > PV req" 75 kW for "PV Prod > PV req del" 60 s,
-   the warning **PV prod > PV req Warning** (AHI delay 15 s) and then **PV prod > PV req BRKR open** —
-   the PV breakers are opened because the inverters are not following the limit. **Reverse power
-   Warning** / *Reverse Power PV not react* protect against export into the gensets.
-10. **PV Q request** — reactive power for the inverters: "Reactive power scheduling mode" (0 on 14 Oct),
-    *Q min math*, *Site Q*, *PV Q req*, *PV Q req out ramp* → RP Set.
+1. **IM210 data acquisition** — site totals from the three InteliMains: *Mains Import P site* = IM1 + IM2 +
+   IM3, *Load P site* = LAOD P of IM1 + IM2 + IM3 (same for Q; PF is a combination of the three). The
+   history of 1 Oct 08:19 shows the three units at −399 / −370 / −341 kW while exporting — three separate
+   feeders, so the sums are right (the earlier "triple counting" worry is withdrawn). *MCB #n* = MCB
+   feedback of unit n AND "unit n present on CAN"; *Any MCB close* = OR of the three; *Any GCB close* = OR
+   of Gen Loaded 1…5; **GroupLink = NOT Any MCB close** (groups linked whenever no mains breaker is closed,
+   i.e. on gensets — the daily "2 + 1 / 2 − 1" in the history); *GCB and MCB close* = both.
+   The setpoint "Reactive power scheduling mode" is converted and written to the SAU.
+2. **UPS breakers math** — *Running nominal Gensets* = "Running Nominal Power Of All" − *PV Actual P*;
+   *Gen load* = Gensets P ÷ Running nominal Gensets × 100 (interpolation 0→0, nominal→100 %); *Gen Load* =
+   that value when any GCB is closed, 1 % otherwise. **UPS 1 CB command** is a hysteresis comparator on
+   *Gen Load* with ON = "UPS 1 Load Shedd OFF" 35 % and OFF = "UPS 1 Load Shedd ON" 70 % — with ON below
+   OFF the comparator works inverted: the command is 1 (UPS breaker closed) below 35 % and drops to 0
+   (shed) above 70 %. UPS 2 the same with 80 %.
+3. **PV Breaker controll** — *PV CB1 command* = User Button 1 AND no latched fail (fail to close / fail to
+   open / other) AND **PVCB Close/Open** (the controller's own PV-breaker decision); PV CB2 the same with
+   User Button 2. *UPS 1* = User Button 3 AND no latched fail AND *UPS 1 CB command* delayed by "UPS1 ON
+   command delay" 10 s (delay on closing only; opening is immediate); UPS 2 the same with Button 4. Four
+   breaker blocks turn the commands into the physical outputs **Binary output 1…8** (PV CB1 ON, PV CB2
+   ON, UPS1 ON, PV CB1 OFF, PV CB2 OFF, UPS1 OFF, UPS2 ON, UPS2 OFF) and supervise the feedbacks; the
+   twelve fail flags are RS latches cleared by **Fault reset**.
+4. **(no name)** — *Any PV CB on* = PV CB1 status OR PV CB2 status OR UPS1 status; **PVCB function status**
+   = Any PV CB on AND PVCB Close/Open, wired back into the controller as its PVCB feedback. So the moment
+   the controller decides to open the PV breaker, its own feedback already reads "open".
+5. **MCB & PV Breakers restriction power** — *PV feedback number* = PV1 feedback × 1 + PV2 feedback × 2;
+   *MCB feedback numbers* = MCB1 × 1 + MCB2 × 2 + MCB3 × 4; both split back into bits for the sheets below.
+6. **Validation** — *AP validate* = the SAU's active power if valid, else 0; *Max Active Power Available
+   valid* = the SAU's "Maximum Active Power Available" (3,520 kW, a constant in the history) if valid, else 0.
+7. **Grid || request** (on the mains) — *Site load no gen* = PV Actual P + Mains Import P site; *Max Export
+   transformers* = MCB feedback numbers × "Max Export 1 transf" 1,300 kW (so 7 × 1,300 with all three
+   MCBs closed — the composed number is 1 + 2 + 4, not a count); *Site Load with GEN* = Site load no gen −
+   Gensets P; *PV req math* = that + Max Export transformers; **PV P req grid** = the smaller of PV req
+   math and Max Active Power Available valid. In practice on the grid the request is simply the SAU
+   maximum (3,520 kW) — PV runs flat out and exports (1 Oct 08:19: 1,445 kW PV, 1,110 kW exported).
+8. **PV breakers restriction** — *1 breaker* = PV P req grid capped at "MAX P req 1 PV breaker" 2,200 kW;
+   **PV req PV CB restriction** = 0 with no PV breaker closed, *1 breaker* with PV1 only, PV P req grid
+   with PV2 only or both (the 2,200 kW cap is applied to one of the two single-breaker cases only — to
+   be confirmed in the editor).
+9. **PV request Mains/Gen** — **PV Output req gen kW** = Maximum Active Power Available × Curtailment
+   Output ÷ 100 (interpolation 0 % → 0, 100 % → max available): the controller's own curtailment
+   regulator (Gen P Min 25 %, gain 5, 15 s) produces a percentage and the PLC turns it into kW of the
+   SAU maximum. **PV req (kW)** = PV req PV CB restriction on the mains, PV Output req gen kW on gensets,
+   "MAN PV P req" when User Button 10 is on.
+10. **PV req step protection** — *PV AP + step prot* = AP validate + "PV req step protetion" 100 kW;
+    **PV req protected** = PV req (kW), but never more than PV AP + step prot (the request can only be
+    100 kW above what the plant is producing — the ~300 kW/min recovery after any drop); **PV comm fail**
+    = ECU 2 Comm Fail OR ECU 3 Comm Fail OR a request ≤ 0; *PV req prot comm fail* = 0 while PV comm fail,
+    else PV req protected; **PV req out ramp** = ramp of that, 25 kW/s up, 1,500 kW/s down → written to
+    the SAU as the active power setpoint. Protections: *PV Prod > PV req comp* = AP validate > PV req +
+    75 kW → **PV prod > PV req Warning** at once (the "AHI" alarm adds its own 15 s delay; indication
+    only); the same condition held 60 s, or *reverse power* (Load P site ≤ −10 kW on gensets) held 15 s,
+    sets the latch *PV prod > PV req BRKR open* (cleared by Fault reset) — the latch is not wired to any
+    controller function, so the PV breakers are not opened by it.
+11. **PV Q request** — *Site Q* = PV Q + Mains Import Q site + Gensets Q; *Q min math* = Site Q − "PV Q min
+    import" 1,000 kVAr; *Q function start* = Q min math > 0 AND PV Actual P > 100 kW AND Gensets Q ≥ 0;
+    *Q min req* = Q min math while started, else 0 — and then **PV Q req = 0 unconditionally** (the final
+    switch is driven by the constant "Logical 1"), ramped and written to the SAU. The reactive power
+    control is switched off by design.
 
-Other PLC bits worth knowing: *PV Actual > 100 kW* and *GroupLink* (see §4), *Any GCB close*,
-*Q function start*, *PV comm fail*.
+What this program explains in the history:
+
+- **A PV-logger comm fail of a single second sets the SAU setpoint to 0** (sheet 10). The inverters
+  follow within seconds, the gensets take the load, and when the session is back the setpoint ramps from
+  0 at 25 kW/s but is held to "actual + 100 kW", so the plant climbs back at ~300 kW/min. Every "PV
+  Logger group 1/2 Comm Fail" line is a production dip; 5-33 of them a day.
+- **The UPS shedding alarms are a side effect of PV drops, not of genset overload.** "Running Nominal
+  Power Of All" includes the PV while the controller's PVCB feedback is closed; sheet 4 drops that
+  feedback the instant PVCB Close/Open goes off, while the SAU value the PLC subtracts is one Modbus
+  refresh old. For a few seconds *Running nominal Gensets* = 3,150 − 1,041 = 2,109 kW while the gensets
+  already carry 1,829 kW → *Gen Load* 87 % → both UPS commands drop. The history of 14 Oct 12:25 shows
+  exactly this ("Gen Nom" 2,940 = 3,150 − 210 eleven seconds later, Gen Load 57 %, both "UPS Shedding").
+  The hysteresis then keeps the UPS shed until the gensets fall below 35 %.
+- The night-time "PV req 100 kW" in the history is the step protection with the PV at 0.
+- On 1 Oct 08:19 the recorded request 1,545.3 kW = 1,445 (actual) + 100: the step chain reproduced to the kW.
+- The reactive-power sheet, the single-breaker cap and the export limit are inactive in today's operation.
 
 ## 4. What the history log shows [fact], and what it means [inferred]
 
@@ -182,9 +218,8 @@ own UI texts), not a plant-defined protection — its meaning is a question for 
 
 ## 7. What is not readable, and how to get it
 
-- The PLC program body and the screens are encrypted in the archive. On the plant PC, InteliConfig →
-  Controller configuration → PLC editor shows every sheet; a screenshot per sheet is enough to confirm
-  §3 and to find what Forced Value 1 and the user buttons do.
+- The PLC program is now known from the sheet exports (§3). Still unknown: what Forced Value 1 does at
+  the transfers, the alarm list that turns PLC bits into "AHI …" indications, and the screens.
 - The per-inverter registers of the SAU (units 1-10) are not in the archive — the Neo only reads the
   array. Still the SAU point table or a register scan.
 - The IM210 unit id is not in the definition (ComAp default 1 assumed).
@@ -196,5 +231,11 @@ own UI texts), not a plant-defined protection — its meaning is a question for 
 - Step 2 of the plan (gensets back under power management) has a precedent: the 1 Oct trial. Find out
   why it was reverted before repeating it.
 - Step 3 (UPS logic) has a concrete base: the UPS breakers are already automated as load shedding at
-  70/80 % genset load. A "bridge on PV drop" would be an extension of that sheet, built in the PLC editor
-  on a copy of this archive and proven in the emulator before anyone writes it to the controller.
+  70/80 % genset load (sheets 2 and 3). The first change there is a correction, not an extension: take
+  *Running nominal Gensets* from the gensets' nominal power instead of "Running Nominal Of All − PV",
+  and delay the shedding command a few seconds, so a PV drop no longer sheds the UPS. A "bridge on PV
+  drop" would then be an extension of the same sheet, built in the PLC editor on a copy of this archive
+  and tried in the model first.
+- The comm-fail problem is a program behaviour as much as a network one: one lost session → setpoint 0.
+  Besides the Modbus timeout/retry settings, sheet 10 could hold the last request for a short time
+  instead of forcing 0 (a Delay on the comm-fail bits plus a hold on the validated values).
