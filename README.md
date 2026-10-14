@@ -87,7 +87,9 @@ docs\turkey\*.xlsx                  the two tag-list workbooks (Rev. 1.2) from D
 docs\DATA_FLOW.md                   how the data moves and how Turkey gets it
 docs\TURKEY_MODBUS.md               the Modbus register map served to the Turkey platform
 docs\DEVICES.md                     what the manuals and the site sessions say, and what it means for us
-docs\site\                          exports taken on site (the InteliNeo Modbus table of 2026-10-14)
+docs\site\                          exports taken on site (the InteliNeo Modbus table and archive extract of 2026-10-14)
+docs\NEO_CONFIGURATION.md           how the InteliNeo configuration works (PLC sheets, devices, history, settings)
+tools\neo_archive.py                reads the readable parts of a controller archive (.aig4), read-only
 tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks
 docs\SAFETY.md                      why it cannot touch the plant
 docs\INFO_NEEDED.md                 the open questions for the site

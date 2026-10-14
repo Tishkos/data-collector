@@ -9,7 +9,7 @@ Connections are shared per host:port and closed after every poll (close_all): th
 gateway allows only 5 Modbus TCP links in total, and the InteliNeo already uses some of
 them. Ten inverters behind one SAU therefore cost one connection, and none between polls.
 
-point.raw: {address, kind: uint16|int16|uint32|int32|float32, scale, fn: holding|input,
+point.raw: {address, kind: uint16|int16|uint32|int32|float32, scale, fn: holding|input|coil|discrete,
             word_order: big|little,
             bit: <n>        one bit of a status word (0 = least significant)
             mask: <int>     true when any of these bits is set
@@ -91,7 +91,7 @@ class ModbusTcpAdapter(Adapter):
         """Group mapped points by function code into contiguous blocks."""
         mapped = [p for p in points if "address" in p.raw]
         blocks: list[tuple[str, int, int, list[PointDefinition]]] = []
-        for fn in ("holding", "input"):
+        for fn in ("holding", "input", "coil", "discrete"):
             pts = sorted((p for p in mapped if p.raw.get("fn", "holding") == fn), key=lambda p: int(p.raw["address"]))
             cur: list[PointDefinition] = []
             start = end = None
@@ -131,14 +131,15 @@ class ModbusTcpAdapter(Adapter):
                     out[p.id] = reading(p, None, Quality.BAD, "no register mapping", now)
         ok_blocks = failed_blocks = 0
         for fn, start, count, pts in self._blocks:
-            call = self._client.read_input_registers if fn == "input" else self._client.read_holding_registers
+            call = {"input": self._client.read_input_registers, "coil": self._client.read_coils,
+                    "discrete": self._client.read_discrete_inputs}.get(fn, self._client.read_holding_registers)
             try:
                 if not self._client.connected:
                     self._client.connect()
                 rr = call(address=start + self.address_offset, count=count, device_id=self.unit_id)
                 if rr is None or rr.isError():
                     raise RuntimeError(str(rr))
-                regs = rr.registers
+                regs = [int(b) for b in rr.bits[:count]] if fn in ("coil", "discrete") else rr.registers   # a coil is a 0/1 "register"
                 ok_blocks += 1
             except Exception as exc:
                 failed_blocks += 1

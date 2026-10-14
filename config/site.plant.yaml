@@ -50,22 +50,30 @@ devices:
   - {id: inv-09, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 9,  timeout: 5}}
   - {id: inv-10, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 10, timeout: 5}}
 
+  # --- the whole PV array as the SAU's virtual device (unit 245) ------------------------------------
+  # Registers taken from the InteliNeo's own Modbus-master definition (archive of 2026-10-14): PV power,
+  # available power before curtailment, energies, inverter counts. Unit 245 answered at register 0 on
+  # 14 Oct; CHECK must show ac_power_kw equal to the Neo's PV Actual P.
+  - {id: pv-array, profile: pv_array_sau.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 245, timeout: 5}}
+
+  # --- the three mains incomers (InteliMains 210 G2) ------------------------------------------------------
+  # Registers from the Neo's Modbus-master definition for them; unit id 1 is the ComAp default - confirm on CHECK.
+  - {id: main-01, profile: im210_mains.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.107, port: 502, unit_id: 1, timeout: 3}}
+  - {id: main-02, profile: im210_mains.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.111, port: 502, unit_id: 1, timeout: 3}}
+  - {id: main-03, profile: im210_mains.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.110, port: 502, unit_id: 1, timeout: 3}}
+
   # No PV-side meter and no irradiance / panel-temperature sensor were found on site (the SAU's
   # meters M1 and M3 are the generator and grid feeders). The Turkey tags that need them stay
-  # "not mapped" until such devices exist. The SAU's virtual array device (unit 245) could give
-  # PV totals and energies once its registers are known.
+  # "not mapped" until such devices exist.
 
-  # The genset and mains controllers can be read directly later for per-genset detail (fuel level,
-  # engine hours, alarms). Their register tables are the controllers' own Modbus lists - export
-  # them with InteliConfig the same way as the Neo's before enabling:
+  # The genset controllers can be read directly later for per-genset detail (fuel level, engine
+  # hours, alarms). Their register tables are the controllers' own Modbus lists - export them with
+  # InteliConfig the same way as the Neo's before enabling:
   # - {id: gen-01,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.105, port: 502, unit_id: 1, timeout: 3}}
   # - {id: gen-02,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.106, port: 502, unit_id: 1, timeout: 3}}
   # - {id: gen-03,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.113, port: 502, unit_id: 1, timeout: 3}}
   # - {id: gen-04,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.114, port: 502, unit_id: 1, timeout: 3}}
   # - {id: gen-05,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.115, port: 502, unit_id: 1, timeout: 3}}
-  # - {id: main-01, profile: im210_mains.yaml,    adapter: modbus_tcp, connection: {host: 192.168.0.107, port: 502, unit_id: 1, timeout: 3}}
-  # - {id: main-02, profile: im210_mains.yaml,    adapter: modbus_tcp, connection: {host: 192.168.0.111, port: 502, unit_id: 1, timeout: 3}}
-  # - {id: main-03, profile: im210_mains.yaml,    adapter: modbus_tcp, connection: {host: 192.168.0.110, port: 502, unit_id: 1, timeout: 3}}
 
 # --- Publishing for the DT Turkey / CCI monitoring platform ------------------------------------
 # A read-only Modbus TCP server on this PC with all tags of profiles/tag_catalog.yaml at fixed

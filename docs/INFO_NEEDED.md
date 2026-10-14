@@ -11,9 +11,8 @@ the inverter register map and a few confirmations on the first live read.
       `address_offset: -1` on `neo-01` in `config\site.plant.yaml`.
 - [ ] `pvcb_closed` = 1 while the PV breaker is closed (bit order of Binary Inputs); `g1..g5_running`
       match the gensets that are actually loaded (Gen Loaded 16 bit order)
-- [ ] ECU order of the Neo's Modbus-master devices (profile assumes ECU 2 and 3 = PV logger groups
-      1 and 2): check in the archive, Controller configuration → Modbus master, or at the next
-      "PV Logger Comm Fail" warning
+- [x] ECU order of the Neo's Modbus-master devices: archive confirms IM1, PV logger 1, PV logger 2, IM2, IM3
+      (profile: pv_logger_comm_fail = ECU 2 | ECU 3)
 - [ ] If the plant agrees to extend the controller's Modbus list later: PV logger values (Daily yield,
       Max Active Power Available, inverter counts), the three InteliMains readings, PLC "Load P site",
       the Statistics group (PV / Gen kWh, fuel). Com. objects are listed in the profile header.
@@ -27,8 +26,9 @@ the inverter register map and a few confirmations on the first live read.
       protocol" for SmartCMSHU121B 0.7.3), or a register scan from the plant PC (the PowerShell dump
       script of 14 Oct, `modbus_dump.csv`) matched against the live values in Device Monitor.
       → `raw.address / kind / scale` next to each `sau_id`.
-- [ ] The SAU's virtual array device (unit 245, answers at register 0): its map would give PV totals
-      and energies for the plant-level tags (Real energy delivered, Total_Energy)
+- [x] The SAU's virtual array device: register map taken from the Neo's own definition in the archive →
+      `profiles\pv_array_sau.yaml` (unit 245 assumed from the live test; CHECK compares ac_power_kw with the
+      Neo's PV Actual P). Daily/total yield scaling to verify against the inverters' counters.
 - [x] Pyranometer / panel temperature: **no such sensor on site** (SAU device list) - the two
       `pv-env` tags stay unmapped unless a sensor is added
 
@@ -51,6 +51,10 @@ the inverter register map and a few confirmations on the first live read.
 
 ## 5. Nice to have
 - [ ] Local diesel price → `fuel_price_per_l`
-- [ ] Per-genset detail (fuel level, hours, alarms): Modbus exports of one IG4 200 and one IM210G2 the
-      same way as the Neo's, then the commented devices in `config\site.plant.yaml`
+- [x] The three InteliMains: registers from the Neo's definition → `profiles\im210_mains.yaml`, enabled in the
+      plant config (unit id 1 assumed - CHECK)
+- [ ] Per-genset detail (fuel level, hours, alarms): Modbus export of one IG4 200 the same way as the Neo's,
+      then the commented genset devices in `config\site.plant.yaml`
+- [ ] PLC editor screenshots (one per sheet) on the plant PC: confirms docs\NEO_CONFIGURATION.md §3 and shows
+      what Forced Value 1 and User Buttons 1-4 do
 - [ ] SAU advanced login also gives the Setup Wizard pages (RS485 settings - the 53-77 % success rate)

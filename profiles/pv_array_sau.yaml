@@ -1,0 +1,43 @@
+# Device profile: the Sineng SAU-100's "virtual array" device - the whole PV plant as one Modbus unit
+# (unit id 245 on 192.168.0.128:502). Read-only.
+#
+# Source: the InteliNeo's own Modbus-master definitions for "PV Logger group 1/2", extracted from the
+# controller archive of 2026-10-14. These are exactly the registers the Neo reads from the SAU every
+# 1-2 s, so they are known to answer. Register = 0-based address as in the Neo definition (FC03).
+# The Neo also WRITES to this unit (AP Set 2100/2101, RP Set 2102/2103, PF Set 2105, percentage sets
+# 2018/2020, mode 1007/1008, coil 4002/4003 inverter ON/OFF) - the collector never touches those.
+#
+# Scaling to verify on the first CHECK against the SAU dashboard: the Neo shows 635,283.7 kWh for
+# "Daily yield" (register 1009, int32 x0.1) and 3,010 for "Total yield" (1011) - not plausible for a
+# 3.2 MW plant, so one of them is misaligned or in other units. The inverters' own counters
+# (SAU export: ~600 kWh/day each) are the reference.
+
+kind: pv
+vendor: Sineng
+model: "SAU-100 virtual array (10 x SP-320K-H, 3.2 MW)"
+profile_revision: 1
+profile_status: mapped (from the Neo definition)
+source_document: "InteliNeo archive 2026-10-14, Modbus master datapoints 'PV Logger group 1/2'"
+
+limits: {rated_kw: 3200}
+
+points:
+  - {id: ac_power_kw,          unit: kW,   raw: {address: 1000, kind: int32,  scale: 0.1},   description: "AP (Active Power) of the array"}
+  - {id: reactive_kvar,        unit: kVAr, raw: {address: 1002, kind: int32,  scale: 0.1},   description: "RP (Reactive Power)"}
+  - {id: power_factor,         unit: "",   raw: {address: 1004, kind: int32,  scale: 0.001}, description: "PF"}
+  - {id: energy_today_kwh,     unit: kWh,  raw: {address: 1009, kind: int32,  scale: 0.1},   description: "Daily yield - VERIFY scaling/alignment"}
+  - {id: energy_total_kwh,     unit: kWh,  raw: {address: 1011, kind: int32},               description: "Total yield - VERIFY units"}
+  - {id: inverters_total,      unit: "",   raw: {address: 1017, kind: int32}}
+  - {id: inverters_online,     unit: "",   raw: {address: 1019, kind: int32}}
+  - {id: inverters_working,    unit: "",   raw: {address: 1021, kind: int32}}
+  - {id: max_power_kw,         unit: kW,   raw: {address: 1063, kind: uint32, scale: 0.1},   description: "Maximum Active Power (10 x 352 kW = 3,520)"}
+  - {id: max_reactive_kvar,    unit: kVAr, raw: {address: 1065, kind: uint32, scale: 0.1}}
+  - {id: min_reactive_kvar,    unit: kVAr, raw: {address: 1067, kind: int32,  scale: 0.1}}
+  - {id: available_kw,         unit: kW,   raw: {address: 1093, kind: uint32, scale: 0.1},   description: "Maximum Active Power Available = what the sun allows now (before curtailment)"}
+  - {id: available_reactive_kvar, unit: kVAr, raw: {address: 1095, kind: uint32, scale: 0.1}}
+  - {id: min_reactive_available_kvar, unit: kVAr, raw: {address: 1097, kind: int32, scale: 0.1}}
+  - {id: inverters_stopped,    unit: "",   raw: {address: 1187, kind: int32}}
+  - {id: inverters_standby,    unit: "",   raw: {address: 1189, kind: int32}}
+  - {id: inverters_faulty,     unit: "",   raw: {address: 1193, kind: int32}}
+  - {id: inverters_alarm,      unit: "",   raw: {address: 1195, kind: int32}}
+  - {id: comm_error,           type: boolean, raw: {derived: comm_error}, description: "set by the collector: SAU not answering"}

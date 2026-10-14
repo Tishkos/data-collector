@@ -1,6 +1,7 @@
 version: '1.2'
 # Source per tag (2026-10-14): inv-* = SAU-100 (registers pending its point table); neo-01 = InteliNeo
-# Modbus table; pv-meter and pv-env = no such device found on site yet (tags stay unmapped).
+# Modbus table; pv-array = the SAU's virtual array (unit 245, registers from the Neo's own definition);
+# pv-meter and pv-env = no such device found on site yet (tags stay unmapped).
 tags:
 - name: INVERTER_1.INV1_AC_POWER
   device: inv-01
@@ -1478,8 +1479,8 @@ tags:
   type: float
   unit: kvar
 - name: Real energy L1 L3 delivered
-  device: pv-meter
-  point: energy_delivered_kwh
+  device: pv-array
+  point: energy_total_kwh
   type: float
   unit: kWh
 - name: Voltage L1 N
@@ -1523,7 +1524,7 @@ tags:
   type: boolean
   unit: ''
 - name: Total_Energy
-  device: pv-meter
+  device: pv-array
   point: energy_total_kwh
   type: float
   unit: kWh

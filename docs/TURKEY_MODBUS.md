@@ -322,7 +322,7 @@ Register map version 1. Addresses are 0-based protocol addresses (address 100 = 
 | 292 | Apparent current L3 N | 674 | 2 | float32 | A | 1292 | pv-meter.current_l3_a | Pending commissioning |
 | 293 | Psum3 | 676 | 2 | float32 | kW | 1293 | neo-01.pv_prod_kw | Ready |
 | 294 | Qsum3 | 678 | 2 | float32 | kvar | 1294 | neo-01.pv_q_kvar | Ready |
-| 295 | Real energy L1 L3 delivered | 680 | 2 | float32 | kWh | 1295 | pv-meter.energy_delivered_kwh | Pending commissioning |
+| 295 | Real energy L1 L3 delivered | 680 | 2 | float32 | kWh | 1295 | pv-array.energy_total_kwh | Ready |
 | 296 | Voltage L1 N | 682 | 2 | float32 | V | 1296 | neo-01.bus_voltage_l1_v | Ready |
 | 297 | Voltage L2 N | 684 | 2 | float32 | V | 1297 | neo-01.bus_voltage_l2_v | Ready |
 | 298 | Voltage L3 N | 686 | 2 | float32 | V | 1298 | neo-01.bus_voltage_l3_v | Ready |
@@ -331,6 +331,6 @@ Register map version 1. Addresses are 0-based protocol addresses (address 100 = 
 | 301 | Area_Connection_Error | 692 | 1 | boolean |  | 1301 | neo-01.pv_logger_comm_fail | Ready |
 | 302 | Thermal_Magnetic_Switch_On_(LV PANEL) | 693 | 1 | boolean |  | 1302 | neo-01.pvcb_closed | Ready |
 | 303 | Thermal_Magnetic_Switch_Off (LV PANEL) | 694 | 1 | boolean |  | 1303 | neo-01.pvcb_open | Ready |
-| 304 | Total_Energy | 695 | 2 | float32 | kWh | 1304 | pv-meter.energy_total_kwh | Pending commissioning |
+| 304 | Total_Energy | 695 | 2 | float32 | kWh | 1304 | pv-array.energy_total_kwh | Ready |
 
 Value block: 100–696. Quality block: 1000–1304.

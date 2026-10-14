@@ -1,0 +1,13 @@
+<datapoints format="2.0">
+  <block id="1" name="read out" refreshrate="1000">
+    <datapoint datatype="2" name="AP(Active Power)" function="3" address="1000" bitindex="0" dim="kW" factor="0.1000000014901160000000000000" offset="0.0000000000000000000000000000" refreshrate="1000" dec="1" />
+    <datapoint datatype="2" name="RP(Reactive Power)" function="3" address="1002" bitindex="0" dim="kVAr" factor="0.1000000014901160000000000000" offset="0.0000000000000000000000000000" refreshrate="1000" dec="1" />
+    <datapoint datatype="2" name="PF(Power Factor)" function="3" address="1004" bitindex="0" dim="kVAr" factor="0.0010000000474974500000000000" offset="0.0000000000000000000000000000" refreshrate="1000" dec="3" />
+  </block>
+  <unassigneddatapoints>
+    <datapoint datatype="4" name="Reactive power scheduling mode" function="6" refreshType="Periodically" address="1007" bitindex="0" dim="" factor="1" offset="0" refreshrate="1000" dec="0" />
+    <datapoint datatype="5" name="AP(Active Power) Set" function="16" refreshType="Periodically" address="2100" bitindex="0" dim="kW" factor="0.1000000014901160000000000000" offset="0.0000000000000000000000" refreshrate="1000" dec="1" />
+    <datapoint datatype="2" name="RP(Reactive Power) Set" function="16" refreshType="Periodically" address="2102" bitindex="0" dim="kVAr" factor="0.1000000014901160000000000000" offset="0.0000000000000000000000" refreshrate="1000" dec="1" />
+    <datapoint datatype="6" name="Inverter ON/OFF" function="5" refreshType="Periodically" address="4002" bitindex="0" factor="1" offset="0" refreshrate="1000" />
+  </unassigneddatapoints>
+</datapoints>

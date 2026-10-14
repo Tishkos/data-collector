@@ -1,0 +1,12 @@
+<datapoints format="2.0">
+  <unassigneddatapoints>
+    <datapoint datatype="2" name="LAOD P" function="3" address="1046" bitindex="0" dim="kW" factor="1" offset="0" refreshrate="1000" dec="0" />
+    <datapoint datatype="1" name="Mains Import  P" function="3" address="1001" bitindex="0" dim="kW" factor="1" offset="0" refreshrate="1000" dec="0" />
+    <datapoint datatype="2" name="LAOD Q" function="3" address="1048" bitindex="0" dim="kVAr" factor="1" offset="0" refreshrate="1000" dec="0" />
+    <datapoint datatype="1" name="LAOD PF" function="3" address="1050" bitindex="0" dim="" factor="0.0100000000000000000000000000" offset="0.0000000000000000000000000000" refreshrate="1000" dec="2" />
+    <datapoint datatype="1" name="Mains Import  Q" function="3" address="1006" bitindex="0" dim="kVAr" factor="1" offset="0" refreshrate="1000" dec="0" />
+    <datapoint datatype="1" name="Mains PF" function="3" address="1014" bitindex="0" dim="" factor="0.0100000000000000000000000000" offset="0.0000000000000000000000000000" refreshrate="1000" dec="2" />
+    <datapoint datatype="1" name="BAT" function="3" address="1051" bitindex="0" dim="V" factor="0.1000000000000000000000000000" offset="0.0000000000000000000000000000" refreshrate="1000" dec="1" />
+    <datapoint datatype="6" name="MCB Feedback" function="1" address="0" bitindex="0" factor="1" offset="0" refreshrate="1000" />
+  </unassigneddatapoints>
+</datapoints>

@@ -155,3 +155,19 @@ def test_address_offset_and_sum_needs_good_inputs(neo_server):
     out = ModbusTcpAdapter(d).read()
     assert out["pv"].value == 1250
     assert out["total"].quality == Quality.BAD and "nope" in out["total"].error
+
+
+def test_coils_and_pv_array_profile(neo_server):
+    """fn: coil reads with FC01; the SAU array profile decodes the Neo-defined registers."""
+    from plantcollector.registry import load_registry
+    reg = load_registry("config/site.plant.yaml")
+    d = reg.devices["main-01"].model_copy(update={"connection": {"host": "127.0.0.1", "port": NEO_PORT, "unit_id": 1, "timeout": 1}})
+    out = ModbusTcpAdapter(d).read()
+    assert out["available"].quality == Quality.GOOD and out["available"].value in (True, False)
+    assert out["power_kw"].quality == Quality.GOOD
+    pv = reg.devices["pv-array"].model_copy(update={"connection": {"host": "127.0.0.1", "port": NEO_PORT, "unit_id": 1, "timeout": 1}})
+    ad = ModbusTcpAdapter(pv)
+    assert [(s, n) for _, s, n, _ in ad._blocks] == [(1000, 99), (1187, 10)]
+    out = ad.read()
+    assert all(r.quality == Quality.GOOD for r in out.values())
+    assert out["max_power_kw"].value == 0.0 and out["comm_error"].value is False
