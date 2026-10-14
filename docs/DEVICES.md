@@ -26,3 +26,17 @@ The SAU-100 on site shows the same web application and protocol set as the SAU-2
 | Opening the Controller configuration window online **needs the controller password** (Others → Access → Enter password) | §5.5.1 note, §5.4 | The person with the controller password opens it; we only read and export. Nothing is written to the controller unless **OK and Restart** is pressed — never press it. |
 | Export to CSV of Setpoints / Values | §6.3.1 | Handy for a snapshot of all live values with names, to check our readings against. |
 | Communication plug-in modules (CM-Ethernet: "TCP Modbus or SNMP") appear as a Setpoints group | §5.2.6 | The Modbus TCP server settings of the Neo (port 502, device address) are in Setpoints → the CM-Ethernet / Modbus group. |
+
+## Facts from site screenshots (SAU device list, IP scan, InteliNeo control window)
+
+| Fact | Consequence |
+|---|---|
+| Inverters: **Sineng SP-xxxK-HU, 12-string version**, 10 units; RS485 addresses 1–5 on COM1, 6–10 on COM2 | unit ids 1…10 confirmed; 12 string currents, not 17 |
+| RS485 success rate per inverter **53–77 %** (5/10/30/60-minute windows) | the SAU is retrying inverters all day: a plausible root of the slow Modbus TCP answers and the Neo's "PV logger comm fail". Site item: RS485 wiring, termination, baud/parity, point table |
+| On the SAU as well: ABB PowerValue 11 UPS (COM7:2, not answering), Acrel PZ96L-E4 meter (COM4:1) and Sfere PD194E meter (COM4:2) = Meter1 generator feeder / Meter2 grid feeder, Acrel AM5SE-T relay (COM5:1), ARTU100 RTU (COM5:2), Sineng AgilePID (COM7:3), two CSQ devices (COM3:2 not answering, COM3:3 ok) | generator and grid power also exist on the SAU; a second source for mains/genset values |
+| Address 1 is used on COM1 (inverter), COM4 (meter) and COM7 (the SAU itself) | the SAU's Modbus TCP side is **not** a plain pass-through by unit id; the TCP point table / forwarding configuration (SAU-WEB → Setting) decides which TCP unit id and registers hold what |
+| Network: MikroTik router .1; nine ComAp devices (.105 .107 .110 .111 .112 .113 .114 .115 .167); SAU .128 (ZHIYUAN hardware); plant PC DESKTOP-K287K9O .166; "SOLAR" Lenovo laptop .171 | .112 = InteliNeo (InteliConfig connects there); .171 is probably the licensed InteliSCADA laptop |
+| InteliNeo 5500 SN 240842DA, firmware 1.2.0.43, application "Standard HC"; 05:28: gensets 1,859 kW, mains 0, PV 0, bus 416 V / 49.98 Hz | plant peak load is around 1.9 MW; the demo is scaled to this |
+| Binary inputs PV1/PV2 feedback, UPS1/UPS2 feedback; binary outputs PV CB1/CB2 ON/OFF, **UPS1/UPS2 ON/OFF** | the UPS control outputs already exist in the configuration — starting point for the UPS logic work |
+| Alarms: Wrn PV Logger group 1 and 2 Comm Fail, **Max Num CU on CAN Exceeded** (red), Wrn Production Mode | the 8-controller firmware limit is a live alarm, not only a report finding |
+| SAU dashboard: installed capacity 3,200 kW, 10/10 inverters online, 2/2 meters | PV rated 3.2 MW |

@@ -8,7 +8,7 @@
 
 kind: pv
 vendor: Sineng
-model: "string inverter (model TBC)"
+model: "SP-xxxK-HU string inverter, 12 strings (exact rating TBC)"
 profile_revision: 2
 profile_status: draft
 source_document: "SAU-100 point table / Sineng Modbus protocol — TO BE ATTACHED"
@@ -26,7 +26,8 @@ points:
   - {id: energy_today_kwh,  unit: kWh, raw: {address: 11, kind: uint32, scale: 0.1}}     # TODO
   - {id: energy_total_kwh,  unit: kWh, raw: {address: 13, kind: uint32, scale: 1.0}}     # TODO
   - {id: comm_error,        type: boolean, raw: {derived: comm_error}, description: "set by the collector: inverter not answering"}
-  # string currents: confirm how many inputs the real model has (template assumes 17)
+  # string currents: the installed model has 12 string inputs (SPxxxKHUx12); 13-17 kept for the Turkey
+  # template and will read as not available on the real device
   - {id: string_current_1_a,  unit: A, raw: {address: 20, kind: uint16, scale: 0.01}}  # TODO
   - {id: string_current_2_a,  unit: A, raw: {address: 21, kind: uint16, scale: 0.01}}
   - {id: string_current_3_a,  unit: A, raw: {address: 22, kind: uint16, scale: 0.01}}

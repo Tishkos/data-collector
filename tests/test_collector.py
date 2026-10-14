@@ -44,7 +44,7 @@ def test_seeded_history_and_totals(collector):
 def test_summary_and_series(collector):
     s = views.summary(collector)
     assert s["mode"] == "read-only" and s["simulated"] is True
-    assert s["kpi"]["gensets_total"] == 3
+    assert s["kpi"]["gensets_total"] == 5
     assert all(d["comms"] == "ok" for d in s["devices"])
     ser = views.series(collector, collector.now() - timedelta(hours=6), collector.now())
     assert ser["step"] >= 30 and len(ser["t"]) == len(ser["series"]["load_kw"])
