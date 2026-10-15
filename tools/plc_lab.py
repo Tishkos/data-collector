@@ -163,7 +163,7 @@ class LivePlant:
             self.curtail = 0.0 if self.on_grid() else max(0.0, min(100.0, wanted / pm.SAU_MAX_AVAILABLE_KW * 100))
             self.pv_actual = self.sau_value = self.sau_reading = self.received_setpoint = wanted
         self.hist = {k: deque(maxlen=HISTORY_S) for k in ("t", "load", "pv_available", "pv_actual", "setpoint", "received", "request",
-                                                            "gen_kw", "gen_load_pct", "comm", "silent", "recorded_setpoint", "rp_limit", "tripped")}
+                                                            "gen_kw", "gen_load_pct", "comm", "silent", "recorded_setpoint", "rp_limit", "tripped", "mains")}
         self.events = deque(maxlen=200)
         self._last_bits = {}
         self.ticks = 0
@@ -368,13 +368,14 @@ class LivePlant:
         self.ticks += 1
         gl = 100 * gen_kw / run_nom if run_nom else 0.0
         self._totals(dt, avail, gen_kw, run_nom, gl, comm)
-        self._record(load, avail, setpoint, request, gen_kw, gl, comm_any, any(silent), None, run_nom)
+        self._record(load, avail, setpoint, request, gen_kw, gl, comm_any, any(silent), None, run_nom, mains_each * 3 if on_grid else None)
         self.snapshot = dict(clock=self._clock(), load=round(load), pv_available=round(avail), pv_actual=round(self.pv_actual),
                              setpoint=round(setpoint, 1), received=round(self.received_setpoint, 1), request=round(request, 1),
                              gen_kw=round(gen_kw), run_nom=round(run_nom), gen_load_pct=round(gl, 1), gensets=self.running,
                              on_grid=on_grid, curtail=round(self.curtail, 1), pv_cb=self.pv_cb, ups=self.ups_closed, comm=comm,
                              silent=[int(s) for s in silent], pvcb_close=pvcb_close, warning=int(bool(plc.get(10433, 2))),
                              latch=int(bool(plc.get(10424, 4))), replay=False, tripped=int(tripped),
+                             mains_kw=round(mains_each * 3) if on_grid else None,
                              rp_limit_kw=round(-P["rp_trip_pct"] / 100 * run_nom) if run_nom else None,
                              load_events=[(round(kw), round(max(0.0, b - self.t))) for (a, b, kw) in self.load_events_list if a <= self.t <= b])
         self.snapshot["totals"] = self._totals_view()
@@ -438,8 +439,9 @@ class LivePlant:
         else:
             self.stop_timer = 0
 
-    def _record(self, load, avail, setpoint, request, gen_kw, gl, comm_any, silent_any, recorded_setpoint, run_nom=0.0):
+    def _record(self, load, avail, setpoint, request, gen_kw, gl, comm_any, silent_any, recorded_setpoint, run_nom=0.0, mains_kw=None):
         rp = -self.params["rp_trip_pct"] / 100 * run_nom if run_nom else None
+        self.hist["mains"].append(None if mains_kw is None else round(mains_kw))
         for k, v in (("t", self._clock()), ("load", round(load)), ("pv_available", round(avail)), ("pv_actual", round(self.pv_actual)),
                      ("setpoint", round(setpoint)), ("received", round(self.received_setpoint)), ("request", round(request)),
                      ("gen_kw", round(gen_kw)), ("gen_load_pct", round(gl, 1)), ("comm", int(comm_any)), ("silent", int(silent_any)),
@@ -497,11 +499,11 @@ class LivePlant:
         self.ticks += 1
         gl = 100 * gen_kw / run_nom if run_nom else 0.0
         load = gen_kw + pv + max(0.0, mains)
-        self._record(load, pv, setpoint, request, gen_kw, gl, bool(comm[0] or comm[1]), False, recorded)
+        self._record(load, pv, setpoint, request, gen_kw, gl, bool(comm[0] or comm[1]), False, recorded, run_nom, mains if on_grid else None)
         self.snapshot = dict(clock=self._clock(), load=round(load), pv_available=None, pv_actual=round(pv), setpoint=round(setpoint, 1),
                              received=recorded, request=round(request, 1), gen_kw=round(gen_kw), run_nom=round(run_nom),
                              gen_load_pct=round(gl, 1), gensets=gens, on_grid=on_grid, curtail=round(curtail, 1), pv_cb=list(pv_cb),
-                             ups=list(ups), comm=comm, silent=[0, 0], pvcb_close=1, warning=int(bool(self.plc.get(10433, 2))),
+                             ups=list(ups), comm=comm, silent=[0, 0], pvcb_close=1, warning=int(bool(self.plc.get(10433, 2))), mains_kw=round(mains) if on_grid else None,
                              latch=int(bool(self.plc.get(10424, 4))), replay=True, replay_file=self.replay.name, totals=self._totals_view())
         self._edges(comm)
 
@@ -674,7 +676,7 @@ PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>PLC lab</titl
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{--bg:#eef0ea;--panel:#ffffff;--ink:#1b2027;--muted:#6b7480;--rule:#d9dcd6;--soft:#f6f7f3;
- --load:#1b2027;--avail:#a7adb5;--solar:#2f8f46;--set:#2457c5;--rec:#7b3fa0;--gen:#c03a2b;--amber:#b8860b;--ok:#2f8f46;
+ --load:#1b2027;--avail:#a7adb5;--solar:#2f8f46;--set:#2457c5;--rec:#7b3fa0;--gen:#c03a2b;--grid:#0f7f8c;--amber:#b8860b;--ok:#2f8f46;
  --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;--mono:'IBM Plex Mono',Consolas,monospace}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
@@ -707,7 +709,7 @@ input{width:70px;cursor:text;background:#fff;font-family:var(--mono)}
 .kpi span{display:block;font-size:11px;color:var(--muted)}
 .kpi strong{font:500 20px var(--mono);display:block;margin-top:2px}
 .kpi strong i{font:12px var(--sans);color:var(--muted);font-style:normal;margin-left:3px}
-.kpi.solar strong{color:var(--solar)}.kpi.set strong{color:var(--set)}.kpi.gen strong{color:var(--gen)}
+.kpi.solar strong{color:var(--solar)}.kpi.set strong{color:var(--set)}.kpi.gen strong{color:var(--gen)}.kpi.grid strong{color:var(--grid)}
 .chartcard{padding:0 0 8px;margin-bottom:14px;position:relative}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 14px 4px;font-size:12px;color:var(--muted)}
 .legend span{cursor:pointer;display:inline-flex;align-items:center;gap:6px;user-select:none}
@@ -768,10 +770,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
   <button onclick="ctl('load_event',300)">line starts +300 kW</button><button onclick="ctl('load_event',-300)">line stops -300 kW</button>
   <button onclick="ctl('load',300)">base load +300</button><button onclick="ctl('load',-300)">-300</button>
   <button onclick="ctl('gensets',2)">2 sets</button><button onclick="ctl('gensets',3)">3 sets</button><button onclick="ctl('gensets',4)">4 sets</button>
-  <button onclick="ctl('auto_pm')" id="auto_pm">power management AUTO</button><button onclick="ctl('grid')">grid on / off</button></div></div>
+  <button onclick="ctl('auto_pm')" id="auto_pm">power management AUTO</button><button onclick="ctl('grid')" id="gridbtn">switch to the grid</button></div>
+  <div class="note" style="padding:6px 0 0">The grid is there from 18:05 to 06:12 as in the history; by day the plant runs on gensets. The button forces a transfer.</div></div>
  <div class="group"><h2>Operator</h2><div class="row">
   <button onclick="ctl('off',60)">OFF toggle 60 s</button><button onclick="ctl('fault_reset')">fault reset</button>
-  <button onclick="ctl('time',8.8)">go to 08:48</button><button onclick="ctl('time',12)">12:00</button><button onclick="ctl('time',16.5)">16:30</button>
+  <button onclick="ctl('time',8.8)">go to 08:48</button><button onclick="ctl('time',12)">12:00</button><button onclick="ctl('time',16.5)">16:30</button><button onclick="ctl('time',18.0)">18:00 (grid at 18:05)</button>
   <button onclick="ctl('replay14')">replay 14 October from 08:00</button></div></div>
  <div class="group"><h2>Settings</h2><details open><summary>what is measured, what is assumed</summary><div id="params"></div></details></div>
 </aside>
@@ -790,7 +793,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
 let sheet=10, state=null, zoom=1, hover=null;
 const SERIES=[['load','load','--load',1,[]],['pv_available','solar available','--avail',1,[]],['pv_actual','solar actual','--solar',2.2,[]],
  ['setpoint','setpoint computed by the program','--set',1.4,[]],['received','setpoint the SAU holds','--set',1.2,[5,4]],['recorded_setpoint','setpoint recorded on site','--rec',1.6,[]],
- ['gen_kw','gensets','--gen',1.8,[]],['rp_limit','reverse power trip level (assumed)','--gen',1,[2,4]]];
+ ['gen_kw','gensets','--gen',1.8,[]],['rp_limit','reverse power trip level (assumed)','--gen',1,[2,4]],['mains','grid, import + / export −','--grid',1.8,[]]];
 const hidden=new Set(['rp_limit'===''?'':'']);
 const PARAMS=[['timeout_s','Modbus timeout, s','archive'],['retries','retries before the comm fail','assumed, 6-9 s in all'],['inverter_tau_s','inverter response, s','assumed'],
  ['inverter_ramp_kw_s','SAU ramp limit, kW/s (0 = none)','assumed'],['curtail_rate','regulator, %/s per % of error','calibrated 14 Oct'],['gen_p_min_pct','Gen P Min, %','setpoint'],
@@ -805,7 +808,7 @@ function render(){
   const s=state.plant; if(!s.clock) return;
   document.getElementById('clock').textContent=s.clock;
   document.getElementById('scname').textContent=state.scenario;
-  const st=document.getElementById('status'); let cls='ok',txt='link OK';
+  const st=document.getElementById('status'); let cls='ok',txt=(s.on_grid?'on the grid':'on gensets')+', link OK';
   if(s.silent&&(s.silent[0]||s.silent[1])){cls='silent';txt='SAU silent '+(s.silent[0]?'g1 ':'')+(s.silent[1]?'g2':'');}
   if(s.comm[0]||s.comm[1]){cls='fail';txt='COMM FAIL '+(s.comm[0]?'g1 ':'')+(s.comm[1]?'g2':'');}
   if(s.tripped){cls='trip';txt='REVERSE POWER TRIP, plant dark';}
@@ -813,10 +816,11 @@ function render(){
   document.getElementById('pause').textContent=state.paused?'play':'pause';
   for(const k of [1,10,60]) document.getElementById('s'+k).className=(state.speed==k)?'on':'';
   document.getElementById('auto_pm').className=state.auto_pm?'on':'';
+  document.getElementById('gridbtn').textContent=s.on_grid?'switch to gensets':'switch to the grid';
   document.getElementById('replay').textContent=s.replay?('replay of '+s.replay_file):'';
   document.getElementById('kpis').innerHTML=kpi('load',s.load,'kW')+kpi('solar available',s.pv_available,'kW')+kpi('solar actual',s.pv_actual,'kW','solar')+
     kpi('setpoint computed',s.setpoint,'kW','set')+kpi('setpoint at the SAU',s.received,'kW','set')+kpi('gensets',s.gen_kw,'kW','gen')+kpi('gen load',s.gen_load_pct,'%','gen')+
-    kpi('sets / nominal',s.gensets+' / '+s.run_nom,'kW')+kpi('curtailment',s.curtail,'%')+kpi('PV breakers / UPS',s.pv_cb.join('')+' / '+s.ups.join(''),'')+
+    kpi('sets / nominal',s.gensets+' / '+s.run_nom,'kW')+kpi(s.on_grid?'grid, import + / export −':'grid',s.on_grid?s.mains_kw:'off, MCBs open',s.on_grid?'kW':'','grid')+kpi('curtailment',s.curtail,'%')+kpi('PV breakers / UPS',s.pv_cb.join('')+' / '+s.ups.join(''),'')+
     kpi('reverse power trip at',s.rp_limit_kw,'kW')+kpi('warning',s.warning?'PV prod > req':'none','');
   const sc=document.getElementById('scenario');
   if(sc.options.length==0){for(const x of state.scenarios){const o=document.createElement('option');o.value=x.name;o.textContent=x.name;sc.appendChild(o);} sc.onchange=()=>fetch('/api/scenario',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:sc.value})});}
