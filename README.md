@@ -93,6 +93,15 @@ model you can poke: a comm fail on one or both sessions, a cloud, a load step, t
 grid transfer, a fault reset, two to four gensets, power management on or off, and the switch between today's
 program and the change-01 variants. A strip chart shows the last 15 minutes. It never connects to the plant.
 
+What is exact in it: the program at its 100 ms cycle, the setpoints, the session refresh and timeout figures from
+the archive, the load anchors and grid hours from the history, the sun curve for the date. What is modelled, and
+adjustable on the page: how fast the inverters follow a setpoint, the controller's curtailment regulator, whether a
+write lands in the SAU while it gives no replies, load noise, cloud edges. A comm fail is injected as "the SAU stops
+answering" and the flag rises the way the module declares it, after the timeout and the retries, so a two-second
+hiccup never raises it. **Replay mode** removes the modelling: `python tools\plc_lab.py --replay data\trace\neo-01_<date>.csv
+--replay-sau data\trace\pv-array_<date>.csv` runs the program on the values the trace recorded on the plant and draws
+the recorded setpoint next to the computed one, with today's program or either change-01 variant.
+
 ## Folder map
 
 ```

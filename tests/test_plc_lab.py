@@ -11,7 +11,7 @@ import plc_lab  # noqa: E402
 
 def run(p, seconds):
     for _ in range(seconds):
-        p._tick(1.0)
+        p._tick()
 
 
 def test_today_zeroes_on_a_comm_fail_and_the_timed_variant_holds():
@@ -19,23 +19,27 @@ def test_today_zeroes_on_a_comm_fail_and_the_timed_variant_holds():
     run(p, 60)
     before = p.snapshot["setpoint"]
     assert before > 300 and p.snapshot["gensets"] == 3 and not p.snapshot["on_grid"]
-    p.inject("comm12", 10)
-    run(p, 3)
-    assert p.snapshot["setpoint"] == 0 and p.snapshot["comm"] == [1, 1]
-    run(p, 20)
-    assert p.snapshot["comm"] == [0, 0] and 0 < p.snapshot["setpoint"] < before     # climbing back from 0
+    p.inject("comm12", 20)                      # the SAU gives no replies for 20 s
+    run(p, 5)
+    assert p.snapshot["silent"] == [1, 1] and p.snapshot["comm"] == [0, 0]       # not declared yet: timeout x retries
+    run(p, 5)
+    assert p.snapshot["comm"] == [1, 1] and p.snapshot["setpoint"] == 0            # declared after 9 s: request 0
+    assert p.snapshot["received"] == before                                        # but nothing reaches a silent SAU
+    run(p, 15)
+    assert p.snapshot["comm"] == [0, 0] and 0 < p.snapshot["setpoint"] < before     # link back: climbing from 0
+    assert p.snapshot["received"] == p.snapshot["setpoint"]                        # and now it reaches the SAU
     assert any("PV setpoint forced to 0" in e[1] for e in p.events)
     p.set_program("change-01 v3 (hold 60 s, then 0)")
     run(p, 120)
     held = p.snapshot["setpoint"]
-    p.inject("comm12", 30)
-    run(p, 10)
-    s10 = p.snapshot["setpoint"]
+    p.inject("comm12", 40)
+    run(p, 20)
+    s20 = p.snapshot["setpoint"]
     run(p, 15)
-    assert abs(s10 - held) < 20 and p.snapshot["setpoint"] == s10                   # held through a 25 s fail (the ramp finishes its last step, then freezes)
-    p.inject("comm12", 100)
-    run(p, 70)
-    assert p.snapshot["setpoint"] == 0                                              # longer than 60 s: 0 as today
+    assert abs(s20 - held) < 150 and p.snapshot["setpoint"] == s20 and s20 > 0     # held through a 35 s fail (frozen at the value of the moment the fail was declared)
+    p.inject("comm12", 120)
+    run(p, 100)
+    assert p.snapshot["setpoint"] == 0                                              # declared at 9 s, held 60 s, then 0 as today
 
 
 def test_sheet_view_lists_blocks_pins_values_and_wires():
@@ -52,6 +56,7 @@ def test_sheet_view_lists_blocks_pins_values_and_wires():
 
 def test_injections_change_the_plant():
     p = plc_lab.LivePlant(start_hour=11.0)
+    p.params["load_noise"] = 0
     run(p, 30)
     load = p.snapshot["load"]
     p.inject("load", 300)
@@ -63,5 +68,45 @@ def test_injections_change_the_plant():
     p.inject("grid")
     run(p, 2)
     assert p.snapshot["on_grid"] and p.snapshot["gensets"] == 0
-    p.inject("zero_hypothesis")
-    assert p.zero_reaches_sau_in_fail is False
+    p.inject("param:writes_through_silence", 1)
+    assert p.params["writes_through_silence"] == 1
+
+
+def test_one_silent_session_lets_the_zero_through_the_other():
+    p = plc_lab.LivePlant(start_hour=11.0)
+    run(p, 60)
+    p.inject("comm1", 40)
+    run(p, 10)
+    assert p.snapshot["comm"] == [1, 0] and p.snapshot["setpoint"] == 0
+    run(p, 10)
+    assert p.snapshot["received"] == 0                                             # session 2 writes every 10 s
+
+
+def test_replay_runs_the_program_on_recorded_values(tmp_path):
+    neo = tmp_path / "neo-01_2026-10-16.csv"
+    sau = tmp_path / "pv-array_2026-10-16.csv"
+    cols = ["ts", "ms", "ok_blocks", "failed_blocks", "pv_prod_kw", "power_kw", "running_nominal_kw", "pv_curtailment_pct", "mains_power_kw",
+            "ecu2_comm_fail", "ecu3_comm_fail", "mcb_status", "pvcb_closed", "pv2cb_closed", "ups1_feedback", "ups2_feedback",
+            "g1_running", "g2_running", "g3_running", "g4_running", "g5_running", "pv_run_request"]
+    with open(neo, "w") as f:
+        f.write(",".join(cols) + "\n")
+        for s in range(180):
+            fail = 1 if 60 <= s < 70 else 0
+            f.write(f"2026-10-16T09:00:{0:02d}Z".replace(":00Z", f":{s % 60:02d}Z").replace("09:00", f"09:{s // 60:02d}") +
+                    f",5,3,0,{1000 if not fail else ''},790,3150,31,0,{fail},{fail},0,1,1,1,1,1,1,1,0,0,1\n")
+    with open(sau, "w") as f:
+        f.write("ts,ms,ok_blocks,failed_blocks,set_2100,set_2101\n")
+        for s in range(180):
+            v = 0 if 60 <= s < 75 else 10912
+            f.write(f"2026-10-16T09:{s // 60:02d}:{s % 60:02d}Z,4,3,0,0,{v}\n")
+    src = plc_lab.ReplaySource(str(neo), str(sau))
+    p = plc_lab.LivePlant(replay=src)
+    assert p.snapshot == {} and p.t == 9 * 3600
+    run(p, 55)
+    assert p.snapshot["replay"] and abs(p.snapshot["setpoint"] - 1091.2) < 0.1 and p.snapshot["received"] == 1091.2
+    run(p, 10)
+    assert p.snapshot["comm"] == [1, 1] and p.snapshot["setpoint"] == 0 and p.snapshot["received"] == 0
+    run(p, 40)
+    assert p.snapshot["comm"] == [0, 0] and 0 < p.snapshot["setpoint"] < 1091.2
+    run(p, 100)
+    assert p.paused                                                                 # end of the file
