@@ -716,9 +716,9 @@ input{width:70px;cursor:text;background:#fff;font-family:var(--mono)}
 .legend i.dash{border-top-style:dashed}
 .legend b{display:inline-block;width:14px;height:12px;border-radius:2px}
 #chart{width:100%;height:260px;display:block;cursor:crosshair}
-#tip{position:absolute;pointer-events:none;display:none;background:#1b2027;color:#fff;font:12px var(--mono);padding:8px 10px;border-radius:5px;line-height:1.5;min-width:210px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+#tip{position:absolute;pointer-events:none;display:none;background:#1b2027;color:#fff;font:500 13px var(--sans);padding:7px 11px;border-radius:5px;line-height:1.45;box-shadow:0 4px 14px rgba(0,0,0,.25);white-space:nowrap}
 #tip b{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
-#tip .t{font-family:var(--sans);color:#c9ced6;margin-bottom:3px}
+#tip .t{font:12px var(--mono);color:#c9ced6}
 .note{padding:6px 14px 2px;color:var(--muted);font-size:13px}
 .totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;padding:4px 8px 10px}
 .totals div{padding:6px 8px}
@@ -855,19 +855,22 @@ function chart(h){
   for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step){ g.beginPath(); g.moveTo(L,y(v)); g.lineTo(W-R,y(v)); g.stroke(); g.fillText(v,L-6*dpr,y(v)+4*dpr); }
   g.strokeStyle='#b9bfb8'; g.beginPath(); g.moveTo(L,y(0)); g.lineTo(W-R,y(0)); g.stroke();
   g.textAlign='center'; for(let i=0;i<n;i+=180){ g.fillText(h.t[i],x(i),H-6*dpr); }
+  const hk=hover?hover.k:null;
   for(const [k,name,col,w,dash] of SERIES){ if(hidden.has(k)) continue; const arr=h[k]; if(!arr) continue;
-    g.beginPath(); g.setLineDash(dash.map(d=>d*dpr)); g.strokeStyle=css(col); g.lineWidth=w*dpr; let pen=false;
-    for(let i=0;i<n;i++){const v=arr[i]; if(v===null||v===undefined){pen=false;continue;} pen?g.lineTo(x(i),y(v)):g.moveTo(x(i),y(v)); pen=true;} g.stroke(); g.setLineDash([]); }
-  if(hover!==null){ const i=Math.max(0,Math.min(n-1,hover)); g.strokeStyle='#1b2027'; g.setLineDash([3*dpr,3*dpr]); g.beginPath(); g.moveTo(x(i),T); g.lineTo(x(i),H-B); g.stroke(); g.setLineDash([]);
-    for(const [k,name,col] of SERIES){ if(hidden.has(k)) continue; const v=h[k][i]; if(v===null||v===undefined) continue; g.fillStyle=css(col); g.beginPath(); g.arc(x(i),y(v),3.5*dpr,0,7); g.fill(); } }
+    g.beginPath(); g.setLineDash(dash.map(d=>d*dpr)); g.strokeStyle=css(col); g.globalAlpha=(hk&&hk!==k)?0.25:1; g.lineWidth=(hk===k?w+1.6:w)*dpr; let pen=false;
+    for(let i=0;i<n;i++){const v=arr[i]; if(v===null||v===undefined){pen=false;continue;} pen?g.lineTo(x(i),y(v)):g.moveTo(x(i),y(v)); pen=true;} g.stroke(); g.setLineDash([]); g.globalAlpha=1; }
+  if(hover){ const i=hover.i; const v=h[hover.k][i]; if(v!==null&&v!==undefined){ const col=SERIES.find(s=>s[0]===hover.k)[2]; g.fillStyle='#fff'; g.beginPath(); g.arc(x(i),y(v),6*dpr,0,7); g.fill(); g.fillStyle=css(col); g.beginPath(); g.arc(x(i),y(v),4*dpr,0,7); g.fill(); } }
 }
 const cv=document.getElementById('chart'), tip=document.getElementById('tip');
-cv.addEventListener('mousemove',e=>{ if(!geo||!state) return; const r=cv.getBoundingClientRect(); const px=(e.clientX-r.left)*geo.dpr; const i=Math.round((px-geo.L)/(geo.W-geo.L-geo.R)*(900-1)); if(i<0||i>=geo.n){hover=null;tip.style.display='none';return;} hover=i;
-  const h=state.hist; let html=`<div class="t">${h.t[i]}</div>`;
-  for(const [k,name,col] of SERIES){ if(hidden.has(k)) continue; const v=h[k][i]; if(v===null||v===undefined) continue; html+=`<div><b style="background:${col==='--load'?'#e6e8e3':css(col)}"></b>${name}: ${v} kW</div>`; }
-  html+=`<div><b style="background:#999"></b>gen load: ${h.gen_load_pct[i]} %</div>`;
+cv.addEventListener('mousemove',e=>{ if(!geo||!state) return; const r=cv.getBoundingClientRect(); const px=(e.clientX-r.left)*geo.dpr, py=(e.clientY-r.top)*geo.dpr;
+  const i=Math.round((px-geo.L)/(geo.W-geo.L-geo.R)*(900-1)); if(i<0||i>=geo.n){hover=null;tip.style.display='none';return;}
+  const h=state.hist; let best=null, bestd=14*geo.dpr;                       // the line under the pointer, if one is within 14 px
+  for(const [k,name,col] of SERIES){ if(hidden.has(k)) continue; const v=h[k][i]; if(v===null||v===undefined) continue; const d=Math.abs(geo.y(v)-py); if(d<bestd){bestd=d;best=[k,name,col,v];} }
+  if(!best){hover=null;tip.style.display='none';return;}
+  hover={i,k:best[0]};
+  let html=`<div><b style="background:${best[2]==='--load'?'#e6e8e3':css(best[2])}"></b>${best[1]}</div><div class="t">${best[3]} kW at ${h.t[i]}`+(best[0]==='gen_kw'?` (gen load ${h.gen_load_pct[i]} %)`:'')+`</div>`;
   if(h.silent[i]) html+=`<div style="color:#e6c15a">SAU silent${h.comm[i]?', comm fail declared':''}</div>`; if(h.tripped&&h.tripped[i]) html+=`<div style="color:#ff8a7a">plant dark</div>`;
-  tip.innerHTML=html; tip.style.display='block'; const card=cv.parentElement.getBoundingClientRect(); let tx=e.clientX-card.left+14, ty=e.clientY-card.top+10; if(tx+240>card.width) tx-=260; tip.style.left=tx+'px'; tip.style.top=ty+'px'; });
+  tip.innerHTML=html; tip.style.display='block'; const card=cv.parentElement.getBoundingClientRect(); let tx=e.clientX-card.left+14, ty=e.clientY-card.top-34; if(tx+240>card.width) tx-=260; tip.style.left=tx+'px'; tip.style.top=ty+'px'; });
 cv.addEventListener('mouseleave',()=>{hover=null;tip.style.display='none';});
 function totals(T){ if(!T) return; const d=document.getElementById('totals');
   const items=[['since the start',T.hours+' h'],['solar used',T.pv_used_kwh+' kWh'],['solar available',T.pv_available_kwh+' kWh'],['solar thrown away',T.pv_curtailed_kwh+' kWh'],
