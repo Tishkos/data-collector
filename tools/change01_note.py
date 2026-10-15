@@ -404,7 +404,7 @@ if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--two-pages"
 CAL = "/usr/share/fonts/truetype/crosextra/Carlito-Regular.ttf"
 CAL_B = "/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf"
 CAL_I = "/usr/share/fonts/truetype/crosextra/Carlito-Italic.ttf"
-BLUE = (31, 78, 121)          # Word's heading blue
+BLUE = (20, 20, 20)           # headings in black
 WHITE = (255, 255, 255)
 
 
@@ -446,30 +446,33 @@ def docx_pages(before_png, after_png):
             p.text(para, body, width=width, gap=7, after=14)
         return p
 
-    pages.append(page_with_shot("Sheet 10 as it is today - the problem", before_png,
+    pages.append(page_with_shot("Sheet 10 today, and what goes wrong", before_png,
         [(455, 540, 600, 562, 1), (1215, 346, 1300, 366, 2)], [
-        ("", "Item 76 is a switch. In its normal position the solar request passes through. When either PV logger "
-             "session misses a single reply, Item 68 (1) flips it to its second position, which is a fixed 0.0 kW (2). "
-             "That zero is written to the SAU as the solar setpoint."),
-        ("", "The inverters obey within seconds. The gensets, idling at 25 %, suddenly carry the whole plant; the UPS logic "
-             "sees the jump and sheds the UPS breakers; and the solar then needs about five minutes to climb back, because "
-             "the request may never be more than 100 kW above what the inverters produce. The history shows this five to "
-             "thirty times a day. The zero never even reaches the logger while the link is down - it arrives when the "
-             "link is back, when there is nothing left to protect."),
+        ("", "This sheet sends the solar plant its setpoint. Most of it is fine. The problem is one small switch, "
+             "Item 76. Normally it just passes the request through. But if the controller misses even one reply from "
+             "the PV logger, Item 68 (1) flips the switch, and the other side of the switch is a fixed 0.0 kW (2). So "
+             "the solar plant gets told: zero."),
+        ("", "The inverters do what they are told, within seconds. The gensets were running at 25 % and now they carry "
+             "everything. The UPS logic sees that jump and sheds the UPS. Then the reply comes back, and the solar has to "
+             "climb up again, 100 kW at a time, about five minutes. This happens five to thirty times a day."),
+        ("", "And here is the silly part: while the link is down, the zero never even reaches the logger. It arrives "
+             "when the link is back, so it protects nothing. We just lose production every time."),
     ]))
-    pages.append(page_with_shot("The change I request", after_png,
+    pages.append(page_with_shot("What I want to change", after_png,
         [(462, 528, 600, 560, 1), (1138, 362, 1290, 382, 2), (330, 1565, 425, 1690, 3)], [
-        ("", "Three edits on this sheet, nothing else. (1) Item 68 reacts only to the two comm fail signals, ECU 2 and ECU 3; "
-             "the \"request below zero\" input is removed, so a request of zero still goes out as zero. (2) The same switch, "
-             "now Item 77, has its own output on its second input: when a reply is missed it simply repeats the last "
-             "setpoint it sent, and nothing drops. (3) One new timer, Item 65, raises the flag \"PV comm lost\" after five "
-             "minutes without the logger, for an alarm; nothing acts on it yet."),
-        ("Why it should go in", "With a healthy link the program behaves exactly as today - checked block by block against "
-             "the plant's own history. The risk during a lost link is unchanged: the inverters keep their last setpoint "
-             "in both versions, the gensets hold 25 % of their nominal in hand, the controller's own protections do not "
-             "depend on the logger, and after five minutes the flag is raised. It is undone in a minute with the "
-             "14 October archive. On the recorded day of 14 October it removes three of the eleven UPS sheddings and "
-             "gives back about 350 kWh of solar - and it is the precondition for running fewer gensets, where the fuel is."),
+        ("", "Three small edits, nothing else. The switch (now Item 77) gets its own output on its second input (2). So "
+             "when a reply is missed, it just keeps sending the last setpoint. Nothing drops, nobody notices. Item 68 "
+             "(1) now only listens to the two real comm fail signals, so if the controller really wants zero, zero "
+             "still goes out. And one new timer, Item 65 (3), raises a flag called PV comm lost if the logger stays "
+             "silent for five minutes. For now that flag only goes to an alarm."),
+        ("Why I think we should do it", "With a healthy link, the program does exactly what it does today. I ran the "
+             "whole program block by block against our own history to check that. While the link is down, nothing is "
+             "different from today either: the inverters keep their last setpoint in both versions, the gensets have "
+             "25 % in hand, the controller's own protections still work without the logger, and after five minutes "
+             "we get the flag. If anyone wants it back, we load the archive from 14 October. One minute."),
+        ("", "On the day of 14 October this change would have taken away three of the eleven UPS sheddings and given us "
+             "about 350 kWh more solar. And it is the first step before we can run fewer gensets, which is where the "
+             "real fuel saving is."),
     ]))
     for k, pg in enumerate(pages, 1):
         pg.d.text((A4P[0] - MARGIN - 40, A4P[1] - MARGIN + 30), f"{k}", fill=GREY, font=font(CAL, 18))
