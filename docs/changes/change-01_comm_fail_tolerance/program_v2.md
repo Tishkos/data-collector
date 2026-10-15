@@ -39,8 +39,8 @@ Outputs wired to controller functions:
 
 ## Sheet 3: PV Breaker controll
 
-1. **AND/OR** - PV CB1 command = User Button 1 [#20743.0] AND NOT PV CB1 Fail to close [#10428.2] AND NOT PV CB1 Fail to open [#10428.3] AND NOT PV CB1 other fail [#10428.4] AND PVCB Close/Open [#9145.7] AND NOT PV comm lost [#10436.4]
-2. **AND/OR** - PV CB2 command = User Button 2 [#20743.1] AND NOT PV CB2 fail to close [#10428.7] AND NOT PV CB2 fail to open [#10429.0] AND NOT PV CB2 other fail [#10429.1] AND PVCB Close/Open [#9145.7] AND NOT PV comm lost [#10436.4]
+1. **AND/OR** - PV CB1 command = User Button 1 [#20743.0] AND NOT PV CB1 Fail to close [#10428.2] AND NOT PV CB1 Fail to open [#10428.3] AND NOT PV CB1 other fail [#10428.4] AND PVCB Close/Open [#9145.7] AND NOT PV comm lost [#10436.2]
+2. **AND/OR** - PV CB2 command = User Button 2 [#20743.1] AND NOT PV CB2 fail to close [#10428.7] AND NOT PV CB2 fail to open [#10429.0] AND NOT PV CB2 other fail [#10429.1] AND PVCB Close/Open [#9145.7] AND NOT PV comm lost [#10436.2]
 3. **AND/OR** - UPS 1 = User Button 3 [#20743.2] AND NOT UPS1 fail to close [#10429.2] AND NOT UPS1  fail to open [#10429.3] AND NOT UPS1  other fail [#10429.4] AND UPS1 ON cmd del [#10436.0]
 4. **Delay** - UPS1 ON cmd del = Delay(UPS 1 CB command [#10435.6]; up UPS1 ON command delay [#65517 setpoint] s, down 0 s)
 5. **AND/OR** - UPS2 = User Button 4 [#20743.3] AND NOT UPS2 fail to close [#10433.7] AND NOT UPS2 fail to open [#10434.0] AND NOT UPS2  other fail [#10434.1] AND UPS2 ON cmd del [#10436.1]
@@ -89,11 +89,8 @@ Outputs wired to controller functions:
 
 ## Sheet 6: Validation
 
-1. **Validator** - AP from SAU = Validator(AP(Active Power) [#19433]; default 0) (invalid flag -> PLC-BOUT 9.8)
-2. **Validator** - Max AP available from SAU = Validator(Maximum Active Power Available [#19424]; default 0) (invalid flag -> PLC-BOUT 10.1)
-3. **AND/OR** - SAU comm fail = ECU 2 Comm Fail [#11900.1] OR ECU 3 Comm Fail [#11900.2]
-4. **Ana Switch** - AP(active Power) validate = Ana Switch(AP from SAU [#21286] when switch 0, AP(active Power) validate [#21281] when switch 1; switch SAU comm fail [#10436.2])
-5. **Ana Switch** - Max Active Power Available valid = Ana Switch(Max AP available from SAU [#21287] when switch 0, Max Active Power Available valid [#21282] when switch 1; switch SAU comm fail [#10436.2])
+1. **Validator** - AP(active Power) validate = Validator(AP(Active Power) [#19433]; default 0) (invalid flag -> PLC-BOUT 9.8)
+2. **Validator** - Max Active Power Available valid = Validator(Maximum Active Power Available [#19424]; default 0) (invalid flag -> PLC-BOUT 10.1)
 
 ## Sheet 7: Grid || request
 
@@ -122,20 +119,19 @@ Outputs wired to controller functions:
 2. **Comp Hyst** - NOT PV negative request = Comp Hyst(PV req (kW) [#21265]; on 0, off 0)
 3. **Math Fc** - PV pro > PV req = add(PV req (kW) [#21265], PV Prod > PV req [#65523 setpoint])
 4. **Comp Hyst** - NOT reverse power = Comp Hyst(Load P site [#21256]; on -10, off -10)
-5. **Delay** - SAU comm fail del = Delay(SAU comm fail [#10436.2]; up PV comm fail hold [#65514 setpoint] s, down 0 s)
-6. **Delay** - PV comm lost = Delay(SAU comm fail [#10436.2]; up 300 s, down 0 s)
-7. **Comp Hyst** - PV req > PV power = Comp Hyst(PV req (kW) [#21265]; on PV AP + step prot [#21268], off PV AP + step prot [#21268])
-8. **AND/OR** - PV comm fail = SAU comm fail del [#10436.3] OR PV negative request [#10433.6]
-9. **Comp Hyst** - PV Prod > PV req comp = Comp Hyst(AP(active Power) validate [#21281]; on PV pro > PV req [#21270], off PV pro > PV req [#21270])
-10. **AND/OR** - Reverse power Warning = NOT Any MCB close [#10424.6] AND reverse power [#10432.4]
-11. **Ana Switch** - PV req protected = Ana Switch(PV req (kW) [#21265] when switch 0, PV AP + step prot [#21268] when switch 1; switch PV req > PV power [#10431.1])
-12. **AND/OR** - PV prod > PV req Warning = Reverse power Warning [#10432.5] OR PV Prod > PV req comp [#10424.2]
-13. **Delay** - PV prod > PV req del = Delay(PV Prod > PV req comp [#10424.2]; up PV Prod > PV req del [#65522 setpoint] s, down 0 s)
-14. **Delay** - Reverse Power PV not react = Delay(Reverse power Warning [#10432.5]; up 15 s, down 0 s)
-15. **Ramp** - PV req out ramp = Ramp(PV req prot comm fail [#21279]; up 25 per s, down 1500 per s)
-16. **Ana Switch** - PV req prot comm fail = Ana Switch(PV req protected [#21269] when switch 0, 0 when switch 1; switch PV comm fail [#10432.1])
-17. **AND/OR** - PV Fail BRK Open = PV prod > PV req del [#10424.3] OR Reverse Power PV not react [#10433.1]
-18. **RS** - PV prod > PV req BRKR open = RS(set PV Fail BRK Open [#10432.6], reset FltRes Button Echo [#11897.0]; reset priority 1)
+5. **Delay** - PV comm lost = Delay(PV comm fail [#10432.1]; up PV comm lost delay [#65514 setpoint] s, down 0 s)
+6. **Comp Hyst** - PV req > PV power = Comp Hyst(PV req (kW) [#21265]; on PV AP + step prot [#21268], off PV AP + step prot [#21268])
+7. **AND/OR** - PV comm fail = ECU 2 Comm Fail [#11900.1] OR ECU 3 Comm Fail [#11900.2]
+8. **Comp Hyst** - PV Prod > PV req comp = Comp Hyst(AP(active Power) validate [#21281]; on PV pro > PV req [#21270], off PV pro > PV req [#21270])
+9. **AND/OR** - Reverse power Warning = NOT Any MCB close [#10424.6] AND reverse power [#10432.4]
+10. **Ana Switch** - PV req protected = Ana Switch(PV req (kW) [#21265] when switch 0, PV AP + step prot [#21268] when switch 1; switch PV req > PV power [#10431.1])
+11. **AND/OR** - PV prod > PV req Warning = Reverse power Warning [#10432.5] OR PV Prod > PV req comp [#10424.2]
+12. **Delay** - PV prod > PV req del = Delay(PV Prod > PV req comp [#10424.2]; up PV Prod > PV req del [#65522 setpoint] s, down 0 s)
+13. **Delay** - Reverse Power PV not react = Delay(Reverse power Warning [#10432.5]; up 15 s, down 0 s)
+14. **Ramp** - PV req out ramp = Ramp(PV req prot comm fail [#21279]; up 25 per s, down 1500 per s)
+15. **Ana Switch** - PV req prot comm fail = Ana Switch(PV req protected [#21269] when switch 0, PV req prot comm fail [#21279] when switch 1; switch PV comm fail [#10432.1])
+16. **AND/OR** - PV Fail BRK Open = PV prod > PV req del [#10424.3] OR Reverse Power PV not react [#10433.1]
+17. **RS** - PV prod > PV req BRKR open = RS(set PV Fail BRK Open [#10432.6], reset FltRes Button Echo [#11897.0]; reset priority 1)
 
 Outputs wired to controller functions:
 - PV req out ramp -> ECU write: PV active power setpoint (SAU)
@@ -210,8 +206,6 @@ Outputs wired to controller functions:
 - FltRes Button Echo [#11897.0] - Log Bout 10 (bit 0 = FltRes Button Echo)
 - AP(Active Power) [#19433] - AP (SAU active power)
 - Maximum Active Power Available [#19424] - Maximum Active Power Available (SAU)
-- ECU 2 Comm Fail [#11900.1] - Log Bout 13 (bits 1,2 = ECU 2/3 Comm Fail)
-- ECU 3 Comm Fail [#11900.2] - Log Bout 13 (bits 1,2 = ECU 2/3 Comm Fail)
 - Max Export 1 transf [#65535] (setpoint)
 - MAX P req 1 PV breaker [#65515] (setpoint)
 - Curtailment Output [#14364] - Curtailment Output (%)
@@ -221,7 +215,9 @@ Outputs wired to controller functions:
 - MAN PV P req [#65527] (setpoint)
 - PV req step protetion [#65525] (setpoint)
 - PV Prod > PV req [#65523] (setpoint)
-- PV comm fail hold [#65514] (setpoint)
+- PV comm lost delay [#65514] (setpoint)
+- ECU 2 Comm Fail [#11900.1] - Log Bout 13 (bits 1,2 = ECU 2/3 Comm Fail)
+- ECU 3 Comm Fail [#11900.2] - Log Bout 13 (bits 1,2 = ECU 2/3 Comm Fail)
 - PV Prod > PV req del [#65522] (setpoint)
 - PV Actual Q [#15595] - PV Actual Q (controller)
 - Gensets Q [#20182]
@@ -230,7 +226,7 @@ Outputs wired to controller functions:
 
 ## User setpoints used by the program
 
-- PV comm fail hold [#65514]
+- PV comm lost delay [#65514]
 - MAX P req 1 PV breaker [#65515] = 2200 kW
 - UPS2 ON command delay [#65516] = 10 s
 - UPS1 ON command delay [#65517] = 10 s

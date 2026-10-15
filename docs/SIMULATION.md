@@ -105,4 +105,4 @@ Reading the table:
   regenerate.
 - The first one is done this way: `docs/changes/change-01_comm_fail_tolerance/` holds the modified sheets
   for InteliConfig (built by `tools/neo_plc_change01.py`), the whole modified program, and the model
-  runs it with `Scenario(program_dir=...)`; `tests/test_change01.py` proves it identical with a healthy link.
+  runs it with `Scenario(program_dir=...)`; `tests/test_change01.py` proves it identical with a healthy link. InteliConfig's import refused a first draft (no Analog Switch left in the PLC), so the change is built with the blocks that are free.

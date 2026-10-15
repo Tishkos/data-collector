@@ -6,8 +6,7 @@ setpoint, import the sheets into a copy of the archive, compare, save as a new a
   python tools/neo_plc_change01.py          writes docs/changes/change-01_comm_fail_tolerance/
 
 What it changes (see README.md in the output folder):
-  sheet 6  Validation            the SAU values are held at their last good value while the SAU session is lost
-  sheet 10 PV req step protection a lost session only forces the request to 0 after "PV comm fail hold" (90 s);
+  sheet 10 PV req step protection a lost session holds the last request instead of forcing it to 0;
                                  a session lost for 5 minutes raises "PV comm lost"
   sheet 3  PV Breaker controll   (optional, stage 2) "PV comm lost" opens the two PV breakers
 Everything else is untouched; the program behaves exactly as today while the link is healthy.
@@ -29,14 +28,8 @@ SRC = os.path.join(ROOT, "docs", "site", "neo_plc_2026-10-14")
 OUT = os.path.join(ROOT, "docs", "changes", "change-01_comm_fail_tolerance")
 
 # --- new objects (free in the program of 14 Oct: PLC-BOUT 13 bits 2..7, PLC-AOUT 39.., user setpoint 65514)
-SP_HOLD = 65514                 # new user setpoint "PV comm fail hold" (s, 1 decimal) - created in InteliConfig first
-B_SAU_FAIL = (10436, 2)         # SAU comm fail (either session)
-B_SAU_FAIL_DEL = (10436, 3)     # SAU comm fail held longer than the setpoint
-B_COMM_LOST = (10436, 4)        # SAU comm fail held longer than 5 minutes
-A_AP_RAW = 21286                # SAU active power as validated (before the hold)
-A_MAX_RAW = 21287               # SAU maximum available as validated (before the hold)
-ECU2, ECU3 = (11900, 1), (11900, 2)
-HOLD_DEFAULT_S = 90.0
+SP_HOLD = 65514                 # new user setpoint "PV comm lost delay" (s, 1 decimal) - created in InteliConfig first
+B_COMM_LOST = (10436, 2)        # PV comm fail held longer than 5 minutes (PLC-BOUT 13 bit 2, free on 14 Oct)
 LOST_S = 300.0
 
 
@@ -172,70 +165,35 @@ def blocks_of(root) -> ET.Element:
 
 
 # --------------------------------------------------------------------------------------------- the change
-def sheet06() -> ET.Element:
-    root = read("sheet06_Validation.xml")
-    fb = blocks_of(root)
-    v_ap, v_max = list(fb)
-    # the two validators keep their invalid flags; their values go to new objects
-    out_ap = v_ap.find("Outputs")[0]
-    out_ap.set("Name", "AP from SAU")
-    out_ap.set("ComObject", str(A_AP_RAW))
-    out_max = v_max.find("Outputs")[0]
-    out_max.set("Name", "Max AP available from SAU")
-    out_max.set("ComObject", str(A_MAX_RAW))
-    # SAU comm fail = either session lost (the PLC computes it here, sheet 10 reuses the bit)
-    fb.append(or_block(6, 20, "SAU comm fail", B_SAU_FAIL, bin_in("ECU 2 Comm Fail", ECU2, ctype=1), bin_in("ECU 3 Comm Fail", ECU3, ctype=1)))
-    # hold: while a session is lost the downstream values keep their last good value (switch feeds back its own output)
-    fb.append(ana_switch(19, 1, "AP(active Power) validate", 21281, ana_in("AP from SAU", A_AP_RAW),
-                         ana_in("AP(active Power) validate", 21281), bin_in("SAU comm fail", B_SAU_FAIL)))
-    fb.append(ana_switch(19, 11, "Max Active Power Available valid", 21282, ana_in("Max AP available from SAU", A_MAX_RAW),
-                         ana_in("Max Active Power Available valid", 21282), bin_in("SAU comm fail", B_SAU_FAIL)))
-    sheet_io(root, "in", ECU2[0], ECU2[1], 8, "Binary")
-    sheet_io(root, "in", ECU3[0], ECU3[1], 9, "Binary")
-    sheet_io(root, "out", B_SAU_FAIL[0], B_SAU_FAIL[1], 10, "Binary")
-    comobj_entry(root, "Log Bout 13", ECU2[0], bit=ECU2[1])
-    comobj_entry(root, "Log Bout 13", ECU3[0], bit=ECU3[1])
-    root.find("Sheet").set("Height", "600")
-    return root
-
+# The first draft held the SAU values with two extra Analog Switch blocks; InteliConfig refused the import
+# ("exceeded PLC resources: Analog Switch" - the program already uses 7). This version adds no switch at all:
+# the existing switch that forces the request to 0 on a comm fail is turned into a hold by feeding it its own
+# output, and the only new block is the 300 s "PV comm lost" delay.
 
 def sheet10(with_setpoint: bool) -> ET.Element:
     root = read("sheet10_PV_req_step_protection.xml")
     fb = blocks_of(root)
     blocks = list(fb)
-    comm_fail = blocks[5]                      # the "PV comm fail" OR block (ECU 2 | ECU 3 | negative request)
+    comm_fail = blocks[5]                      # "PV comm fail" = ECU 2 Comm Fail OR ECU 3 Comm Fail OR PV negative request
     assert comm_fail.get("Identification") == "1" and comm_fail.find("Outputs")[0].get("ComObject") == "10432"
     ins = comm_fail.find("Inputs")
-    ins[0].set("Name", "SAU comm fail del")
-    ins[0].set("ComObject", str(B_SAU_FAIL_DEL[0]))
-    ins[0].set("BitIndex", str(B_SAU_FAIL_DEL[1]))
-    ins[0].set("ConnectedFunctionType", "0")
-    ins[1].set("Name", "")
-    ins[1].set("ComObject", "-1")
-    ins[1].set("BitIndex", "0")
-    ins[1].set("ConnectedFunctionType", "-1")
-    ins[1].set("IsHidden", "true")
-    ins[1].set("ComObjCategory", "Unknown")
-    # the two delays, placed in the first column so they execute before the OR block
-    up = setpoint_in("PV comm fail hold", SP_HOLD) if with_setpoint else const_in(int(HOLD_DEFAULT_S * 10))
-    fb.insert(4, delay_block(4, 50, "SAU comm fail del", B_SAU_FAIL_DEL, bin_in("SAU comm fail", B_SAU_FAIL), up))
-    fb.insert(5, delay_block(4, 56, "PV comm lost", B_COMM_LOST, bin_in("SAU comm fail", B_SAU_FAIL), const_in(int(LOST_S * 10))))
-    # sheet terminals: the ECU bits are no longer read here; the new bit and the setpoint are
-    sec = root.find("PlcProgramExport").find("PlcSheetInputs")
-    for e in list(sec):
-        if e.get("ComObjectNumber") == "11900":
-            sec.remove(e)
-    sheet_io(root, "in", B_SAU_FAIL[0], B_SAU_FAIL[1], 6, "Binary")
+    assert ins[2].get("ComObject") == "10433" and ins[2].get("BitIndex") == "6"
+    # a request of 0 must stay 0 (it is no longer forced through the switch), so the "negative request" leaves the OR
+    for k, v in (("Name", ""), ("ComObject", "-1"), ("BitIndex", "0"), ("ConnectedFunctionType", "-1"),
+                 ("IsHidden", "true"), ("ComObjCategory", "Unknown")):
+        ins[2].set(k, v)
+    hold = next(b for b in blocks if b.get("Identification") == "5" and b.find("Outputs")[0].get("ComObject") == "21279")
+    hin = hold.find("Inputs")
+    assert hin[1].get("IsConst") == "true" and hin[1].get("ValueOfConstant") == "0"
+    hin.remove(hin[1])                          # constant 0 -> the switch's own output: hold the last request
+    hin.insert(1, ana_in("PV req prot comm fail", 21279))
+    # 300 s without the logger -> "PV comm lost" (for a warning, and for sheet 3 in stage 2)
+    up = setpoint_in("PV comm lost delay", SP_HOLD) if with_setpoint else const_in(int(LOST_S * 10))
+    fb.insert(4, delay_block(4, 50, "PV comm lost", B_COMM_LOST, bin_in("PV comm fail", (10432, 1)), up))
     if with_setpoint:
-        sheet_io(root, "in", SP_HOLD, 0, 7, "Analog")
+        sheet_io(root, "in", SP_HOLD, 0, 17, "Analog")
+        comobj_entry(root, "PV comm lost delay", SP_HOLD, dim="s", res="1", setpoint=True)
     sheet_io(root, "out", B_COMM_LOST[0], B_COMM_LOST[1], 19, "Binary")
-    sec = root.find("CommunicationObjectsExport")
-    for e in list(sec):
-        if e.get("ComObjectNumber") == "11900":
-            sec.remove(e)
-    comobj_entry(root, "PLC-BOUT 13", B_SAU_FAIL[0], bit=B_SAU_FAIL[1])
-    if with_setpoint:
-        comobj_entry(root, "PV comm fail hold", SP_HOLD, dim="s", res="1", setpoint=True)
     root.find("Sheet").set("Height", "1260")
     return root
 
@@ -265,72 +223,69 @@ Nothing here writes to the controller; the plant loads the new archive itself, a
 ## Why
 
 One lost Modbus reply on either PV-logger session raises "ECU 2/3 Comm Fail"; sheet 10 switches the PV request
-to 0 the same cycle and sheet 6 replaces the SAU values by 0. The 0 never reaches the SAU (the link is down) -
-it arrives when the link is back and takes the PV to zero, ~5 minutes to climb back, gensets slammed, UPS shed.
-5-33 such events a day in the history.
+to 0 the same cycle. The 0 never reaches the SAU (the link is down) - it arrives when the link is back and takes
+the PV to zero, ~5 minutes to climb back, gensets slammed, UPS shed. 5-33 such events a day in the history.
 
-## What changes
+## What changes (sheet 10 only; no new switch blocks - the PLC has no Analog Switch left)
 
-| Sheet | Before | After |
+| | Before | After |
 |---|---|---|
-| 6 Validation | invalid SAU values -> 0 | values held at the last good value while a session is lost (`SAU comm fail` = ECU 2 OR ECU 3, two analog switches feeding back their own output) |
-| 10 PV req step protection | `PV comm fail` = ECU 2 OR ECU 3 OR negative request -> request 0 at once | `SAU comm fail del` = SAU comm fail held longer than **PV comm fail hold** (new setpoint, 90.0 s); `PV comm fail` = SAU comm fail del OR negative request. `PV comm lost` = SAU comm fail held 300 s, for an alarm and for sheet 3 |
-| 3 PV Breaker controll (optional, stage 2) | - | PV CB1/CB2 command AND NOT `PV comm lost`: five minutes without the logger opens the PV breakers deliberately |
+| `PV comm fail` | ECU 2 OR ECU 3 OR "negative request" | ECU 2 OR ECU 3 |
+| `PV req prot comm fail` (the switch before the ramp) | request while healthy, **0** while PV comm fail | request while healthy, **the last request held** while PV comm fail (the switch reads its own output) |
+| new `PV comm lost` | - | Delay of `PV comm fail`, 300 s (setpoint **PV comm lost delay** or a fixed 300 s) - for a warning, and for sheet 3 in stage 2 |
+| sheet 3 (optional, stage 2) | - | PV CB1/CB2 command AND NOT `PV comm lost`: five minutes without the logger opens the PV breakers |
 
-New objects: PLC-BOUT 13 bits 2, 3, 4 (free in the 14 Oct program), PLC-AOUT 21286 / 21287, user setpoint 65514.
-With a healthy link the program behaves exactly as today (checked block by block with `tools/neo_plc.py`).
+The "negative request" guard is not needed any more: a request of 0 now passes to the SAU as 0 (it was
+only ever 0, never negative), and holding would otherwise keep an old value when the controller asks for 0.
+With a healthy link the program behaves exactly as today (checked output by output with `tools/neo_plc.py`).
 
 ## Files
 
-- `sheet06_Validation_v2.xml`
 - `sheet10_PV_req_step_protection_v2.xml` - uses the new setpoint (create it first, step 1)
-- `sheet10_PV_req_step_protection_v2_const.xml` - same with a fixed 90 s, if the setpoint cannot be created
+- `sheet10_PV_req_step_protection_v2_const.xml` - same with a fixed 300 s, no setpoint needed
 - `sheet03_PV_breaker_control_v2.xml` - optional, only after the plant agrees to automatic breaker opening
-- `program_v2/` - the whole program with the three sheets replaced, as the model runs it
-- `program_v2.md` - the listing of the modified program
+- `program_v2/` - the whole program with the sheets replaced, as the model runs it; `program_v2.md` its listing
 
 ## Steps on the plant PC (copy of the archive, never the live controller)
 
-1. Setpoints -> User setpoints -> add **PV comm fail hold**: unit `s`, 1 decimal, range 0.0-600.0, default **90.0**,
-   group "PV setpoints". Note the number InteliConfig gives it; if it is not 65514, open
-   `sheet10_PV_req_step_protection_v2.xml` in a text editor and replace `65514` (3 places) before importing,
-   or use the `_const` file.
-2. PLC editor -> sheet "Validation" -> import `sheet06_Validation_v2.xml`. Check: two validators, one OR, two
-   analog switches; `AP(active Power) validate` and `Max Active Power Available valid` keep their numbers.
-3. Sheet "PV req step protection" -> import the sheet 10 file. Check: two new Delay blocks in the first
-   column, the `PV comm fail` OR now reads `SAU comm fail del` and `PV negative request`, the ramp and the
-   SAU write are untouched. If the editor renumbered PLC-BOUT 13 bits, follow its numbering.
-4. Alarms: add a warning on `PV comm lost` ("PV logger lost 5 min"); give the existing ECU comm-fail warning
-   a delay equal to the hold if the firmware offers one.
-5. Compile, compare with the 14 Oct archive (only sheets 6 and 10 differ), save as a new archive with the date.
-6. Controller side (settings, no PLC): PV logger sessions - response timeout 3,000 -> 5,000 ms, and one session
-   instead of two if the register sets allow it. Check on the SAU whether it has its own "no command ->
-   power limit" fail-safe; it must be longer than the hold and shorter than 300 s.
+1. (setpoint version only) Setpoints -> User setpoints -> add **PV comm lost delay**: unit `s`, 1 decimal,
+   range 0.0-3600.0, default **300.0**, group "PV setpoints". If InteliConfig gives it a number other than
+   65514, replace `65514` in the sheet file (2 places) before importing - or use the `_const` file.
+2. PLC editor -> sheet "PV req step protection" -> import the sheet 10 file. Check: one new Delay block
+   `PV comm lost` in the first column; the `PV comm fail` OR reads only the two ECU bits; the switch
+   `PV req prot comm fail` has its own output on its second input; the ramp and the SAU write are untouched.
+3. Alarms: add a warning on `PV comm lost` ("PV logger lost 5 min").
+4. Compile, compare with the 14 Oct archive (only sheet 10 differs), save as a new archive with the date.
+5. Controller side (settings, no PLC): ECU modules "PV Logger group 1/2" - response timeout 3,000 -> 5,000 ms;
+   one module instead of two once the SAU point table confirms that 2100/2101 is one setpoint.
+   Check on the SAU whether it has its own "no command received -> power limit" fail-safe; if so it must be
+   longer than a normal fail burst and shorter than 300 s.
 
 ## Test, with the plant's approval, at low load, the collector logging
 
 - SAU Ethernet cable out for 30 s: PV must not move; one warning only. Three times.
-- Cable out for 6 minutes: request to 0 after 90 s, `PV comm lost` after 5 min (breakers open only if sheet 3 v2
-  is loaded), UPS not shed; cable back, fault reset, PV back within the normal ramp.
+- Cable out for 6 minutes: `PV comm lost` after 5 min (breakers open only if sheet 3 v2 is loaded), UPS not
+  shed; cable back, fault reset, PV continues at the held value or the breakers re-close within the normal ramp.
 - Afterwards: daily count of comm-fail warnings, OFF/AUTO toggles and UPS sheddings from the collector.
 
 ## Safety during the blind window
 
 While a session is lost the inverters keep their last setpoint in both the old and the new program - the 0 of
-the old program never reaches them. What the hold must not exceed is the time in which the load could fall by
-more than the gensets' margin above their floor (25 % of the running nominal: 788 kW with three gensets,
-290 kW with one). 90 s is right for two or three gensets; set 60 s when one genset runs. The controller's own
-protections (bus, mains, anti-islanding, the gensets' reverse power) do not depend on the logger.
+the old program never reaches them. What changes is only the moment the link returns: today the PV is sent to
+zero, now it continues. The load may fall during the blind window; the running gensets can lose 25 % of their
+nominal before any reverse power (788 kW with three gensets, 290 kW with one), the controller's own
+protections (bus, mains, anti-islanding, the gensets' reverse power) do not depend on the logger, and after
+300 s the PV is taken off deliberately (stage 2) or at least reported. Set the delay shorter (120 s) when
+one genset runs alone.
 
 ## Rollback
 
-Load the 14 Oct archive, or set **PV comm fail hold** to 0.0 s - that is today's behaviour without reloading.
+Load the 14 Oct archive; or in the editor put the constant 0 back on the switch's second input.
 """
 
 
 def main() -> int:
     os.makedirs(OUT, exist_ok=True)
-    write(sheet06(), os.path.join(OUT, "sheet06_Validation_v2.xml"))
     write(sheet10(True), os.path.join(OUT, "sheet10_PV_req_step_protection_v2.xml"))
     write(sheet10(False), os.path.join(OUT, "sheet10_PV_req_step_protection_v2_const.xml"))
     write(sheet03(), os.path.join(OUT, "sheet03_PV_breaker_control_v2.xml"))
@@ -339,7 +294,6 @@ def main() -> int:
     for f in sorted(os.listdir(SRC)):
         if f.endswith(".xml"):
             shutil.copy(os.path.join(SRC, f), os.path.join(prog_dir, f))
-    shutil.copy(os.path.join(OUT, "sheet06_Validation_v2.xml"), os.path.join(prog_dir, "sheet06_Validation.xml"))
     shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v2.xml"), os.path.join(prog_dir, "sheet10_PV_req_step_protection.xml"))
     shutil.copy(os.path.join(OUT, "sheet03_PV_breaker_control_v2.xml"), os.path.join(prog_dir, "sheet03_PV_breaker_control.xml"))
     prog = load_program(prog_dir)
