@@ -63,13 +63,6 @@ protections (bus, mains, anti-islanding, the gensets' reverse power) do not depe
 300 s the PV is taken off deliberately (stage 2) or at least reported. Set the delay shorter (120 s) when
 one genset runs alone.
 
-## Model result (tools/plant_model.py, scenario `program_dir` = program_v2)
-
-14 Oct as recorded, power management on: fuel 2,818 -> 2,719 l, PV 10.6 -> 11.0 MWh, UPS shedding commands 11 -> 8
-(commands and alarms of the controller; whether the UPS breakers really follow them is open - the history has
-"fail to open/close" warnings on them). The remaining commands come from the operator OFF/AUTO toggles.
-With the link healthy the day is identical to the unmodified program.
-
 ## Rollback
 
 Load the 14 Oct archive; or in the editor put the constant 0 back on the switch's second input.

@@ -76,3 +76,22 @@ def test_zero_request_still_reaches_the_sau():
     settle(new, plant_inputs(**BASE), 120)
     settle(new, plant_inputs(pv_kw=1000, curtailment_pct=0.0, gensets_kw=790, running_nominal_kw=3150), 120)
     assert new.get(21267) == 0                         # the controller asks for 0 -> the SAU gets 0, not a held value
+
+
+def test_timed_variant_holds_short_fails_and_zeroes_long_ones():
+    V3 = os.path.join(OUT, "program_v3")
+    old, new = Plc(load_program()), Plc(load_program(V3))
+    for p in (old, new):
+        settle(p, plant_inputs(**BASE), 120)
+    assert snap(old) == snap(new)                      # identical with a healthy link
+    fail = plant_inputs(**BASE, comm_fail=(1, 0), pv_valid=False)
+    settle(new, fail, 30)
+    assert abs(new.get(21267) - 1091.2) < 0.01         # a 30 s fail is ridden through
+    settle(new, fail, 40)
+    assert new.get(21267) == 0                         # after 60 s: forced to 0, as the program does today
+    settle(new, plant_inputs(**BASE), 1)
+    assert 0 < new.get(21267) <= 25                    # link back: ramps up from 0 like today
+    z = Plc(load_program(V3))
+    settle(z, plant_inputs(**BASE), 60)
+    settle(z, plant_inputs(pv_kw=1000, curtailment_pct=0.0, gensets_kw=790, running_nominal_kw=3150), 60)
+    assert z.get(21267) == 0

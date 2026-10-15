@@ -213,6 +213,45 @@ def sheet03() -> ET.Element:
     return root
 
 
+B_ALLOW_INVALID = (10436, 3)    # invalid flag of the multiplier (unused)
+A_ALLOWED = 21286               # "PV allowed": 1 while the logger answers or was lost less than the hold time, else 0
+A_ALLOWED_2 = 21287             # second output of the composer (unused)
+A_REQ_FINAL = 21288             # request after the hold time: held request x PV allowed
+HOLD_S = 60.0
+
+
+def comp4_block(x, y, name, comobj, comobj2, *ins) -> ET.Element:
+    inputs = list(ins) + [hidden_in()] * (16 - len(ins))
+    return block(53, x, y, inputs, [pin_out(name, comobj, cat="AnaValue", res="0", dim="-"),
+                                    pin_out("", comobj2, cat="AnaValue", res="0", dim="-")], [])
+
+
+def axbc_block(x, y, name, comobj, flag, a, b) -> ET.Element:
+    return block(51, x, y, [a, b, const_in(1), const_in(0)],
+                 [pin_out(name, comobj, cat="AnaValue", res="1", dim="kW"), pin_out("", flag[0], flag[1], cat="BinValue")],
+                 [(22, "0", "UInt"), (37, "0", "UInt"), (23, "False", "Boolean"), (38, "False", "Boolean"), (36, "0", "UInt")])
+
+
+def sheet10_timed(hold_s: float = HOLD_S) -> ET.Element:
+    """Hold through short fails only: after `hold_s` without the logger the request is forced to 0, exactly as the
+    program does today for every fail. Blocks with free budget only (Delay, Comp 4, AxB/C)."""
+    root = sheet10(False)
+    fb = blocks_of(root)
+    delay = next(b for b in fb if b.get("Identification") == "33" and b.find("Outputs")[0].get("Name") == "PV comm lost")
+    delay.find("Inputs")[1].set("ValueOfConstant", str(int(hold_s * 10)))
+    # PV allowed = NOT PV comm lost, as a number (1/0); PV req final = held request x PV allowed
+    fb.append(comp4_block(43, 16, "PV allowed", A_ALLOWED, A_ALLOWED_2, bin_in("PV comm lost", B_COMM_LOST, negated=True)))
+    fb.append(axbc_block(43, 22, "PV req final", A_REQ_FINAL, B_ALLOW_INVALID,
+                         ana_in("PV req prot comm fail", 21279), ana_in("PV allowed", A_ALLOWED)))
+    ramp = next(b for b in fb if b.get("Identification") == "61")
+    rin = ramp.find("Inputs")[0]
+    assert rin.get("ComObject") == "21279"
+    rin.set("Name", "PV req final")
+    rin.set("ComObject", str(A_REQ_FINAL))
+    root.find("Sheet").set("Width", "1800")
+    return root
+
+
 README = """# Change 01 - PV logger communication tolerance
 
 Built from the sheet exports of 2026-10-14 by `tools/neo_plc_change01.py`. Same export format, so the way
@@ -289,6 +328,7 @@ def main() -> int:
     write(sheet10(True), os.path.join(OUT, "sheet10_PV_req_step_protection_v2.xml"))
     write(sheet10(False), os.path.join(OUT, "sheet10_PV_req_step_protection_v2_const.xml"))
     write(sheet03(), os.path.join(OUT, "sheet03_PV_breaker_control_v2.xml"))
+    write(sheet10_timed(), os.path.join(OUT, "sheet10_PV_req_step_protection_v3_timed.xml"))
     prog_dir = os.path.join(OUT, "program_v2")
     os.makedirs(prog_dir, exist_ok=True)
     for f in sorted(os.listdir(SRC)):
@@ -296,6 +336,11 @@ def main() -> int:
             shutil.copy(os.path.join(SRC, f), os.path.join(prog_dir, f))
     shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v2.xml"), os.path.join(prog_dir, "sheet10_PV_req_step_protection.xml"))
     shutil.copy(os.path.join(OUT, "sheet03_PV_breaker_control_v2.xml"), os.path.join(prog_dir, "sheet03_PV_breaker_control.xml"))
+    prog3_dir = os.path.join(OUT, "program_v3")
+    os.makedirs(prog3_dir, exist_ok=True)
+    for f in sorted(os.listdir(prog_dir)):
+        shutil.copy(os.path.join(prog_dir, f), os.path.join(prog3_dir, f))
+    shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v3_timed.xml"), os.path.join(prog3_dir, "sheet10_PV_req_step_protection.xml"))
     prog = load_program(prog_dir)
     with open(os.path.join(OUT, "program_v2.md"), "w", encoding="utf-8") as f:
         f.write(describe(prog).replace("sheet exports of 2026-10-14", "change 01 applied to the sheet exports of 2026-10-14"))
