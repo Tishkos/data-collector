@@ -557,10 +557,10 @@ def request_pdf(before_png, after_png):
              "the solar plant gets told: zero."),
         ("", "The inverters do what they are told, within seconds. The gensets were running at 25 % and now they carry "
              "everything, in one step. Then the reply comes back, and the solar has to climb up again, 100 kW at a "
-             "time, about five minutes. This happens five to thirty times a day. On 14 October, my last check, the "
-             "history shows it 20 times between 08:52 and 09:58."),
-        ("", "And here is the silly part: while the link is down, the zero never even reaches the logger. It arrives "
-             "when the link is back, so it protects nothing. We just lose production every time."),
+             "time, about five minutes. On 14 October, my last check, the history shows it 20 times between 08:52 "
+             "and 09:58."),
+        ("", "While the link is down, the zero never even reaches the logger. It arrives when the link is back, so it "
+             "protects nothing. We just lose production every time."),
     ], 1)
     page("What I want to change", after_png, [(462, 528, 600, 560, 1), (1138, 362, 1290, 382, 2), (330, 1565, 425, 1690, 3)], [
         ("", "Three small edits, nothing else. The switch (now Item 77) gets its own output on its second input (2). So "
@@ -573,9 +573,11 @@ def request_pdf(before_png, after_png):
              "different from today either: the inverters keep their last setpoint in both versions, the gensets have "
              "25 % in hand, the controller's own protections still work without the logger, and after five minutes "
              "we get the flag. If anyone wants it back, we load the archive from 14 October. One minute."),
-        ("", "On the day of 14 October this change would have given us about 350 kWh more solar and spared the gensets "
-             "three of their load jumps. And it is the first step before we can run fewer gensets, which is where the "
-             "real fuel saving is."),
+        ("What it is worth", "I ran 14 October through the model twice, with and without the change. With the plant "
+             "run the way it is today (three gensets by hand) the change gives about 140 kWh more solar and saves about "
+             "45 litres of diesel on that day. With the controller's power management switched on, the same change is "
+             "worth about 350 kWh and 100 litres a day. The real saving is the next step, running fewer gensets, "
+             "roughly 1,300 litres a day; this change is what makes that step safe."),
     ], 2)
     c.save()
     return out
