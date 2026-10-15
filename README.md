@@ -101,6 +101,11 @@ answering" and the flag rises the way the module declares it, after the timeout 
 hiccup never raises it. **Replay mode** removes the modelling: `python tools\plc_lab.py --replay data\trace\neo-01_<date>.csv
 --replay-sau data\trace\pv-array_<date>.csv` runs the program on the values the trace recorded on the plant and draws
 the recorded setpoint next to the computed one, with today's program or either change-01 variant.
+Scenarios on the page (today by hand, change 01 v3, change 01 v2 with stage 2, power management AUTO, Gen P Min
+20 %, AUTO with the PLC and UPS fixes, two gensets in the sun, AUTO with two sets minimum, a grid day) each start
+from zero with a fresh program and plant; "reset" does the same for the current one. Counters since the start:
+solar used, available and thrown away, genset kWh, fuel (model), comm fails, setpoints forced to 0, warnings,
+UPS sheds, min and max gen load.
 
 ## Folder map
 

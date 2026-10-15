@@ -30,6 +30,10 @@ With a healthy link the program behaves exactly as today (checked output by outp
 - `sheet10_PV_req_step_protection_v2_const.xml` - same with a fixed 300 s, no setpoint needed
 - `sheet03_PV_breaker_control_v2.xml` - optional, only after the plant agrees to automatic breaker opening
 - `program_v2/` - the whole program with the sheets replaced, as the model runs it; `program_v2.md` its listing
+- `sheet10_PV_req_step_protection_v3_timed.xml` - the timed variant: hold the last request for 60 s, then 0 exactly
+  as today, no setpoint needed; `program_v3/` is this sheet with the plant's own other sheets. Its "PV comm lost"
+  flag is the 60 s delay, so the breaker-opening sheet 3 must not be combined with it as it is; stage 2 with v3
+  needs its own 300 s delay.
 
 ## Steps on the plant PC (copy of the archive, never the live controller)
 

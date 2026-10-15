@@ -110,3 +110,25 @@ def test_replay_runs_the_program_on_recorded_values(tmp_path):
     assert p.snapshot["comm"] == [0, 0] and 0 < p.snapshot["setpoint"] < 1091.2
     run(p, 100)
     assert p.paused                                                                 # end of the file
+
+
+def test_scenarios_reset_and_counters():
+    p = plc_lab.LivePlant(start_hour=10.0)
+    run(p, 120)
+    T = p.snapshot["totals"]
+    assert T["hours"] == 0.03 and T["pv_used_kwh"] > 0 and T["fuel_l"] > 0 and 20 < T["min_gen_load_pct"] <= 30
+    p.apply_scenario("Two gensets in the sun")
+    assert p.snapshot == {} and p.program_name.startswith("change-01 v3") and p.manual_gensets == 2
+    run(p, 60)
+    assert p.snapshot["gensets"] == 2 and p.snapshot["totals"]["hours"] == 0.02
+    p.apply_scenario("AUTO + change 01 v3 + UPS fixes")
+    assert p.auto_pm and p.ups_math_fix and p.ups_shed_delay_s == 10
+    p.apply_scenario("Grid day with export")
+    run(p, 30)
+    assert p.snapshot["on_grid"] and p.snapshot["gensets"] == 0 and p.snapshot["request"] == 3520
+    p.apply_scenario(plc_lab.SCENARIOS[0]["name"])
+    run(p, 10)
+    p.inject("load", 500)
+    p.reset()
+    assert p.snapshot == {} and p.load_offset == 0 and p.totals["seconds"] == 0 and p.t == 10 * 3600
+    assert [x["name"] for x in plc_lab.SCENARIOS][1].startswith("Change 01 v3")

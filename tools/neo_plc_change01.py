@@ -284,6 +284,10 @@ With a healthy link the program behaves exactly as today (checked output by outp
 - `sheet10_PV_req_step_protection_v2_const.xml` - same with a fixed 300 s, no setpoint needed
 - `sheet03_PV_breaker_control_v2.xml` - optional, only after the plant agrees to automatic breaker opening
 - `program_v2/` - the whole program with the sheets replaced, as the model runs it; `program_v2.md` its listing
+- `sheet10_PV_req_step_protection_v3_timed.xml` - the timed variant: hold the last request for 60 s, then 0 exactly
+  as today, no setpoint needed; `program_v3/` is this sheet with the plant's own other sheets. Its "PV comm lost"
+  flag is the 60 s delay, so the breaker-opening sheet 3 must not be combined with it as it is; stage 2 with v3
+  needs its own 300 s delay.
 
 ## Steps on the plant PC (copy of the archive, never the live controller)
 
@@ -336,10 +340,13 @@ def main() -> int:
             shutil.copy(os.path.join(SRC, f), os.path.join(prog_dir, f))
     shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v2.xml"), os.path.join(prog_dir, "sheet10_PV_req_step_protection.xml"))
     shutil.copy(os.path.join(OUT, "sheet03_PV_breaker_control_v2.xml"), os.path.join(prog_dir, "sheet03_PV_breaker_control.xml"))
+    # v3 = the timed sheet 10 only, with the plant's own sheet 3: its "PV comm lost" is the 60 s delay, so the
+    # breaker-opening sheet 3 (stage 2) must not hang on it; stage 2 with v3 needs its own 300 s delay first
     prog3_dir = os.path.join(OUT, "program_v3")
     os.makedirs(prog3_dir, exist_ok=True)
-    for f in sorted(os.listdir(prog_dir)):
-        shutil.copy(os.path.join(prog_dir, f), os.path.join(prog3_dir, f))
+    for f in sorted(os.listdir(SRC)):
+        if f.endswith(".xml"):
+            shutil.copy(os.path.join(SRC, f), os.path.join(prog3_dir, f))
     shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v3_timed.xml"), os.path.join(prog3_dir, "sheet10_PV_req_step_protection.xml"))
     prog = load_program(prog_dir)
     with open(os.path.join(OUT, "program_v2.md"), "w", encoding="utf-8") as f:

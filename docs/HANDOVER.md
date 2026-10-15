@@ -86,7 +86,8 @@ from 0 again. What: sheet 10 keeps everything and holds the last request instead
 output; the negative-request input removed from the OR), plus a "PV comm lost" delay. Variants: v2 (hold until
 the link returns, 300 s delay as constant or setpoint 65514), v3 timed (hold at most 60 s, then 0 exactly as
 today) built after the integrator's objection. Sheet 3 v2 (optional, stage 2): open the PV breakers after
-5 min without the logger. Built in InteliConfig's own export format by `tools/neo_plc_change01.py`, tested in
+5 min without the logger; it hangs on the "PV comm lost" flag, which in v3 is the 60 s delay, so `program_v3`
+carries the plant's own sheet 3 and stage 2 with v3 needs a separate 300 s delay first. Built in InteliConfig's own export format by `tools/neo_plc_change01.py`, tested in
 `tests/test_change01.py` (identical with a healthy link; short fail ridden through; long fail safe; a real
 zero request still reaches the SAU). The PLC has no Analog Switch left (7 of 7); the first import was refused
 for that and rebuilt. v2 was imported on a copy of the archive on site; v3 is not yet imported. Request PDF

@@ -67,24 +67,60 @@ DEFAULT_PARAMS = dict(
 )
 
 
+# Scenarios: a program, how the gensets are run, and the model knobs. The first is the plant as it runs today.
+SCENARIOS = [
+    dict(name="Default: today's program, 3 gensets by hand", program="today", gensets=3, auto_pm=False,
+         note="The plant as recorded on 14 October: gensets started by hand, Gen P Min 25 %, any comm fail forces the PV request to 0."),
+    dict(name="Change 01 v3: hold 60 s, then 0", program="change-01 v3 (hold 60 s, then 0)", gensets=3, auto_pm=False,
+         note="Sheet 10 keeps the last request for 60 s after a comm fail is declared, then 0 exactly as today. Nothing else changes."),
+    dict(name="Change 01 v2: hold until the link is back, PV breakers open after 5 min", program="change-01 v2 (hold until the link is back)", gensets=3, auto_pm=False,
+         note="Sheet 10 holds as long as the fail lasts; after 5 minutes without the logger sheet 3 opens the PV breakers (stage 2)."),
+    dict(name="Power management AUTO, settings as they are", program="today", gensets=None, auto_pm=True,
+         note="The master starts and stops gensets itself with the reserves and delays from the archive; today's program."),
+    dict(name="AUTO + Gen P Min 20 %", program="today", gensets=None, auto_pm=True, params=dict(gen_p_min_pct=20.0),
+         note="As above with the gensets allowed down to 20 % instead of 25 %: more solar, closer to the engine's floor."),
+    dict(name="AUTO + change 01 v3 + UPS fixes", program="change-01 v3 (hold 60 s, then 0)", gensets=None, auto_pm=True,
+         ups_math_fix=True, ups_shed_delay_s=10.0,
+         note="Power management on, the comm-fail hold, the UPS sheet using the real genset nominal and a 10 s shedding delay (the model's S3)."),
+    dict(name="Two gensets in the sun", program="change-01 v3 (hold 60 s, then 0)", gensets=2, auto_pm=False,
+         note="Two sets by hand through the day with the comm-fail hold: the first real fuel step. Watch gen load % on clouds and fails."),
+    dict(name="AUTO, two gensets minimum", program="change-01 v3 (hold 60 s, then 0)", gensets=None, auto_pm=True, min_gensets=2,
+         note="Power management never below two sets (the model's S6): the safe version of the step above."),
+    dict(name="Grid day with export", program="today", gensets=0, auto_pm=False, grid=True,
+         note="On the grid: no gensets, the PV request is the SAU maximum capped by the export limit of 1,300 kW per feeder."),
+]
+SCENARIO_BY_NAME = {s["name"]: s for s in SCENARIOS}
+
+
 class LivePlant:
     """plant_model.simulate(), unrolled into one-second ticks (ten PLC cycles each) with injectable events."""
 
     def __init__(self, program_name: str = "today", start_hour: float = 10.0, manual_gensets: int = 3, replay=None):
         self.lock = threading.RLock()
-        self.sc = pm.Scenario("lab", manual_gensets=manual_gensets)
-        self.day = pm.Day("lab day", clearness=1.0)
-        self.params = dict(DEFAULT_PARAMS)
         self.replay = replay                               # ReplaySource or None
-        self.t = replay.t0 if replay else start_hour * 3600.0
+        self.start_hour = start_hour
         self.speed = 1.0
         self.paused = False
+        self.scenario = SCENARIOS[0]["name"]
         self.program_name = program_name
+        self.manual_gensets = manual_gensets
+        self.auto_pm = False
+        self.min_gensets = 1
+        self.ups_math_fix = False
+        self.ups_shed_delay_s = 0.0
+        self.grid_override = None
+        self.params = dict(DEFAULT_PARAMS)
+        self._init_state()
+
+    def _init_state(self):
+        """Everything back to zero: a fresh PLC, a fresh plant, empty history and counters; the knobs stay."""
+        self.sc = pm.Scenario("lab", manual_gensets=self.manual_gensets)
+        self.day = pm.Day("lab day", clearness=1.0)
+        self.t = self.replay.t0 if self.replay else self.start_hour * 3600.0
         self.plc = None
-        self._new_plc(program_name)
+        self._new_plc(self.program_name)
         self.rnd = random.Random(14)
-        # plant state
-        self.running = manual_gensets
+        self.running = self.manual_gensets or 0
         self.pv_actual = 0.0
         self.sau_value = 0.0                               # what the SAU would answer right now
         self.sau_reading = 0.0                             # the value the controller holds (refreshed every 1 s while answered)
@@ -102,11 +138,21 @@ class LivePlant:
         self.last_reply = [self.t, self.t]
         self.comm_flag = [0, 0]
         self.off_until = -1.0
-        self.grid_override = None
         self.fault_reset_pending = False
         self.start_timer = self.stop_timer = 0
-        self.auto_pm = False
+        self.ups_shed_timer = [0.0, 0.0]
         self.schedule = []                                 # (t, what, value) from the 14 October replay
+        self.totals = dict(seconds=0, pv_used_kwh=0.0, pv_available_kwh=0.0, gen_kwh=0.0, fuel_l=0.0, comm_fails=0,
+                           zero_setpoints=0, warnings=0, ups_sheds=0, min_gen_load_pct=None, max_gen_load_pct=0.0)
+        self._prev_comm_any = False
+        # a steady start: the regulator already sits where it keeps the gensets at Gen P Min
+        if not self.replay:
+            load0 = pm.load_profile_kw(int(self.t / 60))
+            avail0 = pm.pv_available_kw(self.t / 60, self.day, [])
+            run_nom0 = 0.0 if self.on_grid() else sum(pm.GEN_NOMS_KW[:max(self.running, 1)])
+            wanted = max(0.0, min(avail0, load0 - self.params["gen_p_min_pct"] / 100 * run_nom0)) if run_nom0 else min(avail0, load0)
+            self.curtail = 0.0 if self.on_grid() else max(0.0, min(100.0, wanted / pm.SAU_MAX_AVAILABLE_KW * 100))
+            self.pv_actual = self.sau_value = self.sau_reading = self.received_setpoint = wanted
         self.hist = {k: deque(maxlen=HISTORY_S) for k in ("t", "load", "pv_available", "pv_actual", "setpoint", "received", "request",
                                                             "gen_kw", "gen_load_pct", "comm", "silent", "recorded_setpoint")}
         self.events = deque(maxlen=200)
@@ -130,6 +176,27 @@ class LivePlant:
     def _warm_up(self):
         for _ in range(30):
             self._tick(warm=True)
+
+    def apply_scenario(self, name: str):
+        sc = SCENARIO_BY_NAME[name]
+        with self.lock:
+            self.scenario = name
+            self.program_name = sc["program"]
+            self.manual_gensets = sc["gensets"] if sc["gensets"] is not None else 3
+            self.auto_pm = bool(sc.get("auto_pm"))
+            self.min_gensets = int(sc.get("min_gensets", 1))
+            self.ups_math_fix = bool(sc.get("ups_math_fix"))
+            self.ups_shed_delay_s = float(sc.get("ups_shed_delay_s", 0.0))
+            self.grid_override = True if sc.get("grid") else None
+            self.params = dict(DEFAULT_PARAMS)
+            self.params.update(sc.get("params", {}))
+            self._init_state()
+            self.log(f"scenario: {name}")
+
+    def reset(self):
+        with self.lock:
+            self._init_state()
+            self.log("reset: plant and program restarted from zero")
 
     # ---- helpers ---------------------------------------------------------------------------------
     def log(self, text: str):
@@ -194,7 +261,7 @@ class LivePlant:
             run_nom = 0.0
         else:
             if self.running == 0:
-                self.running = sc.manual_gensets or 3
+                self.running = max(self.min_gensets, self.manual_gensets or 3)
             run_nom = sum(pm.GEN_NOMS_KW[:self.running])
         pvcb_close = int(not (self.t < self.off_until or self.t - self.last_transfer < 120))
         silent = self._sessions(dt)
@@ -209,7 +276,7 @@ class LivePlant:
         # the controller's copy of the SAU values refreshes once a second while session 1 answers; stale otherwise
         if not silent[0]:
             self.sau_reading = self.sau_value
-        neo_pv_term = self.sau_reading if pv_live else 0.0
+        neo_pv_term = self.sau_reading if (pv_live or self.ups_math_fix) else 0.0
         shed_load = sum(sc.ups_critical_share * load for i in range(2) if not self.ups_closed[i])
         load_on_bus = load - shed_load
         gen_kw = 0.0 if on_grid else max(0.0, load_on_bus - self.pv_actual)
@@ -229,7 +296,16 @@ class LivePlant:
         if any(plc.get(n, b) for n, b in ((10425, 7), (10426, 0), (10426, 7), (10427, 0), (10427, 7), (10428, 0), (10434, 7), (10435, 0))):
             self.fail_since = self.fail_since if self.fail_since is not None else self.t
         self.pv_cb = cb_cmd
-        self.ups_closed = [int(bool(c)) for c in ups_cmd]
+        for i in range(2):                                   # the UPS breakers follow the commands, shedding after the optional delay
+            if ups_cmd[i]:
+                self.ups_shed_timer[i] = 0.0
+                self.ups_closed[i] = 1
+            else:
+                self.ups_shed_timer[i] += dt
+                if self.ups_shed_timer[i] >= self.ups_shed_delay_s:
+                    if self.ups_closed[i] and not warm:
+                        self.totals["ups_sheds"] += 1
+                    self.ups_closed[i] = 0
         # the setpoint reaches the SAU through session 1 every second, through session 2 every 10 s, only while
         # that session gets replies (unless the hypothesis switch says writes land anyway)
         through = P["writes_through_silence"] or (not silent[0]) or (not silent[1] and int(self.t) % int(SESSION2_WRITE_S) == 0)
@@ -258,6 +334,7 @@ class LivePlant:
         self.t += dt
         self.ticks += 1
         gl = 100 * gen_kw / run_nom if run_nom else 0.0
+        self._totals(dt, avail, gen_kw, run_nom, gl, comm)
         self._record(load, avail, setpoint, request, gen_kw, gl, comm_any, any(silent), None)
         self.snapshot = dict(clock=self._clock(), load=round(load), pv_available=round(avail), pv_actual=round(self.pv_actual),
                              setpoint=round(setpoint, 1), received=round(self.received_setpoint, 1), request=round(request, 1),
@@ -265,7 +342,39 @@ class LivePlant:
                              on_grid=on_grid, curtail=round(self.curtail, 1), pv_cb=self.pv_cb, ups=self.ups_closed, comm=comm,
                              silent=[int(s) for s in silent], pvcb_close=pvcb_close, warning=int(bool(plc.get(10433, 2))),
                              latch=int(bool(plc.get(10424, 4))), replay=False)
+        self.snapshot["totals"] = self._totals_view()
         self._edges(comm)
+
+    def _totals_view(self):
+        T = self.totals
+        return dict(hours=round(T["seconds"] / 3600, 2), pv_used_kwh=round(T["pv_used_kwh"]), pv_available_kwh=round(T["pv_available_kwh"]),
+                    pv_curtailed_kwh=round(max(0.0, T["pv_available_kwh"] - T["pv_used_kwh"])), gen_kwh=round(T["gen_kwh"]),
+                    fuel_l=round(T["fuel_l"]), comm_fails=T["comm_fails"], zero_setpoints=T["zero_setpoints"], warnings=T["warnings"],
+                    ups_sheds=T["ups_sheds"], min_gen_load_pct=None if T["min_gen_load_pct"] is None else round(T["min_gen_load_pct"], 1),
+                    max_gen_load_pct=round(T["max_gen_load_pct"], 1))
+
+    def _totals(self, dt, avail, gen_kw, run_nom, gl, comm):
+        T = self.totals
+        T["seconds"] += dt
+        T["pv_used_kwh"] += self.pv_actual * dt / 3600
+        T["pv_available_kwh"] += avail * dt / 3600
+        T["gen_kwh"] += gen_kw * dt / 3600
+        if run_nom and self.running:
+            for i in range(self.running):                     # load shared in proportion to nominal
+                share = pm.GEN_NOMS_KW[i] / run_nom
+                T["fuel_l"] += pm.fuel_l_per_min(gen_kw * share, pm.GEN_NOMS_KW[i]) * dt / 60
+            T["min_gen_load_pct"] = gl if T["min_gen_load_pct"] is None else min(T["min_gen_load_pct"], gl)
+            T["max_gen_load_pct"] = max(T["max_gen_load_pct"], gl)
+        if self.warn_timer == 15:                             # the "AHI" alarm has its own 15 s delay
+            T["warnings"] += 1
+        if any(comm) and not self._prev_comm_any:
+            T["comm_fails"] += 1
+        self._prev_comm_any = bool(any(comm))
+        sp = self.hist["setpoint"]
+        if len(sp) > 1 and sp[-1] == 0 and sp[-2] > 0:
+            T["zero_setpoints"] += 1
+
+    _prev_comm_any = False
 
     def _power_management(self, run_nom, gen_kw):
         sc = self.sc
@@ -276,7 +385,7 @@ class LivePlant:
                 self.running += 1; self.start_timer = 0; self.log(f"power management: genset {self.running} started")
         else:
             self.start_timer = 0
-        if self.running > 1 and sum(pm.GEN_NOMS_KW[:self.running - 1]) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * self.pv_actual \
+        if self.running > self.min_gensets and sum(pm.GEN_NOMS_KW[:self.running - 1]) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * self.pv_actual \
                 and gen_kw >= sc.min_run_power_kw:
             self.stop_timer += 60
             if self.stop_timer >= sc.next_stop_delay_s:
@@ -346,7 +455,7 @@ class LivePlant:
                              received=recorded, request=round(request, 1), gen_kw=round(gen_kw), run_nom=round(run_nom),
                              gen_load_pct=round(gl, 1), gensets=gens, on_grid=on_grid, curtail=round(curtail, 1), pv_cb=list(pv_cb),
                              ups=list(ups), comm=comm, silent=[0, 0], pvcb_close=1, warning=int(bool(self.plc.get(10433, 2))),
-                             latch=int(bool(self.plc.get(10424, 4))), replay=True, replay_file=self.replay.name)
+                             latch=int(bool(self.plc.get(10424, 4))), replay=True, replay_file=self.replay.name, totals=self._totals_view())
         self._edges(comm)
 
     # ---- the thread ---------------------------------------------------------------------------------
@@ -389,7 +498,9 @@ class LivePlant:
             elif what == "auto_pm":
                 self.auto_pm = not self.auto_pm
             elif what == "gensets":
-                self.running = int(value); self.sc.manual_gensets = int(value)
+                self.running = int(value); self.manual_gensets = int(value); self.sc.manual_gensets = int(value)
+            elif what == "reset":
+                self._init_state()
             elif what == "time":
                 self.t = float(value) * 3600
                 self.last_reply = [self.t, self.t]
@@ -546,7 +657,9 @@ svg text{font:11px 'Segoe UI',system-ui,sans-serif}
 <span class="num"><span>warning</span><strong id="warning">-</strong></span>
 </header>
 <div class="bar">
-<select id="program"></select>
+<label>scenario</label><select id="scenario"></select>
+<button onclick="ctl('reset')">reset, start from zero</button>
+<label>program</label><select id="program"></select>
 <button onclick="ctl('pause')" id="pause">pause</button>
 <label>speed</label><button onclick="ctl('speed',1)">1x</button><button onclick="ctl('speed',10)">10x</button><button onclick="ctl('speed',60)">60x</button>
 <span style="width:12px"></span>
@@ -567,6 +680,8 @@ svg text{font:11px 'Segoe UI',system-ui,sans-serif}
 <button onclick="ctl('replay14')">replay 14 October from 08:00</button>
 </div>
 <div class="bar" id="params"></div>
+<div class="bar" id="note" style="color:var(--muted)"></div>
+<div class="bar" id="totals"></div>
 <canvas id="chart"></canvas>
 <div class="tabs" id="tabs"></div>
 <main><div id="sheet"></div><aside id="events"></aside></main>
@@ -590,6 +705,11 @@ function render(){
   document.getElementById('pause').textContent=state.paused?'play':'pause';
   document.getElementById('auto_pm').className=state.auto_pm?'on':'';
   document.getElementById('replay').textContent=s.replay?('replay of '+s.replay_file+': the PLC runs on the recorded values; "setpoint at SAU" is the recorded one'):'';
+  const sc=document.getElementById('scenario');
+  if(sc.options.length==0){for(const x of state.scenarios){const o=document.createElement('option');o.value=x.name;o.textContent=x.name;sc.appendChild(o);} sc.onchange=()=>fetch('/api/scenario',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:sc.value})});}
+  if(sc.value!=state.scenario) sc.value=state.scenario;
+  const note=(state.scenarios.find(x=>x.name==state.scenario)||{}).note||''; document.getElementById('note').textContent=note;
+  totals(s.totals);
   const sel=document.getElementById('program');
   if(sel.options.length==0){for(const p of state.programs){const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);} sel.onchange=()=>fetch('/api/program',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:sel.value})});}
   if(sel.value!=state.program) sel.value=state.program;
@@ -598,6 +718,13 @@ function render(){
   tabs(state.sheet.sheets);
   drawSheet(state.sheet);
   document.getElementById('events').innerHTML=state.events.map(e=>'<div>'+e[0]+' '+e[1]+'</div>').join('');
+}
+function totals(T){
+  if(!T) return; const d=document.getElementById('totals');
+  const items=[['since start',T.hours+' h'],['solar used',T.pv_used_kwh+' kWh'],['solar available',T.pv_available_kwh+' kWh'],['solar thrown away',T.pv_curtailed_kwh+' kWh'],
+    ['gensets',T.gen_kwh+' kWh'],['fuel (model)',T.fuel_l+' l'],['comm fails',T.comm_fails],['setpoint to 0',T.zero_setpoints],['overproduction warnings',T.warnings],
+    ['UPS sheds',T.ups_sheds],['gen load min / max',(T.min_gen_load_pct===null?'-':T.min_gen_load_pct)+' / '+T.max_gen_load_pct+' %']];
+  d.innerHTML=items.map(([k,v])=>'<span class="num"><span>'+k+'</span><strong style="font-size:15px">'+v+'</strong></span>').join('');
 }
 function params(p){
   const d=document.getElementById('params'); if(d.children.length) return;
@@ -650,6 +777,7 @@ def create_app(plant: LivePlant):
         with plant.lock:
             return JSONResponse(dict(plant=plant.snapshot, paused=plant.paused, speed=plant.speed, program=plant.program_name,
                                      programs=list(PROGRAMS), auto_pm=plant.auto_pm, params=plant.params,
+                                     scenario=plant.scenario, scenarios=[dict(name=x["name"], note=x["note"]) for x in SCENARIOS],
                                      hist={k: list(v) for k, v in plant.hist.items()}, events=list(plant.events),
                                      sheet=plant.sheet_view(sheet)))
 
@@ -658,6 +786,14 @@ def create_app(plant: LivePlant):
         body = await req.json()
         plant.inject(str(body.get("what", "")), float(body.get("value") or 0))
         return {"ok": True}
+
+    @app.post("/api/scenario")
+    async def scenario(req: Request):
+        body = await req.json()
+        name = body.get("name")
+        if name in SCENARIO_BY_NAME:
+            plant.apply_scenario(name)
+        return {"ok": name in SCENARIO_BY_NAME}
 
     @app.post("/api/program")
     async def program(req: Request):
