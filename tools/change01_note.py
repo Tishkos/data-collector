@@ -556,8 +556,10 @@ def request_pdf(before_png, after_png):
              "the PV logger, Item 68 (1) flips the switch, and the other side of the switch is a fixed 0.0 kW (2). So "
              "the solar plant gets told: zero."),
         ("", "The inverters do what they are told, within seconds. The gensets were running at 25 % and now they carry "
-             "everything. The UPS logic sees that jump and sheds the UPS. Then the reply comes back, and the solar has to "
-             "climb up again, 100 kW at a time, about five minutes. This happens five to thirty times a day."),
+             "everything. The UPS logic sees that jump and sends its shedding command to the UPS breakers (whether the "
+             "UPS really react is a separate question, the history shows breaker fail warnings). Then the reply comes "
+             "back, and the solar has to climb up again, 100 kW at a time, about five minutes. This happens five to "
+             "thirty times a day."),
         ("", "And here is the silly part: while the link is down, the zero never even reaches the logger. It arrives "
              "when the link is back, so it protects nothing. We just lose production every time."),
     ], 1)
@@ -572,9 +574,9 @@ def request_pdf(before_png, after_png):
              "different from today either: the inverters keep their last setpoint in both versions, the gensets have "
              "25 % in hand, the controller's own protections still work without the logger, and after five minutes "
              "we get the flag. If anyone wants it back, we load the archive from 14 October. One minute."),
-        ("", "On the day of 14 October this change would have taken away three of the eleven UPS sheddings and given us "
-             "about 350 kWh more solar. And it is the first step before we can run fewer gensets, which is where the "
-             "real fuel saving is."),
+        ("", "On the day of 14 October this change would have taken away three of the eleven UPS shedding commands "
+             "and given us about 350 kWh more solar. And it is the first step before we can run fewer gensets, which "
+             "is where the real fuel saving is."),
     ], 2)
     c.save()
     return out

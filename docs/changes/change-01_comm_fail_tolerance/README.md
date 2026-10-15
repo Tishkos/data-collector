@@ -65,8 +65,9 @@ one genset runs alone.
 
 ## Model result (tools/plant_model.py, scenario `program_dir` = program_v2)
 
-14 Oct as recorded, power management on: fuel 2,818 -> 2,719 l, PV 10.6 -> 11.0 MWh, UPS sheddings 11 -> 8.
-The remaining sheddings come from the operator OFF/AUTO toggles, which no program change can remove.
+14 Oct as recorded, power management on: fuel 2,818 -> 2,719 l, PV 10.6 -> 11.0 MWh, UPS shedding commands 11 -> 8
+(commands and alarms of the controller; whether the UPS breakers really follow them is open - the history has
+"fail to open/close" warnings on them). The remaining commands come from the operator OFF/AUTO toggles.
 With the link healthy the day is identical to the unmodified program.
 
 ## Rollback
