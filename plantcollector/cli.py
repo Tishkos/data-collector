@@ -5,6 +5,8 @@ plantcollector command line.
   python -m plantcollector.cli --config config/site.plant.yaml check   one poll, print every point
   python -m plantcollector.cli --config ... export --hours 24 --out data.xlsx
   python -m plantcollector.cli --config ... report --date 2026-10-12 --out report.xlsx
+  python -m plantcollector.cli --config config/site.plant.yaml trace          1 s / 2 s trace to data/trace
+  python -m plantcollector.cli --config config/site.plant.yaml probe          who answers on Modbus TCP
 """
 
 from __future__ import annotations
@@ -207,6 +209,65 @@ def cmd_report(a) -> int:
     return 0
 
 
+def cmd_trace(a) -> int:
+    """Fast read-only trace of a few devices to files in data/trace (see trace.py)."""
+    from .registry import load_registry
+    from .trace import Trace
+    reg = load_registry(a.config)
+    every: dict[str, float] = {}
+    for item in a.every or []:
+        dev, _, sec = item.partition("=")
+        every[dev.strip()] = float(sec or 1)
+    if not every:
+        for dev, sec in (("neo-01", 1.0), ("pv-array", 2.0)):
+            if dev in reg.devices:
+                every[dev] = sec
+    if not every:
+        print("nothing to trace: give --every <device>=<seconds>")
+        return 2
+    out = a.out or os.path.join(a.data, "trace")
+    tr = Trace(reg, out, every, connect_test_s=(a.connect_test or None))
+    try:
+        tr.run(duration_s=a.hours * 3600 if a.hours else None)
+    except KeyboardInterrupt:
+        tr.close()
+        print("\n[trace] stopped")
+    print("[trace] " + ", ".join(f"{d}: {tr.rows[d]} rows, {tr.failed[d]} failed reads" for d in every)
+          + f", {tr.events_logged} events, files in {out}")
+    return 0
+
+
+def cmd_probe(a) -> int:
+    """Which hosts answer on Modbus TCP at all. One read of one register per target, nothing else."""
+    from .registry import load_registry
+    from .trace import probe
+    reg = load_registry(a.config)
+    targets: list[tuple[str, int, int]] = []
+    for item in a.targets or []:
+        parts = item.split(":")
+        host = parts[0]
+        port = int(parts[1]) if len(parts) > 1 and parts[1] else 502
+        unit = int(parts[2]) if len(parts) > 2 and parts[2] else 1
+        targets.append((host, port, unit))
+    if not targets:
+        for d in reg.devices.values():
+            c = d.connection
+            if d.adapter == "modbus_tcp" and "host" in c:
+                t = (c["host"], int(c.get("port", 502)), int(c.get("unit_id", 1)))
+                if t not in targets:
+                    targets.append(t)
+        for h in (reg.extra.get("probe") or {}).get("hosts", []) or []:
+            t = (str(h), 502, 1)
+            if t not in targets:
+                targets.append(t)
+    rows = probe(targets, address=a.address, timeout=a.timeout)
+    print(f"{'host':<22}{'unit':>5}  {'tcp':<10}{'ms':>8}  modbus")
+    for r in rows:
+        ms = "" if r["ms"] is None else f"{r['ms']:.0f}"
+        print(f"{r['host'] + ':' + str(r['port']):<22}{r['unit']:>5}  {r['tcp'][:9]:<10}{ms:>8}  {r['modbus']}")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="plantcollector", description="read-only plant data collector")
     ap.add_argument("--config", default=os.path.join("config", "site.yaml"))
@@ -239,6 +300,21 @@ def main(argv=None) -> int:
     p.add_argument("--date")
     p.add_argument("--out")
     p.set_defaults(fn=cmd_report)
+
+    t = sub.add_parser("trace", help="fast read-only trace of a few devices to files (event studies)")
+    t.add_argument("--every", action="append", metavar="DEVICE=SECONDS",
+                   help="device id and read interval, repeatable (default: neo-01=1 pv-array=2)")
+    t.add_argument("--hours", type=float, default=None, help="stop after this many hours (default: until Ctrl+C)")
+    t.add_argument("--connect-test", type=float, default=60.0, help="seconds between fresh-connection tests (0 = off)")
+    t.add_argument("--out", help="folder for the files (default: <data>/trace)")
+    t.set_defaults(fn=cmd_trace)
+
+    q = sub.add_parser("probe", help="which hosts answer on Modbus TCP (one read of one register each)")
+    q.add_argument("--targets", action="extend", nargs="+", metavar="HOST[:PORT[:UNIT]]",
+                   help="repeatable; default: every Modbus device in the config plus probe.hosts")
+    q.add_argument("--address", type=int, default=0, help="holding register to read (default 0)")
+    q.add_argument("--timeout", type=float, default=3.0)
+    q.set_defaults(fn=cmd_probe)
 
     a = ap.parse_args(argv)
     return a.fn(a)

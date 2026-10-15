@@ -26,6 +26,13 @@ the inverter register map and a few confirmations on the first live read.
       protocol" for SmartCMSHU121B 0.7.3), or a register scan from the plant PC (the PowerShell dump
       script of 14 Oct, `modbus_dump.csv`) matched against the live values in Device Monitor.
       → `raw.address / kind / scale` next to each `sau_id`.
+- [ ] **The two PV-logger sessions write the same datapoints one register apart** (archive of 14 Oct):
+      group 1 writes "AP Set" as a 32-bit value at 2100-2101 every second, group 2 writes "AP Set" at
+      2101-2102 every 10 s (and RP Set 2102 vs 2103, PF 2105, mode 1007 vs 1008, coil 4002 vs 4003).
+      With 32-bit values the two writes overlap. Either the SAU really has a second register set at +1,
+      or one definition is off by one. The trace reads 2100-2106 back word by word every second: if the
+      words move with the 1 s / 10 s pattern, the layout and its effect on the setpoint are visible.
+      To settle with the SAU point table. Not to be discussed outside until measured.
 - [x] The SAU's virtual array device: register map taken from the Neo's own definition in the archive →
       `profiles\pv_array_sau.yaml` (unit 245 assumed from the live test; CHECK compares ac_power_kw with the
       Neo's PV Actual P). Daily/total yield scaling to verify against the inverters' counters.

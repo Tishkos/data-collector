@@ -89,7 +89,7 @@ NEO_PORT = 15021
 
 @pytest.fixture(scope="module")
 def neo_server():
-    regs = [0] * 1400
+    regs = [0] * 2200                                   # room for the SAU setpoint words at 2100+
     regs[1040] = 1250                                   # PV Actual P 1250 kW
     regs[1041] = 0xFF9C                                 # PV Actual Q -100 kVAr
     regs[1046] = 9588                                   # Curtailment Output 95.88 %
@@ -167,7 +167,7 @@ def test_coils_and_pv_array_profile(neo_server):
     assert out["power_kw"].quality == Quality.GOOD
     pv = reg.devices["pv-array"].model_copy(update={"connection": {"host": "127.0.0.1", "port": NEO_PORT, "unit_id": 1, "timeout": 1}})
     ad = ModbusTcpAdapter(pv)
-    assert [(s, n) for _, s, n, _ in ad._blocks] == [(1000, 99), (1187, 10)]
+    assert [(s, n) for _, s, n, _ in ad._blocks] == [(1000, 99), (1187, 10), (2100, 7)]   # the third block reads back the setpoint words
     out = ad.read()
     assert all(r.quality == Quality.GOOD for r in out.values())
     assert out["max_power_kw"].value == 0.0 and out["comm_error"].value is False

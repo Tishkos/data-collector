@@ -40,4 +40,18 @@ points:
   - {id: inverters_standby,    unit: "",   raw: {address: 1189, kind: int32}}
   - {id: inverters_faulty,     unit: "",   raw: {address: 1193, kind: int32}}
   - {id: inverters_alarm,      unit: "",   raw: {address: 1195, kind: int32}}
+  # Read-back of the registers the Neo writes (FC03 on the same addresses; nothing is written). Each
+  # register is read as its own 16-bit word so the layout shows as it is: the Neo's group 1 session writes
+  # "AP Set" as a 32-bit value at 2100-2101 every second, its group 2 session writes the same datapoint at
+  # 2101-2102 every 10 s (archive of 14 Oct), so the words are expected to move. 'edge: true' puts every
+  # change of these in the trace's event log.
+  - {id: set_2100, unit: "", raw: {address: 2100, kind: uint16, edge: true}, description: "AP Set word 0 (group 1 session)"}
+  - {id: set_2101, unit: "", raw: {address: 2101, kind: uint16, edge: true}, description: "AP Set word 1 (group 1) / word 0 (group 2)"}
+  - {id: set_2102, unit: "", raw: {address: 2102, kind: uint16, edge: true}, description: "RP Set word 0 (group 1) / AP Set word 1 (group 2)"}
+  - {id: set_2103, unit: "", raw: {address: 2103, kind: uint16, edge: true}, description: "RP Set word 1 (group 1) / word 0 (group 2)"}
+  - {id: set_2104, unit: "", raw: {address: 2104, kind: uint16, edge: true}, description: "RP Set word 1 (group 2)"}
+  - {id: set_2105, unit: "", raw: {address: 2105, kind: uint16, edge: true}, description: "PF Set word 0 (group 2)"}
+  - {id: set_2106, unit: "", raw: {address: 2106, kind: uint16, edge: true}, description: "PF Set word 1 (group 2)"}
+  - {id: mode_1007, unit: "", raw: {address: 1007, kind: uint16, edge: true}, description: "Reactive power scheduling mode (group 1 session writes it)"}
+  - {id: mode_1008, unit: "", raw: {address: 1008, kind: uint16, edge: true}, description: "Reactive power scheduling mode (group 2 session writes it)"}
   - {id: comm_error,           type: boolean, raw: {derived: comm_error}, description: "set by the collector: SAU not answering"}

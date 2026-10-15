@@ -75,6 +75,10 @@ devices:
   # - {id: gen-04,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.114, port: 502, unit_id: 1, timeout: 3}}
   # - {id: gen-05,  profile: ig4_genset.yaml,     adapter: modbus_tcp, connection: {host: 192.168.0.115, port: 502, unit_id: 1, timeout: 3}}
 
+# --- probe: the hosts PROBE-PLANT.bat tries besides the devices above (one read of one register) ---
+probe:
+  hosts: [192.168.0.105, 192.168.0.106, 192.168.0.113, 192.168.0.114, 192.168.0.115]
+
 # --- Publishing for the DT Turkey / CCI monitoring platform ------------------------------------
 # A read-only Modbus TCP server on this PC with all tags of profiles/tag_catalog.yaml at fixed
 # registers (map: docs/TURKEY_MODBUS.md, or GET /api/v1/tags/registers). Their platform polls

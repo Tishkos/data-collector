@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import struct
 import threading
+import time
 from datetime import datetime, timezone
 
 from pymodbus.client import ModbusTcpClient
@@ -85,6 +86,9 @@ class ModbusTcpAdapter(Adapter):
         self.address_offset = int(c.get("address_offset", 0))
         self._client = shared_client(c["host"], int(c.get("port", 502)), float(c.get("timeout", 3)))
         self._blocks = self._plan_blocks(device.points)
+        self.last_ok_blocks = 0                 # statistics of the last read(), for the trace
+        self.last_failed_blocks = 0
+        self.last_ms = 0.0
 
     @staticmethod
     def _plan_blocks(points: list[PointDefinition]) -> list[tuple[str, int, int, list[PointDefinition]]]:
@@ -120,6 +124,13 @@ class ModbusTcpAdapter(Adapter):
             return self._read()
 
     def _read(self) -> dict[str, Reading]:
+        t0 = time.perf_counter()
+        try:
+            return self._read_blocks()
+        finally:
+            self.last_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    def _read_blocks(self) -> dict[str, Reading]:
         out: dict[str, Reading] = {}
         now = datetime.now(timezone.utc)
         derived = []
@@ -165,6 +176,7 @@ class ModbusTcpAdapter(Adapter):
                     out[p.id] = reading(p, val, ts=now)
                 except Exception as exc:
                     out[p.id] = reading(p, None, Quality.BAD, f"decode: {exc}", now)
+        self.last_ok_blocks, self.last_failed_blocks = ok_blocks, failed_blocks
         for p in derived:
             if p.raw.get("derived") == "comm_error":   # the device answered nothing this poll
                 if not self._blocks:                    # nothing mapped yet: nothing was asked, so unknown

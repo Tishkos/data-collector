@@ -14,6 +14,8 @@ STOP.bat             stop the collector
 UNINSTALL.bat        remove it from Windows startup (the data stays)
 OPEN-DASHBOARD.bat   http://localhost:8080
 RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows every message; stops when closed)
+PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
+TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 2 s SAU, response times, event log (Ctrl+C stops)
 ```
 
 If port 8080 is taken by another program, the dashboard takes the next free port and writes its
@@ -70,6 +72,16 @@ window, until the window is closed.
 
 Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, never more often, saved in `data\settings.json`), or `poll_interval_s` in `config\site.plant.yaml`. "Read devices now" in the top bar reads everything once, at any time.
 
+## Event studies: the trace
+
+The hourly collector is for the Turkey platform. For questions like "what happens in the ten seconds of a
+PV logger comm fail", `TRACE-PLANT.bat` runs a separate, read-only trace in a console window: the master
+every second, the SAU array every two seconds (the setpoint registers the master writes are read back word
+by word), the response time of every read, a fresh-connection test every minute, and an event log of every
+bit that changes. Files land in `data\trace\` (one set per day, CSV), nothing goes into the database.
+Other intervals: `python -m plantcollector.cli --config config\site.plant.yaml --data data trace --every neo-01=1 --every pv-array=1`.
+The SAU allows five Modbus TCP links in all and the master uses two, so one trace at a time.
+
 ## Folder map
 
 ```
@@ -96,6 +108,8 @@ tools\neo_plc.py                    lists and executes the controller's PLC prog
 tools\neo_plc_change01.py           builds the modified sheets of change 01 (docs\changes) in InteliConfig's export format
 tools\plant_model.py                runs a day of the plant under today's settings and proposed changes
 tools\plant_diagram.py              draws docs\plant_overview.svg
+plantcollector\trace.py             the trace and the probe (read-only, own files)
+docs\site\visit_checklist.md        the read-only export steps for a site or remote session
 tools\neo_history.py                turns a History export into CSV tables
 tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks
 docs\SAFETY.md                      why it cannot touch the plant
