@@ -236,3 +236,91 @@ def build(before_png, after_png):
 
 if __name__ == "__main__":
     print(build(sys.argv[1], sys.argv[2]))
+
+
+# ------------------------------------------------------------------------------------------ one-page version
+ONE_PAGE_TEXT = [
+    ("What happens today", "Every tenth of a second the controller decides how much it wants from the solar plant and writes it to the "
+     "SAU. Sheet 10 is the last stage: it keeps the request within 100 kW of what the inverters already give, ramps it, "
+     "sends it. It also holds a small switch, Item 76. Normally the request passes through; but the moment either PV "
+     "logger session misses a single reply, the switch flips to its other position, which is a fixed zero. The inverters "
+     "obey within seconds, the gensets jump from 25 percent to the whole plant, the UPS breakers are shed, and the solar "
+     "then needs about five minutes to climb back, 100 kW at a time. Five to thirty times a day in the history. And the "
+     "zero never reaches the logger while the link is down; it arrives when the link is back, when there is nothing left "
+     "to protect."),
+    ("The change", "We leave the switch, the ramp and every protection. The switch's second input is wired to its own output "
+     "instead of the fixed zero, so when a reply is missed it simply repeats the last value it sent. The inverters see no "
+     "drop, the gensets see no step. The block in front of it, Item 68, no longer fires on a request of zero (that guard "
+     "would now keep an old value when the controller really wants zero), only on the two comm fail signals. And one new "
+     "timer raises a flag, PV comm lost, after five minutes of silence, for an alarm now and, if the plant agrees later, "
+     "for opening the PV breakers from sheet 3."),
+    ("Is holding safe?", "While the link is down the inverters keep their last setpoint in both programs; the old zero never "
+     "had a say. The gensets keep 25 percent of their nominal in hand (788 kW with three running) against a load drop, "
+     "the controller's own protections do not depend on the logger, and after five minutes the flag is up."),
+    ("Checked", "The whole program was run block by block against the plant's history. With a healthy link the new sheet "
+     "gives the same outputs as the old one, to the kilowatt. On 14 October it removes three of the eleven UPS sheddings "
+     "and gives back about 350 kWh of solar; the rest was the OFF/AUTO toggles."),
+    ("Loading, testing, the way back", "Copy of the archive, import sheet10_PV_req_step_protection_v2_const.xml, "
+     "check the three marked places, compare, save as a new archive. Test at low load with the plant's agreement: SAU "
+     "cable out 30 s, the solar must not move; out 6 min, the flag comes up, the UPS stay. Undo: the 14 October archive, "
+     "or the constant 0.0 kW back on the switch."),
+]
+
+
+def one_page(before_png, after_png):
+    p = Page(A4L)
+    p.text(TITLE, font(SERIF_B, 27), gap=6, after=4, width=A4L[0] - 2 * MARGIN)
+    p.text(SUB, font(SERIF_I, 16), color=GREY, after=10)
+    p.rule(after=16)
+    top = p.y
+    col_w = 790
+    body, head = font(SERIF, 17), font(SERIF_B, 19)
+    for h, para in ONE_PAGE_TEXT:
+        p.heading(h, head, color=RED, after=6)
+        p.text(para, body, width=col_w, gap=6, after=10)
+    # right column: crops of the two screenshots
+    rx = MARGIN + col_w + 40
+    rw = A4L[0] - MARGIN - rx
+    nf, bf, cf = font(SANS_B, 16), font(SERIF, 16), font(SERIF_B, 19)
+
+    def crop_block(img_path, box, boxes, title, notes, y):
+        im = Image.open(img_path).convert("RGB").crop(box)
+        s = rw / im.width
+        im = im.resize((rw, round(im.height * s)), Image.LANCZOS)
+        p.d.text((rx, y), title, fill=RED, font=cf)
+        y += 30
+        p.im.paste(im, (rx, y))
+        p.d.rectangle([rx, y, rx + im.width, y + im.height], outline=(205, 200, 192), width=2)
+        for (x0, y0, x1, y1, n) in boxes:
+            X0, Y0, X1, Y1 = rx + (x0 - box[0]) * s, y + (y0 - box[1]) * s, rx + (x1 - box[0]) * s, y + (y1 - box[1]) * s
+            p.d.rectangle([X0, Y0, X1, Y1], outline=RED, width=3)
+            cx, cy = X0 - 12, (Y0 + Y1) / 2
+            p.d.ellipse([cx - 12, cy - 12, cx + 12, cy + 12], fill=RED)
+            p.d.text((cx - 5, cy - 10), str(n), fill="white", font=nf)
+        y += im.height + 8
+        for n, text in notes:
+            p.d.ellipse([rx, y + 1, rx + 22, y + 23], fill=RED)
+            p.d.text((rx + 6, y + 2), str(n), fill="white", font=nf)
+            for line in wrap(text, bf, rw - 34):
+                p.d.text((rx + 30, y), line, fill=INK, font=bf)
+                y += 22
+            y += 6
+        return y + 10
+
+    y = top
+    y = crop_block(before_png, (430, 290, 1420, 700), [(455, 540, 600, 562, 1), (1215, 346, 1300, 366, 2)], "Today",
+                   [(1, "Item 68 fires on a missed reply, and also on a request of zero or below."),
+                    (2, "Item 76: the second position is a fixed 0.0 kW. That is what goes out.")], y)
+    y = crop_block(after_png, (430, 300, 1420, 710), [(462, 528, 600, 560, 1), (1138, 362, 1290, 382, 2)], "After the change",
+                   [(1, "Item 68 reacts only to ECU 2 and ECU 3 comm fail."),
+                    (2, "The switch (now Item 77) has its own output on its second input: it holds the last value.")], y)
+    y = crop_block(after_png, (230, 1555, 1100, 1700), [(330, 1565, 425, 1690, 3)], "",
+                   [(3, "New: Item 65, a 300 s timer on PV comm fail, raises the flag PV comm lost (sheet output 5).")], y - 30)
+    out = os.path.join(OUT, "change-01_one_page.pdf")
+    p.im.save(out, "PDF", resolution=150)
+    p.im.save(out.replace(".pdf", ".png"))
+    return out
+
+
+if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--one-page":
+    print(one_page(sys.argv[1], sys.argv[2]))
