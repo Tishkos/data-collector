@@ -105,7 +105,13 @@ Scenarios on the page (today by hand, change 01 v3, change 01 v2 with stage 2, p
 20 %, AUTO with the PLC and UPS fixes, two gensets in the sun, AUTO with two sets minimum, a grid day) each start
 from zero with a fresh program and plant; "reset" does the same for the current one. Counters since the start:
 solar used, available and thrown away, genset kWh, fuel (model), comm fails, setpoints forced to 0, warnings,
-UPS sheds, min and max gen load.
+UPS sheds, min and max gen load, seconds in reverse power, reverse power trips, minutes with the plant dark.
+
+The previous integrator's example is a button: "link lost, load drops 800 kW" (and 1,200 kW, and the one-session
+variant). The gensets' reverse power protection is in the model as an assumed 5 % for 5 s until the IG4 settings are
+read; a trip opens the gensets and the plant goes dark for three minutes, so it counts. Random production steps
+(chillers, lines) come and go on their own, size and rate adjustable, so the test is not hand-picked. Hovering the
+chart gives every line's name and value at that second.
 
 ## Folder map
 

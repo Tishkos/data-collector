@@ -132,3 +132,35 @@ def test_scenarios_reset_and_counters():
     p.reset()
     assert p.snapshot == {} and p.load_offset == 0 and p.totals["seconds"] == 0 and p.t == 10 * 3600
     assert [x["name"] for x in plc_lab.SCENARIOS][1].startswith("Change 01 v3")
+
+
+def test_integrators_example_and_the_assumed_reverse_power_trip():
+    """His example: 1 MW of solar, the link lost, the load drops at the same time. With both sessions silent the zero
+    cannot reach the SAU in either program, so the exposure is the same; with one session alive today's program
+    delivers the zero through the other session within 10 s and the hold does not."""
+    def case(scenario, what, kw):
+        p = plc_lab.LivePlant(start_hour=11.0)
+        p.apply_scenario(scenario)
+        p.params["load_events"] = 0
+        p.params["load_noise"] = 0
+        run(p, 120)
+        p.inject(what, kw)
+        lows = []
+        for _ in range(90):
+            p._tick()
+            lows.append(p.snapshot["gen_kw"])
+        return min(lows), p.snapshot["totals"]["rp_trips"]
+    today, v3 = plc_lab.SCENARIOS[0]["name"], plc_lab.SCENARIOS[1]["name"]
+    assert case(today, "integrator_both", 1200)[1] == 1 and case(v3, "integrator_both", 1200)[1] == 1   # both trip: the zero cannot get through
+    low_today, trips_today = case(today, "integrator_one", 800)
+    low_v3, trips_v3 = case(v3, "integrator_one", 800)
+    assert low_today > 150 and trips_today == 0                                          # the zero arrives through session 2
+    assert low_v3 < 50 and trips_v3 == 0                                                 # the hold keeps the solar up: exposure, below the trip level
+
+
+def test_random_production_steps_appear_and_pass():
+    p = plc_lab.LivePlant(start_hour=11.0)
+    p.params["load_event_minutes"] = 0.5
+    run(p, 600)
+    assert any("production step" in e[1] for e in p.events)
+    assert p.snapshot["load"] > 0

@@ -96,7 +96,11 @@ bound. **Status: parked until the collector has two weeks of data; then back wit
 margin.** Reverse power: the held value is at most 100 kW above the inverters' output at that moment (step
 protection), the gensets sit around 25 % (about 788 kW with three sets), so reverse power inside a 60 s
 hold needs a load drop of roughly 700 kW within that minute; load steps are not measured; IG4 reverse-power
-settings are unread. Never claim the IG4 protection "covers" it.
+settings are unread. Never claim the IG4 protection "covers" it. The lab shows the honest picture: with both
+sessions silent the zero cannot reach the SAU in either program, so the exposure in that window is the same today
+as with the hold; with one session alive today's program delivers the zero through the other session within 10 s
+and the hold does not, which is the hold's real cost. A possible v4: hold, but lower the held value by the amount
+the gensets fall below Gen P Min (genset kW comes over CAN, not from the SAU), which answers the example directly.
 
 ## 6. Tools in this repository
 
@@ -108,7 +112,7 @@ settings are unread. Never claim the IG4 protection "covers" it.
 | Read the master's archive (plain parts) | `tools/neo_archive.py` |
 | List and execute the PLC program | `tools/neo_plc.py` (`--out`, `--demo`) |
 | Run a day of the plant | `tools/plant_model.py` (scenarios S0-S6, days) |
-| The PLC lab: plant and program live in the browser, every sheet with live pin values, events injectable; `--replay` runs the program on a recorded trace | `PLC-LAB.bat` (`tools/plc_lab.py`) -> http://localhost:8090 |
+| The PLC lab: plant and program live in the browser, every sheet with live pin values, scenarios, the integrator's example, an assumed reverse-power trip, random production steps; `--replay` runs the program on a recorded trace | `PLC-LAB.bat` (`tools/plc_lab.py`) -> http://localhost:8090 |
 | Build the change-01 sheets | `tools/neo_plc_change01.py` |
 | The request PDF | `tools/change01_note.py` |
 | Plant drawing | `tools/plant_diagram.py` -> `docs/plant_overview.svg` |

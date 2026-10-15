@@ -64,6 +64,11 @@ DEFAULT_PARAMS = dict(
     load_noise=1.0,          # ASSUMED: slow random load variation, % of load
     cloud_edge_s=20.0,       # ASSUMED: a cloud edge takes this long to pass
     writes_through_silence=0,  # HYPOTHESIS: 1 = a write still lands in the SAU while it gives no replies
+    rp_trip_pct=5.0,         # ASSUMED: IG4 reverse power protection, % of running nominal (the real setting is unread)
+    rp_delay_s=5.0,          # ASSUMED: its delay
+    load_events=1,           # ASSUMED: random production load steps on/off (chillers, compressors, lines)
+    load_event_minutes=10.0, # ASSUMED: one such step every N minutes on average
+    load_event_kw=400.0,     # ASSUMED: largest step, kW (sizes uniform up to this, either direction)
 )
 
 
@@ -141,9 +146,13 @@ class LivePlant:
         self.fault_reset_pending = False
         self.start_timer = self.stop_timer = 0
         self.ups_shed_timer = [0.0, 0.0]
+        self.load_events_list = []                         # (start, end, kw): production steps, random or injected
+        self.rp_timer = 0.0
+        self.tripped_until = -1.0
         self.schedule = []                                 # (t, what, value) from the 14 October replay
         self.totals = dict(seconds=0, pv_used_kwh=0.0, pv_available_kwh=0.0, gen_kwh=0.0, fuel_l=0.0, comm_fails=0,
-                           zero_setpoints=0, warnings=0, ups_sheds=0, min_gen_load_pct=None, max_gen_load_pct=0.0)
+                           zero_setpoints=0, warnings=0, ups_sheds=0, min_gen_load_pct=None, max_gen_load_pct=0.0,
+                           rp_seconds=0, rp_trips=0, blackout_s=0)
         self._prev_comm_any = False
         # a steady start: the regulator already sits where it keeps the gensets at Gen P Min
         if not self.replay:
@@ -154,7 +163,7 @@ class LivePlant:
             self.curtail = 0.0 if self.on_grid() else max(0.0, min(100.0, wanted / pm.SAU_MAX_AVAILABLE_KW * 100))
             self.pv_actual = self.sau_value = self.sau_reading = self.received_setpoint = wanted
         self.hist = {k: deque(maxlen=HISTORY_S) for k in ("t", "load", "pv_available", "pv_actual", "setpoint", "received", "request",
-                                                            "gen_kw", "gen_load_pct", "comm", "silent", "recorded_setpoint")}
+                                                            "gen_kw", "gen_load_pct", "comm", "silent", "recorded_setpoint", "rp_limit", "tripped")}
         self.events = deque(maxlen=200)
         self._last_bits = {}
         self.ticks = 0
@@ -251,7 +260,12 @@ class LivePlant:
         if P["load_noise"] > 0:
             self.load_noise_kw += self.rnd.gauss(0, 3) - 0.02 * self.load_noise_kw
         base_load = pm.load_profile_kw(int(minute))
-        load = base_load + self.load_offset + self.load_noise_kw * P["load_noise"]
+        if P["load_events"] and not warm and self.rnd.random() < dt / max(60.0, 60 * P["load_event_minutes"]):
+            kw = self.rnd.uniform(0.25, 1.0) * P["load_event_kw"] * self.rnd.choice((-1, 1))
+            self.load_events_list.append((self.t, self.t + self.rnd.uniform(60, 600), kw))
+            self.log(f"production step {kw:+.0f} kW")
+        self.load_events_list = [e for e in self.load_events_list if e[1] + 30 > self.t]
+        load = base_load + self.load_offset + self.load_noise_kw * P["load_noise"] + self._load_events_kw()
         avail = pm.pv_available_kw(minute, self.day, []) * self._cloud_factor()
         on_grid = self.on_grid()
         if self.grid_override is None and on_grid != pm.grid_on((self.t - dt) / 60, self.day):
@@ -279,8 +293,27 @@ class LivePlant:
         neo_pv_term = self.sau_reading if (pv_live or self.ups_math_fix) else 0.0
         shed_load = sum(sc.ups_critical_share * load for i in range(2) if not self.ups_closed[i])
         load_on_bus = load - shed_load
-        gen_kw = 0.0 if on_grid else max(0.0, load_on_bus - self.pv_actual)
+        tripped = self.t < self.tripped_until
+        if tripped:                                           # the gensets tripped on reverse power: the plant is dark
+            self.pv_actual = 0.0
+            gen_kw = 0.0
+        else:
+            gen_kw = 0.0 if on_grid else load_on_bus - self.pv_actual     # negative = reverse power into the gensets
         mains_each = (load_on_bus - self.pv_actual) / 3 if on_grid else 0.0
+        if not on_grid and run_nom and gen_kw < -P["rp_trip_pct"] / 100 * run_nom:
+            self.rp_timer += dt
+            if not warm:
+                self.totals["rp_seconds"] += dt
+            if self.rp_timer >= P["rp_delay_s"] and not tripped:
+                self.tripped_until = self.t + 180
+                if not warm:
+                    self.totals["rp_trips"] += 1
+                self.log(f"REVERSE POWER TRIP: gensets at {gen_kw:.0f} kW for {P['rp_delay_s']:g} s, plant dark for 3 min")
+                self.rp_timer = 0.0
+        else:
+            self.rp_timer = 0.0
+        if tripped and not warm:
+            self.totals["blackout_s"] += dt
         inputs = plant_inputs(pv_kw=self.sau_reading, max_avail_kw=pm.SAU_MAX_AVAILABLE_KW, curtailment_pct=self.curtail,
                               gensets_kw=gen_kw, running_nominal_kw=run_nom, mains_import_kw=(mains_each,) * 3,
                               on_grid=on_grid, gens_loaded=self.running, pv_cb=tuple(self.pv_cb), ups_fb=tuple(self.ups_closed),
@@ -335,13 +368,15 @@ class LivePlant:
         self.ticks += 1
         gl = 100 * gen_kw / run_nom if run_nom else 0.0
         self._totals(dt, avail, gen_kw, run_nom, gl, comm)
-        self._record(load, avail, setpoint, request, gen_kw, gl, comm_any, any(silent), None)
+        self._record(load, avail, setpoint, request, gen_kw, gl, comm_any, any(silent), None, run_nom)
         self.snapshot = dict(clock=self._clock(), load=round(load), pv_available=round(avail), pv_actual=round(self.pv_actual),
                              setpoint=round(setpoint, 1), received=round(self.received_setpoint, 1), request=round(request, 1),
                              gen_kw=round(gen_kw), run_nom=round(run_nom), gen_load_pct=round(gl, 1), gensets=self.running,
                              on_grid=on_grid, curtail=round(self.curtail, 1), pv_cb=self.pv_cb, ups=self.ups_closed, comm=comm,
                              silent=[int(s) for s in silent], pvcb_close=pvcb_close, warning=int(bool(plc.get(10433, 2))),
-                             latch=int(bool(plc.get(10424, 4))), replay=False)
+                             latch=int(bool(plc.get(10424, 4))), replay=False, tripped=int(tripped),
+                             rp_limit_kw=round(-P["rp_trip_pct"] / 100 * run_nom) if run_nom else None,
+                             load_events=[(round(kw), round(max(0.0, b - self.t))) for (a, b, kw) in self.load_events_list if a <= self.t <= b])
         self.snapshot["totals"] = self._totals_view()
         self._edges(comm)
 
@@ -351,7 +386,17 @@ class LivePlant:
                     pv_curtailed_kwh=round(max(0.0, T["pv_available_kwh"] - T["pv_used_kwh"])), gen_kwh=round(T["gen_kwh"]),
                     fuel_l=round(T["fuel_l"]), comm_fails=T["comm_fails"], zero_setpoints=T["zero_setpoints"], warnings=T["warnings"],
                     ups_sheds=T["ups_sheds"], min_gen_load_pct=None if T["min_gen_load_pct"] is None else round(T["min_gen_load_pct"], 1),
-                    max_gen_load_pct=round(T["max_gen_load_pct"], 1))
+                    max_gen_load_pct=round(T["max_gen_load_pct"], 1), rp_seconds=round(T["rp_seconds"]), rp_trips=T["rp_trips"],
+                    blackout_min=round(T["blackout_s"] / 60, 1))
+
+    def _load_events_kw(self) -> float:
+        total = 0.0
+        for (a, b, kw) in self.load_events_list:
+            if a <= self.t <= b:
+                ramp = 15.0
+                f = min(1.0, (self.t - a) / ramp, max(0.0, (b - self.t) / ramp) if b - self.t < ramp else 1.0)
+                total += kw * f
+        return total
 
     def _totals(self, dt, avail, gen_kw, run_nom, gl, comm):
         T = self.totals
@@ -393,11 +438,13 @@ class LivePlant:
         else:
             self.stop_timer = 0
 
-    def _record(self, load, avail, setpoint, request, gen_kw, gl, comm_any, silent_any, recorded_setpoint):
+    def _record(self, load, avail, setpoint, request, gen_kw, gl, comm_any, silent_any, recorded_setpoint, run_nom=0.0):
+        rp = -self.params["rp_trip_pct"] / 100 * run_nom if run_nom else None
         for k, v in (("t", self._clock()), ("load", round(load)), ("pv_available", round(avail)), ("pv_actual", round(self.pv_actual)),
                      ("setpoint", round(setpoint)), ("received", round(self.received_setpoint)), ("request", round(request)),
                      ("gen_kw", round(gen_kw)), ("gen_load_pct", round(gl, 1)), ("comm", int(comm_any)), ("silent", int(silent_any)),
-                     ("recorded_setpoint", recorded_setpoint)):
+                     ("recorded_setpoint", recorded_setpoint), ("rp_limit", None if rp is None else round(rp)),
+                     ("tripped", int(self.t < self.tripped_until))):
             self.hist[k].append(v)
 
     def _edges(self, comm):
@@ -485,6 +532,14 @@ class LivePlant:
                 self.clouds = [c for c in self.clouds if c[1] + 60 > self.t]
             elif what == "load":
                 self.load_offset += value
+            elif what == "load_event":                       # a production step of value kW for 3 minutes
+                self.load_events_list.append((self.t, self.t + 180, value))
+            elif what in ("integrator_both", "integrator_one"):   # his example: 1 MW of solar, link lost, load drops at the same time
+                n = 60.0
+                self.silent_until[0] = self.t + n
+                if what == "integrator_both":
+                    self.silent_until[1] = self.t + n
+                self.load_events_list.append((self.t + 12, self.t + 12 + 180, -(value or 800)))
             elif what == "off":
                 self.off_until = self.t + (value or 60)
             elif what == "grid":
@@ -615,148 +670,228 @@ def _key(p):
 
 # ---- web ------------------------------------------------------------------------------------------------
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>PLC lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-:root{--bg:#f4f5f3;--fg:#1d2229;--muted:#5c6570;--panel:#fff;--rule:#d6d9d4;--on:#1f5fbf;--warn:#a86d00;--bad:#b3261e}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 'Segoe UI',system-ui,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--rule)}
-header b{font-size:16px}
-.num{display:inline-block;min-width:92px}.num span{display:block;color:var(--muted);font-size:11px}
-.num strong{font-size:18px;font-variant-numeric:tabular-nums}
-.bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;border-bottom:1px solid var(--rule);align-items:center}
-.bar label{font-size:12px;color:var(--muted)}
-button,select,input{font:13px 'Segoe UI',system-ui,sans-serif;padding:4px 10px;border:1px solid var(--rule);background:var(--panel);border-radius:3px;cursor:pointer}
-input{width:64px;cursor:text}
-button.on{background:var(--on);color:#fff;border-color:var(--on)}
-main{display:grid;grid-template-columns:1fr 280px;gap:0}
-#chart{width:100%;height:170px;display:block;background:var(--panel);border-bottom:1px solid var(--rule)}
-#sheet{overflow:auto;background:var(--panel);min-height:600px}
-aside{border-left:1px solid var(--rule);padding:8px 12px;font-size:12px;overflow:auto;max-height:calc(100vh - 260px)}
-aside div{padding:2px 0;border-bottom:1px dotted var(--rule);font-variant-numeric:tabular-nums}
-.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:6px 16px;background:var(--bg)}
-.tabs button.on{background:var(--fg);border-color:var(--fg)}
-svg text{font:11px 'Segoe UI',system-ui,sans-serif}
-.blk{fill:#fbfbfa;stroke:#1d2229;stroke-width:1}
-.pin1{fill:var(--on);font-weight:600}.pin0{fill:var(--muted)}.pinv{fill:#1d2229}
-.wire{fill:none;stroke:#1f5fbf;stroke-width:1.2;opacity:.75}
+:root{--bg:#eef0ea;--panel:#ffffff;--ink:#1b2027;--muted:#6b7480;--rule:#d9dcd6;--soft:#f6f7f3;
+ --load:#1b2027;--avail:#a7adb5;--solar:#2f8f46;--set:#2457c5;--rec:#7b3fa0;--gen:#c03a2b;--amber:#b8860b;--ok:#2f8f46;
+ --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;--mono:'IBM Plex Mono',Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
+header{display:flex;align-items:center;gap:18px;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:5}
+header h1{font-size:17px;font-weight:600;margin:0;letter-spacing:.2px}
+header .sc{color:var(--muted);font-size:13px;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:500;background:var(--soft);border:1px solid var(--rule)}
+.pill.ok{color:var(--ok);border-color:#bfe0c6;background:#eef8f0}.pill.silent{color:var(--amber);border-color:#ead9a6;background:#fbf5e3}
+.pill.fail{color:#fff;background:var(--amber);border-color:var(--amber)}.pill.trip{color:#fff;background:var(--gen);border-color:var(--gen)}
+.clock{font:500 20px var(--mono);margin-left:auto}
+.spd button{min-width:40px}
+.wrap{display:grid;grid-template-columns:330px 1fr;gap:14px;padding:14px 20px}
+@media(max-width:1100px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:6px}
+.card h2{font-size:12px;font-weight:600;color:var(--muted);margin:0;padding:10px 14px 6px;letter-spacing:.3px}
+.controls .group{padding:4px 14px 12px;border-bottom:1px solid var(--rule)}
+.controls .group:last-child{border-bottom:0}
+.controls .row{display:flex;flex-wrap:wrap;gap:6px}
+button,select,input{font:13px var(--sans);padding:5px 10px;border:1px solid var(--rule);background:var(--soft);color:var(--ink);border-radius:4px;cursor:pointer}
+button:hover{border-color:#b9bfb8;background:#fff}
+button.on{background:var(--set);color:#fff;border-color:var(--set)}
+button.danger{border-color:#e4b1aa;background:#fbefed;color:#8a2a1f}
+button.wide{width:100%;text-align:left}
+select{width:100%;background:#fff}
+input{width:70px;cursor:text;background:#fff;font-family:var(--mono)}
+.knob{display:grid;grid-template-columns:1fr 76px;align-items:center;gap:6px;padding:3px 0;font-size:12px;color:var(--muted)}
+.knob small{display:block;color:#9aa1aa;font-size:11px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px 10px}
+.kpi span{display:block;font-size:11px;color:var(--muted)}
+.kpi strong{font:500 20px var(--mono);display:block;margin-top:2px}
+.kpi strong i{font:12px var(--sans);color:var(--muted);font-style:normal;margin-left:3px}
+.kpi.solar strong{color:var(--solar)}.kpi.set strong{color:var(--set)}.kpi.gen strong{color:var(--gen)}
+.chartcard{padding:0 0 8px;margin-bottom:14px;position:relative}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 14px 4px;font-size:12px;color:var(--muted)}
+.legend span{cursor:pointer;display:inline-flex;align-items:center;gap:6px;user-select:none}
+.legend span.off{opacity:.35}
+.legend i{display:inline-block;width:18px;height:0;border-top:3px solid currentColor}
+.legend i.dash{border-top-style:dashed}
+.legend b{display:inline-block;width:14px;height:12px;border-radius:2px}
+#chart{width:100%;height:260px;display:block;cursor:crosshair}
+#tip{position:absolute;pointer-events:none;display:none;background:#1b2027;color:#fff;font:12px var(--mono);padding:8px 10px;border-radius:5px;line-height:1.5;min-width:210px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+#tip b{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+#tip .t{font-family:var(--sans);color:#c9ced6;margin-bottom:3px}
+.note{padding:6px 14px 2px;color:var(--muted);font-size:13px}
+.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;padding:4px 8px 10px}
+.totals div{padding:6px 8px}
+.totals span{display:block;font-size:11px;color:var(--muted)}
+.totals strong{font:500 16px var(--mono)}
+.sheetcard{margin-top:14px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:6px 14px;border-bottom:1px solid var(--rule);align-items:center}
+.tabs button{font-size:12px;padding:3px 8px}
+.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tabs .zoom{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sheetwrap{display:grid;grid-template-columns:1fr 290px}
+@media(max-width:1100px){.sheetwrap{grid-template-columns:1fr}}
+#sheet{overflow:auto;min-height:560px;max-height:75vh;background:#fcfcfa}
+#sheet svg{transform-origin:0 0}
+svg text{font:11px var(--sans)}
+.blk{fill:#fff;stroke:#2a313a;stroke-width:1}
+.blkhdr{fill:#eef0ea}
+.pin1{fill:var(--set);font-weight:600}.pin0{fill:#9aa1aa}.pinv{fill:var(--ink);font-family:var(--mono)}
+.wire{fill:none;stroke:var(--set);stroke-width:1.3;opacity:.65}
+.wire:hover{opacity:1;stroke-width:2.4}
 .hdr{font-weight:600}
-#replay{color:var(--warn);font-weight:600}
+.events{border-left:1px solid var(--rule);padding:8px 12px;font-size:12px;overflow:auto;max-height:75vh}
+.events div{padding:3px 0;border-bottom:1px dotted var(--rule)}
+.events time{font-family:var(--mono);color:var(--muted);margin-right:6px}
+.events .bad{color:var(--gen);font-weight:600}.events .warn{color:var(--amber)}
+.replay{color:var(--amber);font-weight:500}
+details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
 </style></head><body>
-<header><b>PLC lab</b> <span id="replay"></span>
-<span class="num"><span>time</span><strong id="clock">--:--:--</strong></span>
-<span class="num"><span>load kW</span><strong id="load">-</strong></span>
-<span class="num"><span>solar available</span><strong id="pv_available">-</strong></span>
-<span class="num"><span>solar actual</span><strong id="pv_actual">-</strong></span>
-<span class="num"><span>setpoint computed</span><strong id="setpoint">-</strong></span>
-<span class="num"><span>setpoint at SAU</span><strong id="received">-</strong></span>
-<span class="num"><span>gensets kW</span><strong id="gen_kw">-</strong></span>
-<span class="num"><span>gen load %</span><strong id="gen_load_pct">-</strong></span>
-<span class="num"><span>sets / nominal</span><strong id="gensets">-</strong></span>
-<span class="num"><span>curtail %</span><strong id="curtail">-</strong></span>
-<span class="num"><span>SAU silent / comm fail</span><strong id="comm">-</strong></span>
-<span class="num"><span>PV CB / UPS</span><strong id="cbs">-</strong></span>
-<span class="num"><span>warning</span><strong id="warning">-</strong></span>
+<header><h1>PLC lab</h1><span class="sc" id="scname"></span><span class="pill" id="status">–</span><span class="replay" id="replay"></span>
+<span class="clock" id="clock">--:--:--</span>
+<span class="spd"><button onclick="ctl('pause')" id="pause">pause</button><button onclick="ctl('speed',1)" id="s1">1x</button><button onclick="ctl('speed',10)" id="s10">10x</button><button onclick="ctl('speed',60)" id="s60">60x</button></span>
 </header>
-<div class="bar">
-<label>scenario</label><select id="scenario"></select>
-<button onclick="ctl('reset')">reset, start from zero</button>
-<label>program</label><select id="program"></select>
-<button onclick="ctl('pause')" id="pause">pause</button>
-<label>speed</label><button onclick="ctl('speed',1)">1x</button><button onclick="ctl('speed',10)">10x</button><button onclick="ctl('speed',60)">60x</button>
-<span style="width:12px"></span>
-<button onclick="ctl('comm1',10)">SAU silent g1 10 s</button>
-<button onclick="ctl('comm2',10)">g2 10 s</button>
-<button onclick="ctl('comm12',10)">both 10 s</button>
-<button onclick="ctl('comm12',90)">both 90 s</button>
-<button onclick="ctl('comm12',400)">both 400 s</button>
-<button onclick="ctl('cloud',120)">cloud 50 % 2 min</button>
-<button onclick="ctl('load',300)">load +300</button>
-<button onclick="ctl('load',-300)">load -300</button>
-<button onclick="ctl('off',60)">operator OFF 60 s</button>
-<button onclick="ctl('grid')">grid on/off</button>
-<button onclick="ctl('fault_reset')">fault reset</button>
-<button onclick="ctl('gensets',2)">2 sets</button><button onclick="ctl('gensets',3)">3 sets</button><button onclick="ctl('gensets',4)">4 sets</button>
-<button onclick="ctl('auto_pm')" id="auto_pm">power management AUTO</button>
-<button onclick="ctl('time',8.8)">08:48</button><button onclick="ctl('time',12)">12:00</button>
-<button onclick="ctl('replay14')">replay 14 October from 08:00</button>
-</div>
-<div class="bar" id="params"></div>
-<div class="bar" id="note" style="color:var(--muted)"></div>
-<div class="bar" id="totals"></div>
-<canvas id="chart"></canvas>
-<div class="tabs" id="tabs"></div>
-<main><div id="sheet"></div><aside id="events"></aside></main>
+<div class="wrap">
+<aside class="card controls">
+ <div class="group"><h2>Scenario</h2><select id="scenario"></select>
+  <div class="row" style="margin-top:6px"><button class="wide" onclick="ctl('reset')">Reset: start again from zero</button></div>
+  <div class="knob" style="margin-top:6px"><span>program</span></div><select id="program"></select></div>
+ <div class="group"><h2>Link to the SAU</h2><div class="row">
+  <button onclick="ctl('comm12',10)">silent 10 s</button><button onclick="ctl('comm12',30)">30 s</button><button onclick="ctl('comm12',90)">90 s</button><button onclick="ctl('comm12',400)">400 s</button>
+  <button onclick="ctl('comm1',30)">group 1 only, 30 s</button><button onclick="ctl('comm2',30)">group 2 only, 30 s</button></div>
+  <h2 style="padding-left:0">The integrator's example</h2><div class="row">
+  <button class="danger" onclick="ctl('integrator_both',800)">link lost, load drops 800 kW</button>
+  <button class="danger" onclick="ctl('integrator_one',800)">same, one session alive</button>
+  <button class="danger" onclick="ctl('integrator_both',1200)">link lost, load drops 1,200 kW</button></div></div>
+ <div class="group"><h2>Plant</h2><div class="row">
+  <button onclick="ctl('cloud',120)">cloud 50 %, 2 min</button><button onclick="ctl('cloud',600)">cloud 10 min</button>
+  <button onclick="ctl('load_event',300)">line starts +300 kW</button><button onclick="ctl('load_event',-300)">line stops -300 kW</button>
+  <button onclick="ctl('load',300)">base load +300</button><button onclick="ctl('load',-300)">-300</button>
+  <button onclick="ctl('gensets',2)">2 sets</button><button onclick="ctl('gensets',3)">3 sets</button><button onclick="ctl('gensets',4)">4 sets</button>
+  <button onclick="ctl('auto_pm')" id="auto_pm">power management AUTO</button><button onclick="ctl('grid')">grid on / off</button></div></div>
+ <div class="group"><h2>Operator</h2><div class="row">
+  <button onclick="ctl('off',60)">OFF toggle 60 s</button><button onclick="ctl('fault_reset')">fault reset</button>
+  <button onclick="ctl('time',8.8)">go to 08:48</button><button onclick="ctl('time',12)">12:00</button><button onclick="ctl('time',16.5)">16:30</button>
+  <button onclick="ctl('replay14')">replay 14 October from 08:00</button></div></div>
+ <div class="group"><h2>Settings</h2><details open><summary>what is measured, what is assumed</summary><div id="params"></div></details></div>
+</aside>
+<main>
+ <div class="kpis" id="kpis"></div>
+ <div class="card chartcard">
+  <div class="legend" id="legend"></div>
+  <canvas id="chart"></canvas><div id="tip"></div>
+  <div class="note" id="note"></div>
+ </div>
+ <div class="card"><h2>Since the start</h2><div class="totals" id="totals"></div></div>
+ <div class="card sheetcard"><div class="tabs" id="tabs"></div>
+  <div class="sheetwrap"><div id="sheet"></div><div class="events" id="events"></div></div></div>
+</main></div>
 <script>
-let sheet=10, state=null;
-const PARAMS=[['timeout_s','timeout s (archive 3)'],['retries','retries before comm fail (assumed)'],['inverter_tau_s','inverter response s (assumed)'],
- ['inverter_ramp_kw_s','SAU ramp limit kW/s, 0 = none'],['curtail_rate','regulator %/s per % (calibrated)'],['gen_p_min_pct','Gen P Min %'],
- ['load_noise','load noise x'],['cloud_edge_s','cloud edge s'],['writes_through_silence','writes land while silent 0/1 (hypothesis)']];
+let sheet=10, state=null, zoom=1, hover=null;
+const SERIES=[['load','load','--load',1,[]],['pv_available','solar available','--avail',1,[]],['pv_actual','solar actual','--solar',2.2,[]],
+ ['setpoint','setpoint computed by the program','--set',1.4,[]],['received','setpoint the SAU holds','--set',1.2,[5,4]],['recorded_setpoint','setpoint recorded on site','--rec',1.6,[]],
+ ['gen_kw','gensets','--gen',1.8,[]],['rp_limit','reverse power trip level (assumed)','--gen',1,[2,4]]];
+const hidden=new Set(['rp_limit'===''?'':'']);
+const PARAMS=[['timeout_s','Modbus timeout, s','archive'],['retries','retries before the comm fail','assumed, 6-9 s in all'],['inverter_tau_s','inverter response, s','assumed'],
+ ['inverter_ramp_kw_s','SAU ramp limit, kW/s (0 = none)','assumed'],['curtail_rate','regulator, %/s per % of error','calibrated 14 Oct'],['gen_p_min_pct','Gen P Min, %','setpoint'],
+ ['rp_trip_pct','reverse power trip, % of nominal','assumed, IG4 unread'],['rp_delay_s','reverse power delay, s','assumed'],
+ ['load_events','random production steps (0/1)','assumed'],['load_event_minutes','one step every N minutes','assumed'],['load_event_kw','largest step, kW','assumed'],
+ ['load_noise','load noise x','assumed'],['cloud_edge_s','cloud edge, s','assumed'],['writes_through_silence','writes land while silent (0/1)','hypothesis']];
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v.replace('--','--')).trim();
 async function ctl(what,value){await fetch('/api/control',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({what,value:value||0})});}
-async function poll(){
-  try{const r=await fetch('/api/state?sheet='+sheet); state=await r.json(); render();}catch(e){}
-  setTimeout(poll,300);
-}
+async function poll(){ try{const r=await fetch('/api/state?sheet='+sheet); state=await r.json(); render();}catch(e){} setTimeout(poll,300); }
+function kpi(label,val,unit,cls){return `<div class="kpi ${cls||''}"><span>${label}</span><strong>${val===null||val===undefined?'–':val}<i>${unit||''}</i></strong></div>`;}
 function render(){
   const s=state.plant; if(!s.clock) return;
-  for(const k of ['clock','load','pv_available','pv_actual','setpoint','received','gen_kw','gen_load_pct','curtail']) document.getElementById(k).textContent=(s[k]===null||s[k]===undefined)?'-':s[k];
-  document.getElementById('gensets').textContent=s.gensets+' / '+s.run_nom;
-  document.getElementById('comm').textContent=s.silent.join('')+' / '+s.comm.join('');
-  document.getElementById('cbs').textContent=s.pv_cb.join('')+' / '+s.ups.join('');
-  document.getElementById('warning').textContent=s.warning?'PV prod > req':(s.on_grid?'on grid':'-');
+  document.getElementById('clock').textContent=s.clock;
+  document.getElementById('scname').textContent=state.scenario;
+  const st=document.getElementById('status'); let cls='ok',txt='link OK';
+  if(s.silent&&(s.silent[0]||s.silent[1])){cls='silent';txt='SAU silent '+(s.silent[0]?'g1 ':'')+(s.silent[1]?'g2':'');}
+  if(s.comm[0]||s.comm[1]){cls='fail';txt='COMM FAIL '+(s.comm[0]?'g1 ':'')+(s.comm[1]?'g2':'');}
+  if(s.tripped){cls='trip';txt='REVERSE POWER TRIP, plant dark';}
+  st.className='pill '+cls; st.textContent=txt;
   document.getElementById('pause').textContent=state.paused?'play':'pause';
+  for(const k of [1,10,60]) document.getElementById('s'+k).className=(state.speed==k)?'on':'';
   document.getElementById('auto_pm').className=state.auto_pm?'on':'';
-  document.getElementById('replay').textContent=s.replay?('replay of '+s.replay_file+': the PLC runs on the recorded values; "setpoint at SAU" is the recorded one'):'';
+  document.getElementById('replay').textContent=s.replay?('replay of '+s.replay_file):'';
+  document.getElementById('kpis').innerHTML=kpi('load',s.load,'kW')+kpi('solar available',s.pv_available,'kW')+kpi('solar actual',s.pv_actual,'kW','solar')+
+    kpi('setpoint computed',s.setpoint,'kW','set')+kpi('setpoint at the SAU',s.received,'kW','set')+kpi('gensets',s.gen_kw,'kW','gen')+kpi('gen load',s.gen_load_pct,'%','gen')+
+    kpi('sets / nominal',s.gensets+' / '+s.run_nom,'kW')+kpi('curtailment',s.curtail,'%')+kpi('PV breakers / UPS',s.pv_cb.join('')+' / '+s.ups.join(''),'')+
+    kpi('reverse power trip at',s.rp_limit_kw,'kW')+kpi('warning',s.warning?'PV prod > req':'none','');
   const sc=document.getElementById('scenario');
   if(sc.options.length==0){for(const x of state.scenarios){const o=document.createElement('option');o.value=x.name;o.textContent=x.name;sc.appendChild(o);} sc.onchange=()=>fetch('/api/scenario',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:sc.value})});}
   if(sc.value!=state.scenario) sc.value=state.scenario;
-  const note=(state.scenarios.find(x=>x.name==state.scenario)||{}).note||''; document.getElementById('note').textContent=note;
-  totals(s.totals);
   const sel=document.getElementById('program');
   if(sel.options.length==0){for(const p of state.programs){const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);} sel.onchange=()=>fetch('/api/program',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:sel.value})});}
   if(sel.value!=state.program) sel.value=state.program;
-  params(state.params);
-  chart(state.hist);
-  tabs(state.sheet.sheets);
-  drawSheet(state.sheet);
-  document.getElementById('events').innerHTML=state.events.map(e=>'<div>'+e[0]+' '+e[1]+'</div>').join('');
+  const note=(state.scenarios.find(x=>x.name==state.scenario)||{}).note||'';
+  const ev=(s.load_events||[]).map(e=>`production step ${e[0]>0?'+':''}${e[0]} kW, ${e[1]} s left`).join(' · ');
+  document.getElementById('note').textContent=note+(ev?'   ·   '+ev:'');
+  params(state.params); legend(); chart(state.hist); totals(s.totals); tabs(state.sheet.sheets); drawSheet(state.sheet);
+  document.getElementById('events').innerHTML=state.events.map(e=>{const c=/TRIP/.test(e[1])?'bad':(/comm fail: on|forced to 0/.test(e[1])?'warn':'');return `<div class="${c}"><time>${e[0]}</time>${esc(e[1])}</div>`;}).join('');
 }
-function totals(T){
-  if(!T) return; const d=document.getElementById('totals');
-  const items=[['since start',T.hours+' h'],['solar used',T.pv_used_kwh+' kWh'],['solar available',T.pv_available_kwh+' kWh'],['solar thrown away',T.pv_curtailed_kwh+' kWh'],
-    ['gensets',T.gen_kwh+' kWh'],['fuel (model)',T.fuel_l+' l'],['comm fails',T.comm_fails],['setpoint to 0',T.zero_setpoints],['overproduction warnings',T.warnings],
-    ['UPS sheds',T.ups_sheds],['gen load min / max',(T.min_gen_load_pct===null?'-':T.min_gen_load_pct)+' / '+T.max_gen_load_pct+' %']];
-  d.innerHTML=items.map(([k,v])=>'<span class="num"><span>'+k+'</span><strong style="font-size:15px">'+v+'</strong></span>').join('');
+function legend(){
+  const l=document.getElementById('legend'); if(l.children.length) return;
+  for(const [k,name,col,w,dash] of SERIES){const sp=document.createElement('span');sp.innerHTML=`<i class="${dash.length?'dash':''}" style="color:${css(col)}"></i>${name}`;sp.onclick=()=>{hidden.has(k)?hidden.delete(k):hidden.add(k);sp.className=hidden.has(k)?'off':'';};l.appendChild(sp);}
+  const b=document.createElement('span');b.innerHTML=`<b style="background:rgba(184,134,11,.18)"></b>SAU silent`;l.appendChild(b);
+  const b2=document.createElement('span');b2.innerHTML=`<b style="background:rgba(184,134,11,.4)"></b>comm fail declared`;l.appendChild(b2);
+  const b3=document.createElement('span');b3.innerHTML=`<b style="background:rgba(192,58,43,.25)"></b>plant dark`;l.appendChild(b3);
 }
-function params(p){
-  const d=document.getElementById('params'); if(d.children.length) return;
-  for(const [k,label] of PARAMS){const l=document.createElement('label');l.textContent=label+' ';const i=document.createElement('input');i.value=p[k];i.id='p_'+k;
-    i.onchange=()=>ctl('param:'+k,parseFloat(i.value)); l.appendChild(i); d.appendChild(l);}
-}
+let geo=null;
 function chart(h){
-  const c=document.getElementById('chart'); const W=c.width=c.clientWidth*devicePixelRatio, H=c.height=170*devicePixelRatio; const g=c.getContext('2d');
-  g.clearRect(0,0,W,H); const n=h.load.length; if(n<2) return; const max=Math.max(2200,...h.load,...h.pv_available.filter(v=>v!==null))*1.05;
-  const x=i=>i/(900-1)*W, y=v=>H-v/max*H;
-  for(let i=0;i<n;i++){ if(h.silent[i]){g.fillStyle='rgba(168,109,0,.12)'; g.fillRect(x(i),0,Math.max(1,W/900),H);} if(h.comm[i]){g.fillStyle='rgba(168,109,0,.22)'; g.fillRect(x(i),0,Math.max(1,W/900),H);} }
-  const line=(arr,col,w,dash)=>{g.beginPath();g.setLineDash(dash||[]);g.strokeStyle=col;g.lineWidth=w*devicePixelRatio;let pen=false;for(let i=0;i<n;i++){const v=arr[i];if(v===null||v===undefined){pen=false;continue;} pen?g.lineTo(x(i),y(v)):g.moveTo(x(i),y(v));pen=true;}g.stroke();g.setLineDash([]);};
-  line(h.load,'#1d2229',1); line(h.pv_available,'#9aa3ad',1); line(h.pv_actual,'#2a8a3c',2); line(h.setpoint,'#1f5fbf',1.2); line(h.received,'#1f5fbf',1,[4,3]); line(h.recorded_setpoint,'#7b3fa0',1.5); line(h.gen_kw,'#b3261e',1.5);
-  g.fillStyle='#5c6570'; g.font=(11*devicePixelRatio)+'px sans-serif';
-  g.fillText('black load, grey solar available, green solar actual, blue setpoint computed (dashed: at the SAU), purple recorded setpoint, red gensets, amber = SAU silent / comm fail declared, last 15 min',8*devicePixelRatio,14*devicePixelRatio);
+  const c=document.getElementById('chart'); const dpr=devicePixelRatio||1; const W=c.width=c.clientWidth*dpr, H=c.height=260*dpr; const g=c.getContext('2d');
+  g.clearRect(0,0,W,H); const n=h.load.length; if(n<2) return;
+  const L=54*dpr, R=10*dpr, T=10*dpr, B=22*dpr;
+  let hi=2200, lo=0;
+  for(const [k] of SERIES){ if(hidden.has(k)) continue; for(const v of h[k]){ if(v===null||v===undefined) continue; if(v>hi) hi=v; if(v<lo) lo=v; } }
+  lo=Math.min(lo,-200); hi*=1.04;
+  const x=i=>L+i/(900-1)*(W-L-R), y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+  geo={x,y,n,L,R,T,B,W,H,dpr};
+  for(let i=0;i<n;i++){ const w=Math.max(1,(W-L-R)/900);
+    if(h.silent[i]){g.fillStyle='rgba(184,134,11,.16)'; g.fillRect(x(i),T,w,H-T-B);} if(h.comm[i]){g.fillStyle='rgba(184,134,11,.26)'; g.fillRect(x(i),T,w,H-T-B);}
+    if(h.tripped&&h.tripped[i]){g.fillStyle='rgba(192,58,43,.22)'; g.fillRect(x(i),T,w,H-T-B);} }
+  g.strokeStyle='#e3e6e0'; g.lineWidth=1*dpr; g.fillStyle='#8a929c'; g.font=(11*dpr)+'px IBM Plex Mono, monospace'; g.textAlign='right';
+  const step=hi-lo>3000?1000:500;
+  for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step){ g.beginPath(); g.moveTo(L,y(v)); g.lineTo(W-R,y(v)); g.stroke(); g.fillText(v,L-6*dpr,y(v)+4*dpr); }
+  g.strokeStyle='#b9bfb8'; g.beginPath(); g.moveTo(L,y(0)); g.lineTo(W-R,y(0)); g.stroke();
+  g.textAlign='center'; for(let i=0;i<n;i+=180){ g.fillText(h.t[i],x(i),H-6*dpr); }
+  for(const [k,name,col,w,dash] of SERIES){ if(hidden.has(k)) continue; const arr=h[k]; if(!arr) continue;
+    g.beginPath(); g.setLineDash(dash.map(d=>d*dpr)); g.strokeStyle=css(col); g.lineWidth=w*dpr; let pen=false;
+    for(let i=0;i<n;i++){const v=arr[i]; if(v===null||v===undefined){pen=false;continue;} pen?g.lineTo(x(i),y(v)):g.moveTo(x(i),y(v)); pen=true;} g.stroke(); g.setLineDash([]); }
+  if(hover!==null){ const i=Math.max(0,Math.min(n-1,hover)); g.strokeStyle='#1b2027'; g.setLineDash([3*dpr,3*dpr]); g.beginPath(); g.moveTo(x(i),T); g.lineTo(x(i),H-B); g.stroke(); g.setLineDash([]);
+    for(const [k,name,col] of SERIES){ if(hidden.has(k)) continue; const v=h[k][i]; if(v===null||v===undefined) continue; g.fillStyle=css(col); g.beginPath(); g.arc(x(i),y(v),3.5*dpr,0,7); g.fill(); } }
 }
-function tabs(list){
-  const t=document.getElementById('tabs'); if(t.children.length) {for(const b of t.children) b.className=(+b.dataset.i==sheet)?'on':''; return;}
+const cv=document.getElementById('chart'), tip=document.getElementById('tip');
+cv.addEventListener('mousemove',e=>{ if(!geo||!state) return; const r=cv.getBoundingClientRect(); const px=(e.clientX-r.left)*geo.dpr; const i=Math.round((px-geo.L)/(geo.W-geo.L-geo.R)*(900-1)); if(i<0||i>=geo.n){hover=null;tip.style.display='none';return;} hover=i;
+  const h=state.hist; let html=`<div class="t">${h.t[i]}</div>`;
+  for(const [k,name,col] of SERIES){ if(hidden.has(k)) continue; const v=h[k][i]; if(v===null||v===undefined) continue; html+=`<div><b style="background:${col==='--load'?'#e6e8e3':css(col)}"></b>${name}: ${v} kW</div>`; }
+  html+=`<div><b style="background:#999"></b>gen load: ${h.gen_load_pct[i]} %</div>`;
+  if(h.silent[i]) html+=`<div style="color:#e6c15a">SAU silent${h.comm[i]?', comm fail declared':''}</div>`; if(h.tripped&&h.tripped[i]) html+=`<div style="color:#ff8a7a">plant dark</div>`;
+  tip.innerHTML=html; tip.style.display='block'; const card=cv.parentElement.getBoundingClientRect(); let tx=e.clientX-card.left+14, ty=e.clientY-card.top+10; if(tx+240>card.width) tx-=260; tip.style.left=tx+'px'; tip.style.top=ty+'px'; });
+cv.addEventListener('mouseleave',()=>{hover=null;tip.style.display='none';});
+function totals(T){ if(!T) return; const d=document.getElementById('totals');
+  const items=[['since the start',T.hours+' h'],['solar used',T.pv_used_kwh+' kWh'],['solar available',T.pv_available_kwh+' kWh'],['solar thrown away',T.pv_curtailed_kwh+' kWh'],
+    ['gensets',T.gen_kwh+' kWh'],['fuel (model)',T.fuel_l+' l'],['comm fails declared',T.comm_fails],['setpoint forced to 0',T.zero_setpoints],['overproduction warnings',T.warnings],
+    ['UPS sheds',T.ups_sheds],['gen load min / max',(T.min_gen_load_pct===null?'–':T.min_gen_load_pct)+' / '+T.max_gen_load_pct+' %'],['seconds in reverse power',T.rp_seconds],
+    ['reverse power trips',T.rp_trips],['plant dark',T.blackout_min+' min']];
+  d.innerHTML=items.map(([k,v])=>`<div><span>${k}</span><strong>${v}</strong></div>`).join(''); }
+function params(p){ const d=document.getElementById('params'); if(d.children.length) return;
+  for(const [k,label,src] of PARAMS){const l=document.createElement('label');l.className='knob';l.innerHTML=`<span>${label}<small>${src}</small></span>`;const i=document.createElement('input');i.value=p[k];i.id='p_'+k;i.onchange=()=>ctl('param:'+k,parseFloat(i.value));l.appendChild(i);d.appendChild(l);} }
+function tabs(list){ const t=document.getElementById('tabs'); if(t.children.length){for(const b of t.querySelectorAll('button[data-i]')) b.className=(+b.dataset.i==sheet)?'on':''; return;}
   for(const s of list){const b=document.createElement('button');b.dataset.i=s.index;b.textContent=s.index+' '+s.name;b.onclick=()=>{sheet=s.index;};t.appendChild(b);}
-}
+  const z=document.createElement('div');z.className='zoom';z.innerHTML='zoom <input type="range" min="50" max="150" value="100" style="width:110px;padding:0">';z.querySelector('input').oninput=e=>{zoom=e.target.value/100;document.querySelector('#sheet svg').style.transform=`scale(${zoom})`;};t.appendChild(z); }
 function drawSheet(sh){
   const CX=34, RY=16, BW=170, M=240, MY=20; let maxx=0,maxy=0; const pos={};
   for(const b of sh.blocks){ const rows=Math.max(b.inputs.length,b.outputs.length,1); const h=RY*(rows+1)+6; const px=M+(b.x-4)*CX, py=MY+b.y*RY; pos[b.id]={x:px,y:py,h:h,b:b}; maxx=Math.max(maxx,px+BW+260); maxy=Math.max(maxy,py+h+10); }
-  let out=`<svg width="${maxx}" height="${maxy}" xmlns="http://www.w3.org/2000/svg">`;
-  for(const w of sh.wires){ const a=pos[w.frm], b=pos[w.to]; if(!a||!b) continue; const x1=a.x+BW, y1=a.y+RY*(w.out+1)+10, x2=b.x, y2=b.y+RY*(w.inp+1)+10; const dx=Math.max(30,(x2-x1)/2);
-    out+=`<path class="wire" d="M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}"/>`; }
+  let out=`<svg width="${maxx}" height="${maxy}" xmlns="http://www.w3.org/2000/svg" style="transform:scale(${zoom})">`;
+  for(const w of sh.wires){ const a=pos[w.frm], b=pos[w.to]; if(!a||!b) continue; const o=a.b.outputs[w.out]; const x1=a.x+BW, y1=a.y+RY*(w.out+1)+10, x2=b.x, y2=b.y+RY*(w.inp+1)+10; const dx=Math.max(30,(x2-x1)/2);
+    out+=`<path class="wire" d="M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}"><title>${esc(o.name)} = ${esc(o.value)}  (${o.key})</title></path>`; }
   for(const id in pos){ const p=pos[id], b=p.b;
-    out+=`<rect class="blk" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="2"/><text class="hdr" x="${p.x+6}" y="${p.y+12}">${esc(b.type)}</text>`;
+    out+=`<rect class="blk" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="3"/><rect class="blkhdr" x="${p.x+1}" y="${p.y+1}" width="${BW-2}" height="15"/><text class="hdr" x="${p.x+6}" y="${p.y+12}">${esc(b.type)}</text>`;
     b.inputs.forEach((i,k)=>{ const y=p.y+RY*(k+1)+14; const cls=i.value==='1'?'pin1':(i.value==='0'?'pin0':'pinv');
-      out+=`<text class="${cls}" x="${p.x+6}" y="${y}">${esc(i.value)}</text><text x="${p.x-4}" y="${y}" text-anchor="end" fill="#5c6570">${i.neg?'NOT ':''}${esc(i.name)}</text>`; });
+      out+=`<text class="${cls}" x="${p.x+6}" y="${y}"><title>${esc(i.name)} (${i.key})</title>${esc(i.value)}</text><text x="${p.x-4}" y="${y}" text-anchor="end" fill="#6b7480"><title>${esc(i.name)} (${i.key})</title>${i.neg?'NOT ':''}${esc(i.name)}</text>`; });
     b.outputs.forEach((o,k)=>{ const y=p.y+RY*(k+1)+14; const cls=o.value==='1'?'pin1':(o.value==='0'?'pin0':'pinv');
-      out+=`<text class="${cls}" x="${p.x+BW-6}" y="${y}" text-anchor="end">${esc(o.value)}</text><text x="${p.x+BW+4}" y="${y}" fill="#5c6570">${esc(o.name)}</text>`; });
+      out+=`<text class="${cls}" x="${p.x+BW-6}" y="${y}" text-anchor="end"><title>${esc(o.name)} (${o.key})</title>${esc(o.value)}</text><text x="${p.x+BW+4}" y="${y}" fill="#6b7480"><title>${esc(o.name)} (${o.key})</title>${esc(o.name)}</text>`; });
   }
   out+='</svg>'; document.getElementById('sheet').innerHTML=out;
 }
