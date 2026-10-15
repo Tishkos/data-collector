@@ -154,8 +154,8 @@ def test_integrators_example_and_the_assumed_reverse_power_trip():
     assert case(today, "integrator_both", 1200)[1] == 1 and case(v3, "integrator_both", 1200)[1] == 1   # both trip: the zero cannot get through
     low_today, trips_today = case(today, "integrator_one", 800)
     low_v3, trips_v3 = case(v3, "integrator_one", 800)
-    assert low_today > 150 and trips_today == 0                                          # the zero arrives through session 2
-    assert low_v3 < 50 and trips_v3 == 0                                                 # the hold keeps the solar up: exposure, below the trip level
+    assert trips_today == 0 and trips_v3 == 0                                            # below the assumed trip level either way
+    assert low_today > low_v3 + 30                                                       # the zero arrives through session 2 (the SAU ramps down at 5 kW/s), the hold keeps the solar up
 
 
 def test_random_production_steps_appear_and_pass():
@@ -164,3 +164,34 @@ def test_random_production_steps_appear_and_pass():
     run(p, 600)
     assert any("production step" in e[1] for e in p.events)
     assert p.snapshot["load"] > 0
+
+
+def test_one_genset_with_the_ups_as_buffer():
+    """One set carries the floor. A surge is fine; a total solar loss is survived only if the UPS shed enough load
+    while the next set starts; a load drop during a held setpoint pushes one set into reverse power."""
+    one = next(x["name"] for x in plc_lab.SCENARIOS if x["name"].startswith("One genset"))
+
+    def trial(what, value, **pp):
+        p = plc_lab.LivePlant(start_hour=12.0)
+        p.apply_scenario(one)
+        p.params["load_events"] = 0
+        p.params["load_noise"] = 0
+        p.params.update(pp)
+        run(p, 180)
+        assert p.snapshot["gensets"] == 1 and abs(p.snapshot["gen_load_pct"] - 25) < 1
+        p.inject(what, value)
+        peak = 0
+        for _ in range(300):
+            p._tick()
+            peak = max(peak, p.snapshot["gen_load_pct"])
+        T = p.snapshot["totals"]
+        return peak, T["overload_trips"], T["rp_trips"], T["ups_sheds"], p.snapshot["gensets"]
+
+    peak, ol, rp, sheds, sets = trial("load_event", 400)
+    assert peak < 70 and ol == 0 and rp == 0
+    peak, ol, rp, sheds, sets = trial("off", 60)                     # total loss, UPS 300 kW each (assumed)
+    assert ol == 0 and sheds == 2 and sets == 2                      # the UPS go to battery, the second set comes
+    peak, ol, rp, sheds, sets = trial("off", 60, ups_kw_each=100)    # small UPS: the single set is overloaded and trips
+    assert ol >= 1
+    peak, ol, rp, sheds, sets = trial("integrator_one", 500)         # held setpoint + load drop on one set
+    assert rp >= 1

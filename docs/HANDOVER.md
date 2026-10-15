@@ -101,6 +101,11 @@ sessions silent the zero cannot reach the SAU in either program, so the exposure
 as with the hold; with one session alive today's program delivers the zero through the other session within 10 s
 and the hold does not, which is the hold's real cost. A possible v4: hold, but lower the held value by the amount
 the gensets fall below Gen P Min (genset kW comes over CAN, not from the SAU), which answers the example directly.
+The lab's one-genset scenario (model, assumed UPS size, overload setting and start time) says: one set survives
+surges and clouds, survives a total solar loss only if the UPS shed about 600 kW within seconds while the next
+set starts, and goes into reverse power when a held setpoint meets a load drop or when the sun returns after a
+cloud with the regulator wound up; so one-set operation needs the v4 guard as a PV ceiling (never request more
+than load minus the genset floor), not plain v3, plus the real UPS and IG4 figures.
 
 ## 6. Tools in this repository
 

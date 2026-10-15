@@ -110,8 +110,15 @@ UPS sheds, min and max gen load, seconds in reverse power, reverse power trips, 
 The previous integrator's example is a button: "link lost, load drops 800 kW" (and 1,200 kW, and the one-session
 variant). The gensets' reverse power protection is in the model as an assumed 5 % for 5 s until the IG4 settings are
 read; a trip opens the gensets and the plant goes dark for three minutes, so it counts. Random production steps
-(chillers, lines) come and go on their own, size and rate adjustable, so the test is not hand-picked. Hovering the
-chart gives every line's name and value at that second.
+(chillers, lines) come and go on their own, size and rate adjustable, so the test is not hand-picked. Hovering a
+line names it with its value at that second.
+
+A ninth scenario tries the fuel idea directly: one genset by day with the UPS as the buffer and the next set on
+reserve. The gensets got an assumed overload protection (110 % for 10 s), started sets need an assumed 30 s before
+they take load, and each UPS feeds an assumed 300 kW; all three are fields on the page until the plant confirms
+them. The SAU ramp is set to 5 kW/s, the climb measured on 14 October after breaker closes, and the model's
+curtailment regulator no longer winds up while the PV is off or unseen (the history shows the request restarting
+low after a breaker close).
 
 ## Folder map
 

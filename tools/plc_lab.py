@@ -58,7 +58,7 @@ DEFAULT_PARAMS = dict(
     timeout_s=3.0,           # REAL: Modbus timeout of the PV logger sessions (archive)
     retries=2,               # ASSUMED: lost replies before the module declares the comm fail (the integrator: 6-9 s)
     inverter_tau_s=10.0,     # ASSUMED: first-order response of the inverters to a setpoint
-    inverter_ramp_kw_s=0.0,  # ASSUMED: 0 = no extra rate limit in the SAU (set e.g. 100 for 100 kW/s)
+    inverter_ramp_kw_s=5.0,  # CALIBRATED on 14 Oct: the PV climbs about 300 kW/min after a breaker close (0 = no limit); the trace will say
     curtail_rate=0.03,       # CALIBRATED: the controller's curtailment regulator, %/s per % of error
     gen_p_min_pct=25.0,      # REAL: Gen P Min
     load_noise=1.0,          # ASSUMED: slow random load variation, % of load
@@ -69,6 +69,10 @@ DEFAULT_PARAMS = dict(
     load_events=1,           # ASSUMED: random production load steps on/off (chillers, compressors, lines)
     load_event_minutes=10.0, # ASSUMED: one such step every N minutes on average
     load_event_kw=400.0,     # ASSUMED: largest step, kW (sizes uniform up to this, either direction)
+    ups_kw_each=300.0,       # ASSUMED: the load each UPS feeds, kW (what the plant has not yet told us; 0 = 5 % of the load)
+    overload_trip_pct=110.0, # ASSUMED: genset overload protection, % of running nominal (IG4 unread)
+    overload_delay_s=10.0,   # ASSUMED: its delay
+    genset_start_s=30.0,     # ASSUMED: crank, warm-up and synchronisation before a started set takes load
 )
 
 
@@ -91,6 +95,9 @@ SCENARIOS = [
          note="Two sets by hand through the day with the comm-fail hold: the first real fuel step. Watch gen load % on clouds and fails."),
     dict(name="AUTO, two gensets minimum", program="change-01 v3 (hold 60 s, then 0)", gensets=None, auto_pm=True, min_gensets=2,
          note="Power management never below two sets (the model's S6): the safe version of the step above."),
+    dict(name="One genset by day, the UPS as buffer, next set on reserve", program="change-01 v3 (hold 60 s, then 0)", gensets=1, auto_pm=True,
+         min_gensets=1, ups_math_fix=True,
+         note="One set carries the floor, the solar the rest. On a surge the set takes it; on a solar loss the PLC sheds the UPS to battery at 70/80 % gen load while power management starts the next set. Needs the UPS really connected and the comm-fail zero gone."),
     dict(name="Grid day with export", program="today", gensets=0, auto_pm=False, grid=True,
          note="On the grid: no gensets, the PV request is the SAU maximum capped by the export limit of 1,300 kW per feeder."),
 ]
@@ -132,7 +139,7 @@ class LivePlant:
         self.received_setpoint = 0.0                       # the last setpoint that reached the SAU
         self.curtail = 30.0
         self.pv_cb = [1, 1]
-        self.ups_closed = [0, 0]
+        self.ups_closed = [1, 1]                           # in normal operation both UPS breakers are closed
         self.fail_since = None
         self.last_transfer = -1e9
         self.warn_timer = 0.0
@@ -145,14 +152,16 @@ class LivePlant:
         self.off_until = -1.0
         self.fault_reset_pending = False
         self.start_timer = self.stop_timer = 0
+        self.starting_until = None
         self.ups_shed_timer = [0.0, 0.0]
         self.load_events_list = []                         # (start, end, kw): production steps, random or injected
         self.rp_timer = 0.0
+        self.ol_timer = 0.0
         self.tripped_until = -1.0
         self.schedule = []                                 # (t, what, value) from the 14 October replay
         self.totals = dict(seconds=0, pv_used_kwh=0.0, pv_available_kwh=0.0, gen_kwh=0.0, fuel_l=0.0, comm_fails=0,
                            zero_setpoints=0, warnings=0, ups_sheds=0, min_gen_load_pct=None, max_gen_load_pct=0.0,
-                           rp_seconds=0, rp_trips=0, blackout_s=0)
+                           rp_seconds=0, rp_trips=0, blackout_s=0, overload_seconds=0, overload_trips=0)
         self._prev_comm_any = False
         # a steady start: the regulator already sits where it keeps the gensets at Gen P Min
         if not self.replay:
@@ -291,7 +300,8 @@ class LivePlant:
         if not silent[0]:
             self.sau_reading = self.sau_value
         neo_pv_term = self.sau_reading if (pv_live or self.ups_math_fix) else 0.0
-        shed_load = sum(sc.ups_critical_share * load for i in range(2) if not self.ups_closed[i])
+        ups_each = P["ups_kw_each"] if P["ups_kw_each"] > 0 else sc.ups_critical_share * load
+        shed_load = sum(ups_each for i in range(2) if not self.ups_closed[i])
         load_on_bus = load - shed_load
         tripped = self.t < self.tripped_until
         if tripped:                                           # the gensets tripped on reverse power: the plant is dark
@@ -304,7 +314,7 @@ class LivePlant:
             self.rp_timer += dt
             if not warm:
                 self.totals["rp_seconds"] += dt
-            if self.rp_timer >= P["rp_delay_s"] and not tripped:
+            if self.rp_timer >= P["rp_delay_s"] and not tripped and not warm:
                 self.tripped_until = self.t + 180
                 if not warm:
                     self.totals["rp_trips"] += 1
@@ -312,6 +322,18 @@ class LivePlant:
                 self.rp_timer = 0.0
         else:
             self.rp_timer = 0.0
+        if not on_grid and run_nom and gen_kw > P["overload_trip_pct"] / 100 * run_nom and not tripped:
+            self.ol_timer += dt
+            if not warm:
+                self.totals["overload_seconds"] += dt
+            if self.ol_timer >= P["overload_delay_s"] and not warm:
+                self.tripped_until = self.t + 180
+                if not warm:
+                    self.totals["overload_trips"] += 1
+                self.log(f"OVERLOAD TRIP: gensets at {gen_kw:.0f} kW of {run_nom:.0f} for {P['overload_delay_s']:g} s, plant dark for 3 min")
+                self.ol_timer = 0.0
+        else:
+            self.ol_timer = 0.0
         if tripped and not warm:
             self.totals["blackout_s"] += dt
         inputs = plant_inputs(pv_kw=self.sau_reading, max_avail_kw=pm.SAU_MAX_AVAILABLE_KW, curtailment_pct=self.curtail,
@@ -357,11 +379,14 @@ class LivePlant:
         self.sau_value = self.pv_actual
         if not on_grid and run_nom:
             gen_load_now = max(0.0, load_on_bus - self.pv_actual) / run_nom * 100
-            self.curtail = max(0.0, min(100.0, self.curtail + P["curtail_rate"] * (gen_load_now - P["gen_p_min_pct"]) * dt))
+            if pv_live and not comm_any:                     # the regulator does not wind up while the PV is off or unseen
+                self.curtail = max(0.0, min(100.0, self.curtail + P["curtail_rate"] * (gen_load_now - P["gen_p_min_pct"]) * dt))
+            else:                                            # (14 Oct: after a breaker close the request restarts low, 09:29:21)
+                self.curtail = min(self.curtail, max(0.0, self.pv_actual) / pm.SAU_MAX_AVAILABLE_KW * 100)
         elif on_grid:
             self.curtail = 0.0
-        if self.auto_pm and not on_grid and int(self.t) % 60 == 0:
-            self._power_management(run_nom, gen_kw)
+        if self.auto_pm and not on_grid:
+            self._power_management(run_nom, gen_kw, dt)
         if warm:
             return
         self.t += dt
@@ -388,7 +413,7 @@ class LivePlant:
                     fuel_l=round(T["fuel_l"]), comm_fails=T["comm_fails"], zero_setpoints=T["zero_setpoints"], warnings=T["warnings"],
                     ups_sheds=T["ups_sheds"], min_gen_load_pct=None if T["min_gen_load_pct"] is None else round(T["min_gen_load_pct"], 1),
                     max_gen_load_pct=round(T["max_gen_load_pct"], 1), rp_seconds=round(T["rp_seconds"]), rp_trips=T["rp_trips"],
-                    blackout_min=round(T["blackout_s"] / 60, 1))
+                    blackout_min=round(T["blackout_s"] / 60, 1), overload_seconds=round(T["overload_seconds"]), overload_trips=T["overload_trips"])
 
     def _load_events_kw(self) -> float:
         total = 0.0
@@ -422,18 +447,25 @@ class LivePlant:
 
     _prev_comm_any = False
 
-    def _power_management(self, run_nom, gen_kw):
+    def _power_management(self, run_nom, gen_kw, dt):
+        """The master's power management as the archive sets it (start/stop reserves and delays, REAL) plus the
+        time a started set needs before it carries load (ASSUMED genset_start_s)."""
         sc = self.sc
+        if self.starting_until is not None:
+            if self.t >= self.starting_until:
+                self.running += 1; self.starting_until = None; self.log(f"power management: genset {self.running} on the bus")
+            return
         reserve = sc.start_reserve_kw + sc.solar_coverage * self.pv_actual
         if run_nom - gen_kw < reserve and self.running < pm.GENSETS:
-            self.start_timer += 60
+            self.start_timer += dt
             if self.start_timer >= sc.next_start_delay_s:
-                self.running += 1; self.start_timer = 0; self.log(f"power management: genset {self.running} started")
+                self.starting_until = self.t + self.params["genset_start_s"]; self.start_timer = 0
+                self.log(f"power management: start request for genset {self.running + 1}, on the bus in {self.params['genset_start_s']:g} s")
         else:
             self.start_timer = 0
         if self.running > self.min_gensets and sum(pm.GEN_NOMS_KW[:self.running - 1]) - gen_kw >= sc.stop_reserve_kw + sc.solar_coverage * self.pv_actual \
                 and gen_kw >= sc.min_run_power_kw:
-            self.stop_timer += 60
+            self.stop_timer += dt
             if self.stop_timer >= sc.next_stop_delay_s:
                 self.log(f"power management: genset {self.running} stopped"); self.running -= 1; self.stop_timer = 0
         else:
@@ -769,7 +801,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:4px 0}
   <button onclick="ctl('cloud',120)">cloud 50 %, 2 min</button><button onclick="ctl('cloud',600)">cloud 10 min</button>
   <button onclick="ctl('load_event',300)">line starts +300 kW</button><button onclick="ctl('load_event',-300)">line stops -300 kW</button>
   <button onclick="ctl('load',300)">base load +300</button><button onclick="ctl('load',-300)">-300</button>
-  <button onclick="ctl('gensets',2)">2 sets</button><button onclick="ctl('gensets',3)">3 sets</button><button onclick="ctl('gensets',4)">4 sets</button>
+  <button onclick="ctl('gensets',1)">1 set</button><button onclick="ctl('gensets',2)">2 sets</button><button onclick="ctl('gensets',3)">3 sets</button><button onclick="ctl('gensets',4)">4 sets</button>
   <button onclick="ctl('auto_pm')" id="auto_pm">power management AUTO</button><button onclick="ctl('grid')" id="gridbtn">switch to the grid</button></div>
   <div class="note" style="padding:6px 0 0">The grid is there from 18:05 to 06:12 as in the history; by day the plant runs on gensets. The button forces a transfer.</div></div>
  <div class="group"><h2>Operator</h2><div class="row">
@@ -796,9 +828,10 @@ const SERIES=[['load','load','--load',1,[]],['pv_available','solar available','-
  ['gen_kw','gensets','--gen',1.8,[]],['rp_limit','reverse power trip level (assumed)','--gen',1,[2,4]],['mains','grid, import + / export −','--grid',1.8,[]]];
 const hidden=new Set(['rp_limit'===''?'':'']);
 const PARAMS=[['timeout_s','Modbus timeout, s','archive'],['retries','retries before the comm fail','assumed, 6-9 s in all'],['inverter_tau_s','inverter response, s','assumed'],
- ['inverter_ramp_kw_s','SAU ramp limit, kW/s (0 = none)','assumed'],['curtail_rate','regulator, %/s per % of error','calibrated 14 Oct'],['gen_p_min_pct','Gen P Min, %','setpoint'],
+ ['inverter_ramp_kw_s','SAU ramp limit, kW/s (0 = none)','calibrated 14 Oct, climbs'],['curtail_rate','regulator, %/s per % of error','calibrated 14 Oct'],['gen_p_min_pct','Gen P Min, %','setpoint'],
  ['rp_trip_pct','reverse power trip, % of nominal','assumed, IG4 unread'],['rp_delay_s','reverse power delay, s','assumed'],
  ['load_events','random production steps (0/1)','assumed'],['load_event_minutes','one step every N minutes','assumed'],['load_event_kw','largest step, kW','assumed'],
+ ['genset_start_s','genset start to load, s','assumed'],['ups_kw_each','load each UPS feeds, kW','assumed, plant to confirm'],['overload_trip_pct','genset overload trip, % of nominal','assumed, IG4 unread'],['overload_delay_s','overload delay, s','assumed'],
  ['load_noise','load noise x','assumed'],['cloud_edge_s','cloud edge, s','assumed'],['writes_through_silence','writes land while silent (0/1)','hypothesis']];
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v.replace('--','--')).trim();
 async function ctl(what,value){await fetch('/api/control',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({what,value:value||0})});}
@@ -811,7 +844,7 @@ function render(){
   const st=document.getElementById('status'); let cls='ok',txt=(s.on_grid?'on the grid':'on gensets')+', link OK';
   if(s.silent&&(s.silent[0]||s.silent[1])){cls='silent';txt='SAU silent '+(s.silent[0]?'g1 ':'')+(s.silent[1]?'g2':'');}
   if(s.comm[0]||s.comm[1]){cls='fail';txt='COMM FAIL '+(s.comm[0]?'g1 ':'')+(s.comm[1]?'g2':'');}
-  if(s.tripped){cls='trip';txt='REVERSE POWER TRIP, plant dark';}
+  if(s.tripped){cls='trip';txt='GENSETS TRIPPED, plant dark';}
   st.className='pill '+cls; st.textContent=txt;
   document.getElementById('pause').textContent=state.paused?'play':'pause';
   for(const k of [1,10,60]) document.getElementById('s'+k).className=(state.speed==k)?'on':'';
@@ -880,7 +913,7 @@ function totals(T){ if(!T) return; const d=document.getElementById('totals');
   const items=[['since the start',T.hours+' h'],['solar used',T.pv_used_kwh+' kWh'],['solar available',T.pv_available_kwh+' kWh'],['solar thrown away',T.pv_curtailed_kwh+' kWh'],
     ['gensets',T.gen_kwh+' kWh'],['fuel (model)',T.fuel_l+' l'],['comm fails declared',T.comm_fails],['setpoint forced to 0',T.zero_setpoints],['overproduction warnings',T.warnings],
     ['UPS sheds',T.ups_sheds],['gen load min / max',(T.min_gen_load_pct===null?'–':T.min_gen_load_pct)+' / '+T.max_gen_load_pct+' %'],['seconds in reverse power',T.rp_seconds],
-    ['reverse power trips',T.rp_trips],['plant dark',T.blackout_min+' min']];
+    ['reverse power trips',T.rp_trips],['seconds in overload',T.overload_seconds],['overload trips',T.overload_trips],['plant dark',T.blackout_min+' min']];
   d.innerHTML=items.map(([k,v])=>`<div><span>${k}</span><strong>${v}</strong></div>`).join(''); }
 function params(p){ const d=document.getElementById('params'); if(d.children.length) return;
   for(const [k,label,src] of PARAMS){const l=document.createElement('label');l.className='knob';l.innerHTML=`<span>${label}<small>${src}</small></span>`;const i=document.createElement('input');i.value=p[k];i.id='p_'+k;i.onchange=()=>ctl('param:'+k,parseFloat(i.value));l.appendChild(i);d.appendChild(l);} }
