@@ -219,7 +219,7 @@ def cmd_trace(a) -> int:
         dev, _, sec = item.partition("=")
         every[dev.strip()] = float(sec or 1)
     if not every:
-        for dev, sec in (("neo-01", 1.0), ("pv-array", 2.0)):
+        for dev, sec in (("neo-01", 1.0), ("pv-array", 5.0)):      # gentle on the SAU by default; --every pv-array=2 when the fail count allows
             if dev in reg.devices:
                 every[dev] = sec
     if not every:
@@ -303,7 +303,7 @@ def main(argv=None) -> int:
 
     t = sub.add_parser("trace", help="fast read-only trace of a few devices to files (event studies)")
     t.add_argument("--every", action="append", metavar="DEVICE=SECONDS",
-                   help="device id and read interval, repeatable (default: neo-01=1 pv-array=2)")
+                   help="device id and read interval, repeatable (default: neo-01=1 pv-array=5)")
     t.add_argument("--hours", type=float, default=None, help="stop after this many hours (default: until Ctrl+C)")
     t.add_argument("--connect-test", type=float, default=60.0, help="seconds between fresh-connection tests (0 = off)")
     t.add_argument("--out", help="folder for the files (default: <data>/trace)")

@@ -18,7 +18,7 @@ OPEN-DASHBOARD.bat   http://localhost:8080
 RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows every message; stops when closed)
 PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
 PLC-LAB.bat          the plant and the master's PLC program live in the browser (model only, touches nothing): http://localhost:8090
-TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 2 s SAU, response times, event log (Ctrl+C stops)
+TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 5 s SAU, response times, event log (Ctrl+C stops)
 ```
 
 If port 8080 is taken by another program, the dashboard takes the next free port and writes its
@@ -79,7 +79,7 @@ Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, n
 
 The hourly collector is for the Turkey platform. For questions like "what happens in the ten seconds of a
 PV logger comm fail", `TRACE-PLANT.bat` runs a separate, read-only trace in a console window: the master
-every second, the SAU array every two seconds (the setpoint registers the master writes are read back word
+every second, the SAU array every five seconds (the setpoint registers the master writes are read back word
 by word), the response time of every read, a fresh-connection test every minute, and an event log of every
 bit that changes. Files land in `data\trace\` (one set per day, CSV), nothing goes into the database.
 Other intervals: `python -m plantcollector.cli --config config\site.plant.yaml --data data trace --every neo-01=1 --every pv-array=1`.

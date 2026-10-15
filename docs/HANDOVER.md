@@ -113,7 +113,7 @@ than load minus the genset floor), not plain v3, plus the real UPS and IG4 figur
 |---|---|
 | Hourly collector + dashboard + Turkey Modbus server | `START-PLANT.bat` (first `CHECK-PLANT.bat`) |
 | Who answers on Modbus | `PROBE-PLANT.bat` (`plantcollector.cli probe`) |
-| Fast read-only trace: 1 s master, 2 s SAU, setpoint read-back, response times, event log | `TRACE-PLANT.bat` (`plantcollector.cli trace`) -> `data\trace\` |
+| Fast read-only trace: 1 s master, 5 s SAU, setpoint read-back, response times, event log | `TRACE-PLANT.bat` (`plantcollector.cli trace`) -> `data\trace\` |
 | Read the master's archive (plain parts) | `tools/neo_archive.py` |
 | List and execute the PLC program | `tools/neo_plc.py` (`--out`, `--demo`) |
 | Run a day of the plant | `tools/plant_model.py` (scenarios S0-S6, days) |

@@ -5,7 +5,7 @@
 #   START-PLANT.bat      real plant (config\site.plant.yaml), read-only polling
 #   CHECK-PLANT.bat      one poll of the real plant, every point printed (no background task)
 #   PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
-#   TRACE-PLANT.bat      fast read-only trace to data\trace (1 s master, 2 s SAU) in this window, Ctrl+C stops
+#   TRACE-PLANT.bat      fast read-only trace to data\trace (1 s master, 5 s SAU) in this window, Ctrl+C stops
 #   RUN-IN-WINDOW.bat    run in the console instead (no Windows task); shows every message
 #   STOP.bat             stop the background collector
 #   UNINSTALL.bat        remove the Windows task (data stays in data\)
@@ -78,7 +78,7 @@ if ($Probe) {
     exit $LASTEXITCODE
 }
 if ($Trace) {
-    Say "Trace running in this window: 1 s master, 2 s SAU, files in data\trace. Ctrl+C stops it."
+    Say "Trace running in this window: 1 s master, 5 s SAU, files in data\trace. Ctrl+C stops it."
     & $venvPy -m plantcollector.cli --config $cfg --data data trace
     exit $LASTEXITCODE
 }
