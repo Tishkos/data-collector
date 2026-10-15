@@ -485,3 +485,100 @@ def docx_pages(before_png, after_png):
 
 if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--docx-style":
     print(docx_pages(sys.argv[1], sys.argv[2]))
+
+
+# ------------------------------------------------------------------------------------------ the request, vector PDF
+def request_pdf(before_png, after_png):
+    """Same two pages, but real text and the screenshots embedded at their native resolution (no downscaling)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.colors import Color
+    from reportlab.platypus import Paragraph
+    from reportlab.lib.styles import ParagraphStyle
+
+    pdfmetrics.registerFont(TTFont("Carlito", CAL))
+    pdfmetrics.registerFont(TTFont("Carlito-Bold", CAL_B))
+    pdfmetrics.registerFont(TTFont("Carlito-Italic", CAL_I))
+    PW, PH = A4
+    M = 18 * mm
+    red = Color(176 / 255, 32 / 255, 32 / 255)
+    ink = Color(0.1, 0.1, 0.1)
+    grey = Color(0.42, 0.42, 0.42)
+    body = ParagraphStyle("b", fontName="Carlito", fontSize=11.5, leading=15.5, textColor=ink, spaceAfter=7)
+    head = ParagraphStyle("h", fontName="Carlito-Bold", fontSize=14, leading=18, textColor=ink, spaceBefore=4, spaceAfter=4)
+    out = os.path.join(OUT, "change-01_request.pdf")
+    c = canvas.Canvas(out, pagesize=A4)
+    c.setTitle("Change 01 - PV logger communication")
+
+    def page(title, img_path, boxes, paragraphs, number):
+        c.setFont("Carlito-Bold", 20)
+        c.setFillColor(ink)
+        c.drawString(M, PH - M - 8, title)
+        c.setFont("Carlito-Italic", 9.5)
+        c.setFillColor(grey)
+        c.drawString(M, PH - M - 24, "Erbil plant - InteliNeo 5500 master - PLC sheet 10 \"PV req step protection\"")
+        im = Image.open(img_path)
+        w = PW - 2 * M
+        s = w / im.width
+        h = im.height * s
+        max_h = 150 * mm
+        if h > max_h:
+            s = max_h / im.height
+            w, h = im.width * s, max_h
+        x0 = (PW - w) / 2
+        y0 = PH - M - 34 - h
+        c.drawImage(img_path, x0, y0, width=w, height=h)       # the PNG itself, full resolution, inside the PDF
+        c.setStrokeColor(Color(0.75, 0.75, 0.75)); c.setLineWidth(0.5)
+        c.rect(x0, y0, w, h)
+        for (bx0, by0, bx1, by1, n) in boxes:
+            X0, Y0, X1, Y1 = x0 + bx0 * s, y0 + h - by1 * s, x0 + bx1 * s, y0 + h - by0 * s
+            c.setStrokeColor(red); c.setLineWidth(1.2)
+            c.rect(X0, Y0, X1 - X0, Y1 - Y0)
+            cx, cy = X0 - 7, (Y0 + Y1) / 2
+            c.setFillColor(red); c.circle(cx, cy, 6, stroke=0, fill=1)
+            c.setFillColor(Color(1, 1, 1)); c.setFont("Carlito-Bold", 9)
+            c.drawCentredString(cx, cy - 3, str(n))
+        y = y0 - 16
+        for hd, text in paragraphs:
+            if hd:
+                p = Paragraph(hd, head); _, ph = p.wrap(PW - 2 * M, 100); p.drawOn(c, M, y - ph); y -= ph
+            p = Paragraph(text, body); _, ph = p.wrap(PW - 2 * M, 400); p.drawOn(c, M, y - ph); y -= ph + 4
+        c.setFont("Carlito", 9); c.setFillColor(grey)
+        c.drawRightString(PW - M, M - 6, str(number))
+        c.showPage()
+
+    page("Sheet 10 today, and what goes wrong", before_png, [(455, 540, 600, 562, 1), (1215, 346, 1300, 366, 2)], [
+        ("", "This sheet sends the solar plant its setpoint. Most of it is fine. The problem is one small switch, "
+             "Item 76. Normally it just passes the request through. But if the controller misses even one reply from "
+             "the PV logger, Item 68 (1) flips the switch, and the other side of the switch is a fixed 0.0 kW (2). So "
+             "the solar plant gets told: zero."),
+        ("", "The inverters do what they are told, within seconds. The gensets were running at 25 % and now they carry "
+             "everything. The UPS logic sees that jump and sheds the UPS. Then the reply comes back, and the solar has to "
+             "climb up again, 100 kW at a time, about five minutes. This happens five to thirty times a day."),
+        ("", "And here is the silly part: while the link is down, the zero never even reaches the logger. It arrives "
+             "when the link is back, so it protects nothing. We just lose production every time."),
+    ], 1)
+    page("What I want to change", after_png, [(462, 528, 600, 560, 1), (1138, 362, 1290, 382, 2), (330, 1565, 425, 1690, 3)], [
+        ("", "Three small edits, nothing else. The switch (now Item 77) gets its own output on its second input (2). So "
+             "when a reply is missed, it just keeps sending the last setpoint. Nothing drops, nobody notices. Item 68 "
+             "(1) now only listens to the two real comm fail signals, so if the controller really wants zero, zero "
+             "still goes out. And one new timer, Item 65 (3), raises a flag called PV comm lost if the logger stays "
+             "silent for five minutes. For now that flag only goes to an alarm."),
+        ("Why I think we should do it", "With a healthy link, the program does exactly what it does today. I ran the "
+             "whole program block by block against our own history to check that. While the link is down, nothing is "
+             "different from today either: the inverters keep their last setpoint in both versions, the gensets have "
+             "25 % in hand, the controller's own protections still work without the logger, and after five minutes "
+             "we get the flag. If anyone wants it back, we load the archive from 14 October. One minute."),
+        ("", "On the day of 14 October this change would have taken away three of the eleven UPS sheddings and given us "
+             "about 350 kWh more solar. And it is the first step before we can run fewer gensets, which is where the "
+             "real fuel saving is."),
+    ], 2)
+    c.save()
+    return out
+
+
+if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--request":
+    print(request_pdf(sys.argv[1], sys.argv[2]))
