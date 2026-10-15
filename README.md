@@ -1,5 +1,7 @@
 # Plant Data Collector — Erbil Coca-Cola hybrid plant
 
+New to this work? Read `docs\HANDOVER.md` first: what is known, what is assumed, the rules, and what comes next.
+
 One folder, one click. Reads the plant (ComAp InteliNeo, Sineng inverters through the
 SAU gateway, the mains incomer, the meter) once an hour, keeps every value on the plant PC,
 shows a dashboard, and exports Excel / CSV — including the tag list DT Turkey asked for.
@@ -108,6 +110,8 @@ tools\neo_plc.py                    lists and executes the controller's PLC prog
 tools\neo_plc_change01.py           builds the modified sheets of change 01 (docs\changes) in InteliConfig's export format
 tools\plant_model.py                runs a day of the plant under today's settings and proposed changes
 tools\plant_diagram.py              draws docs\plant_overview.svg
+tools\win_inspect.py                lists InteliConfig's windows and controls (first step of driving its read-only chores)
+docs\HANDOVER.md                    read this first: everything known, assumed, decided and open
 plantcollector\trace.py             the trace and the probe (read-only, own files)
 docs\site\visit_checklist.md        the read-only export steps for a site or remote session
 tools\neo_history.py                turns a History export into CSV tables
