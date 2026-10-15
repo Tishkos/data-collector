@@ -398,3 +398,87 @@ def two_pages(before_png, after_png):
 
 if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--two-pages":
     print(two_pages(sys.argv[1], sys.argv[2]))
+
+
+# ------------------------------------------------------------------------------------------ docx-style, two pages
+CAL = "/usr/share/fonts/truetype/crosextra/Carlito-Regular.ttf"
+CAL_B = "/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf"
+CAL_I = "/usr/share/fonts/truetype/crosextra/Carlito-Italic.ttf"
+BLUE = (31, 78, 121)          # Word's heading blue
+WHITE = (255, 255, 255)
+
+
+def docx_pages(before_png, after_png):
+    pages = []
+    body, head, title, small = font(CAL, 23), font(CAL_B, 30), font(CAL_B, 36), font(CAL_I, 19)
+    width = A4P[0] - 2 * MARGIN
+
+    def page_with_shot(heading, img_path, boxes, paragraphs):
+        p = Page(A4P)
+        p.im.paste(WHITE, (0, 0, p.im.width, p.im.height))
+        p.d.text((MARGIN, p.y), heading, fill=BLUE, font=title)
+        p.y += 52
+        p.d.text((MARGIN, p.y), "Erbil plant - InteliNeo 5500 master - PLC sheet 10 \"PV req step protection\"", fill=GREY, font=small)
+        p.y += 40
+        im = Image.open(img_path).convert("RGB")
+        s = width / im.width
+        im = im.resize((width, round(im.height * s)), Image.LANCZOS)
+        max_h = 880
+        if im.height > max_h:
+            s2 = max_h / im.height
+            im = im.resize((round(im.width * s2), max_h), Image.LANCZOS)
+            s *= s2
+        ox = MARGIN + (width - im.width) // 2
+        p.im.paste(im, (ox, p.y))
+        p.d.rectangle([ox, p.y, ox + im.width, p.y + im.height], outline=(190, 190, 190), width=1)
+        nf = font(CAL_B, 20)
+        for (x0, y0, x1, y1, n) in boxes:
+            X0, Y0, X1, Y1 = ox + x0 * s, p.y + y0 * s, ox + x1 * s, p.y + y1 * s
+            p.d.rectangle([X0, Y0, X1, Y1], outline=RED, width=3)
+            cx, cy = X0 - 13, (Y0 + Y1) / 2
+            p.d.ellipse([cx - 13, cy - 13, cx + 13, cy + 13], fill=RED)
+            p.d.text((cx - 5, cy - 12), str(n), fill=WHITE, font=nf)
+        p.y += im.height + 28
+        for h, para in paragraphs:
+            if h:
+                p.d.text((MARGIN, p.y), h, fill=BLUE, font=head)
+                p.y += 40
+            p.text(para, body, width=width, gap=7, after=14)
+        return p
+
+    pages.append(page_with_shot("Sheet 10 as it is today - the problem", before_png,
+        [(455, 540, 600, 562, 1), (1215, 346, 1300, 366, 2)], [
+        ("", "Item 76 is a switch. In its normal position the solar request passes through. When either PV logger "
+             "session misses a single reply, Item 68 (1) flips it to its second position, which is a fixed 0.0 kW (2). "
+             "That zero is written to the SAU as the solar setpoint."),
+        ("", "The inverters obey within seconds. The gensets, idling at 25 %, suddenly carry the whole plant; the UPS logic "
+             "sees the jump and sheds the UPS breakers; and the solar then needs about five minutes to climb back, because "
+             "the request may never be more than 100 kW above what the inverters produce. The history shows this five to "
+             "thirty times a day. The zero never even reaches the logger while the link is down - it arrives when the "
+             "link is back, when there is nothing left to protect."),
+    ]))
+    pages.append(page_with_shot("The change I request", after_png,
+        [(462, 528, 600, 560, 1), (1138, 362, 1290, 382, 2), (330, 1565, 425, 1690, 3)], [
+        ("", "Three edits on this sheet, nothing else. (1) Item 68 reacts only to the two comm fail signals, ECU 2 and ECU 3; "
+             "the \"request below zero\" input is removed, so a request of zero still goes out as zero. (2) The same switch, "
+             "now Item 77, has its own output on its second input: when a reply is missed it simply repeats the last "
+             "setpoint it sent, and nothing drops. (3) One new timer, Item 65, raises the flag \"PV comm lost\" after five "
+             "minutes without the logger, for an alarm; nothing acts on it yet."),
+        ("Why it should go in", "With a healthy link the program behaves exactly as today - checked block by block against "
+             "the plant's own history. The risk during a lost link is unchanged: the inverters keep their last setpoint "
+             "in both versions, the gensets hold 25 % of their nominal in hand, the controller's own protections do not "
+             "depend on the logger, and after five minutes the flag is raised. It is undone in a minute with the "
+             "14 October archive. On the recorded day of 14 October it removes three of the eleven UPS sheddings and "
+             "gives back about 350 kWh of solar - and it is the precondition for running fewer gensets, where the fuel is."),
+    ]))
+    for k, pg in enumerate(pages, 1):
+        pg.d.text((A4P[0] - MARGIN - 40, A4P[1] - MARGIN + 30), f"{k}", fill=GREY, font=font(CAL, 18))
+    out = os.path.join(OUT, "change-01_request.pdf")
+    pages[0].im.save(out, "PDF", resolution=150, save_all=True, append_images=[pg.im for pg in pages[1:]])
+    for k, pg in enumerate(pages, 1):
+        pg.im.save(out.replace(".pdf", f"_{k}.png"))
+    return out
+
+
+if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--docx-style":
+    print(docx_pages(sys.argv[1], sys.argv[2]))
