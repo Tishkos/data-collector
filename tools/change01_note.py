@@ -557,7 +557,8 @@ def request_pdf(before_png, after_png):
              "the solar plant gets told: zero."),
         ("", "The inverters do what they are told, within seconds. The gensets were running at 25 % and now they carry "
              "everything, in one step. Then the reply comes back, and the solar has to climb up again, 100 kW at a "
-             "time, about five minutes. This happens five to thirty times a day."),
+             "time, about five minutes. This happens five to thirty times a day. On 14 October, my last check, the "
+             "history shows it 20 times between 08:52 and 09:58."),
         ("", "And here is the silly part: while the link is down, the zero never even reaches the logger. It arrives "
              "when the link is back, so it protects nothing. We just lose production every time."),
     ], 1)
