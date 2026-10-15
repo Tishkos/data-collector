@@ -17,6 +17,7 @@ UNINSTALL.bat        remove it from Windows startup (the data stays)
 OPEN-DASHBOARD.bat   http://localhost:8080
 RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows every message; stops when closed)
 PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
+PLC-LAB.bat          the plant and the master's PLC program live in the browser (model only, touches nothing): http://localhost:8090
 TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 2 s SAU, response times, event log (Ctrl+C stops)
 ```
 
@@ -84,6 +85,14 @@ bit that changes. Files land in `data\trace\` (one set per day, CSV), nothing go
 Other intervals: `python -m plantcollector.cli --config config\site.plant.yaml --data data trace --every neo-01=1 --every pv-array=1`.
 The SAU allows five Modbus TCP links in all and the master uses two, so one trace at a time.
 
+## The PLC lab
+
+`PLC-LAB.bat` (or `python tools\plc_lab.py`) runs the plant model one second at a time with the master's real
+PLC program inside it and shows every sheet with live pin values, like the controller's own PLC monitor, on a
+model you can poke: a comm fail on one or both sessions, a cloud, a load step, the operator's OFF toggle, a
+grid transfer, a fault reset, two to four gensets, power management on or off, and the switch between today's
+program and the change-01 variants. A strip chart shows the last 15 minutes. It never connects to the plant.
+
 ## Folder map
 
 ```
@@ -110,6 +119,7 @@ tools\neo_plc.py                    lists and executes the controller's PLC prog
 tools\neo_plc_change01.py           builds the modified sheets of change 01 (docs\changes) in InteliConfig's export format
 tools\plant_model.py                runs a day of the plant under today's settings and proposed changes
 tools\plant_diagram.py              draws docs\plant_overview.svg
+tools\plc_lab.py                    the PLC lab: the plant and the program live in the browser
 tools\win_inspect.py                lists InteliConfig's windows and controls (first step of driving its read-only chores)
 docs\HANDOVER.md                    read this first: everything known, assumed, decided and open
 plantcollector\trace.py             the trace and the probe (read-only, own files)

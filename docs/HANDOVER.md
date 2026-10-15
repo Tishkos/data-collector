@@ -107,6 +107,7 @@ settings are unread. Never claim the IG4 protection "covers" it.
 | Read the master's archive (plain parts) | `tools/neo_archive.py` |
 | List and execute the PLC program | `tools/neo_plc.py` (`--out`, `--demo`) |
 | Run a day of the plant | `tools/plant_model.py` (scenarios S0-S6, days) |
+| The PLC lab: plant and program live in the browser, every sheet with live pin values, events injectable | `PLC-LAB.bat` (`tools/plc_lab.py`) -> http://localhost:8090 |
 | Build the change-01 sheets | `tools/neo_plc_change01.py` |
 | The request PDF | `tools/change01_note.py` |
 | Plant drawing | `tools/plant_diagram.py` -> `docs/plant_overview.svg` |
