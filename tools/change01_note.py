@@ -324,3 +324,77 @@ def one_page(before_png, after_png):
 
 if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--one-page":
     print(one_page(sys.argv[1], sys.argv[2]))
+
+
+# ------------------------------------------------------------------------------------------ two-page version
+def two_pages(before_png, after_png):
+    W, H = 2600, 1560
+    p = Page((W, H))
+    nf, bf, hf = font(SANS_B, 20), font(SERIF, 22), font(SERIF_B, 30)
+    p.text(TITLE, font(SERIF_B, 34), gap=6, after=14, width=W - 2 * MARGIN)
+    top = p.y
+    col = (W - 2 * MARGIN - 60) // 2
+
+    def shot(img_path, x, title, boxes, text):
+        im = Image.open(img_path).convert("RGB")
+        s = col / im.width
+        im = im.resize((col, round(im.height * s)), Image.LANCZOS)
+        p.d.text((x, top), title, fill=RED, font=hf)
+        y = top + 46
+        p.im.paste(im, (x, y))
+        p.d.rectangle([x, y, x + im.width, y + im.height], outline=(205, 200, 192), width=2)
+        for (x0, y0, x1, y1, n) in boxes:
+            X0, Y0, X1, Y1 = x + x0 * s, y + y0 * s, x + x1 * s, y + y1 * s
+            p.d.rectangle([X0, Y0, X1, Y1], outline=RED, width=3)
+            cx, cy = X0 - 14, (Y0 + Y1) / 2
+            p.d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=RED)
+            p.d.text((cx - 6, cy - 12), str(n), fill="white", font=nf)
+        y += im.height + 16
+        for line in wrap(text, bf, col):
+            p.d.text((x, y), line, fill=INK, font=bf)
+            y += 31
+
+    shot(before_png, MARGIN, "Today", [(455, 540, 600, 562, 1), (1215, 346, 1300, 366, 2)],
+         "Item 76 is a switch. When either PV logger session misses one reply, Item 68 flips it to its second position, "
+         "a fixed 0.0 kW (2). That zero goes to the SAU as the solar setpoint. The inverters obey within seconds, the gensets "
+         "take the whole plant, the UPS are shed, and the solar needs about five minutes to climb back, 100 kW at a time. "
+         "Five to thirty times a day. Item 68 (1) also fires on a request of zero or below.")
+    shot(after_png, MARGIN + col + 60, "After the change", [(462, 528, 600, 560, 1), (1138, 362, 1290, 382, 2), (330, 1565, 425, 1690, 3)],
+         "The same switch, now Item 77: its second input is its own output (2), so a missed reply just repeats the last "
+         "setpoint. Nothing drops. Item 68 reacts only to the two comm fail signals (1). One new timer, Item 65 (3), raises "
+         "the flag PV comm lost after five minutes of silence, for an alarm. Nothing else on the sheet changed.")
+    p1 = p
+
+    p = Page((W, H))
+    p.text("Why it matters, the risk, and why it should go in", font(SERIF_B, 34), gap=6, after=24)
+    body, head = font(SERIF, 26), font(SERIF_B, 28)
+    width = W - 2 * MARGIN
+    for h, para in [
+        ("Why it matters", "Every comm fail is a production dip and a load step on the gensets. The history of 14 October shows "
+         "three bursts of them, dozens of warnings, and the UPS shed at the worst moment. The zero the program sends does "
+         "not even reach the logger while the link is down; it arrives when the link is back, when there is nothing left "
+         "to protect. We pay every time for a protection that cannot act."),
+        ("The risk", "While the link is down the inverters keep their last setpoint, exactly as they do today; the change "
+         "does not alter that. What could go wrong in a blind window is a large load drop with the solar still at its "
+         "setpoint, pushing the gensets towards reverse power. The gensets hold 25 percent of their nominal in hand "
+         "(788 kW with three running, 290 kW with one), the load of this plant moves a couple of hundred kW in half an "
+         "hour, the controller's own protections do not depend on the logger, and after five minutes the flag is raised. "
+         "The risk of leaving it as it is, we see every day."),
+        ("Why it should go in", "It is one wire, one input and one timer. With a healthy link the program behaves exactly as "
+         "today, checked block by block against the plant's own history. It is undone in a minute: load the 14 October "
+         "archive, or put the 0.0 kW back on the switch. And it is the precondition for the step that saves the fuel: "
+         "running fewer gensets is only safe once a lost reply no longer takes the solar down."),
+        ("In numbers", "Model of 14 October with the change: three of the eleven UPS sheddings gone, about 350 kWh of solar "
+         "back, 3.5 percent less fuel. With power management on afterwards: 30 percent less fuel and more."),
+    ]:
+        p.heading(h, head, color=RED, after=10)
+        p.text(para, body, width=width, gap=10, after=26)
+    out = os.path.join(OUT, "change-01_two_pages.pdf")
+    p1.im.save(out, "PDF", resolution=150, save_all=True, append_images=[p.im])
+    p1.im.save(out.replace(".pdf", "_1.png"))
+    p.im.save(out.replace(".pdf", "_2.png"))
+    return out
+
+
+if __name__ == "__main__" and len(sys.argv) > 3 and sys.argv[3] == "--two-pages":
+    print(two_pages(sys.argv[1], sys.argv[2]))
