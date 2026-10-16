@@ -30,6 +30,7 @@ With a healthy link the program behaves exactly as today (checked output by outp
 - `sheet10_PV_req_step_protection_v2_const.xml` - same with a fixed 300 s, no setpoint needed
 - `sheet03_PV_breaker_control_v2.xml` - optional, only after the plant agrees to automatic breaker opening
 - `program_v2/` - the whole program with the sheets replaced, as the model runs it; `program_v2.md` its listing
+- `design_review_v4.md` - the four-role review of v3 and v4, the revised v4 and the measurements that come first
 - `sheet10_PV_req_step_protection_v3_timed.xml` - the timed variant: hold the last request for 60 s, then 0 exactly
   as today, no setpoint needed; `program_v3/` is this sheet with the plant's own other sheets. Its "PV comm lost"
   flag is the 60 s delay, so the breaker-opening sheet 3 must not be combined with it as it is; stage 2 with v3
@@ -70,5 +71,3 @@ one genset runs alone.
 ## Rollback
 
 Load the 14 Oct archive; or in the editor put the constant 0 back on the switch's second input.
-
-See `design_review_v4.md` for the four-role review of v3 and v4, the revised v4 and the measurements that come first.
