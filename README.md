@@ -19,6 +19,7 @@ RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows
 PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
 PLC-LAB.bat          the plant and the master's PLC program live in the browser (model only, touches nothing): http://localhost:8090
 TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 5 s SAU, response times, event log (Ctrl+C stops)
+SESSION.bat          the whole measuring session, one click: probe, check, 30 min master only, then the SAU, report, zip in bundles\, then the long run
 ```
 
 If port 8080 is taken by another program, the dashboard takes the next free port and writes its
@@ -74,6 +75,21 @@ window, until the window is closed.
    over the VPN, or `http://<pc-ip>:8080/api/v1/tags` / the exported file.
 
 Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, never more often, saved in `data\settings.json`), or `poll_interval_s` in `config\site.plant.yaml`. "Read devices now" in the top bar reads everything once, at any time.
+
+## The measuring session, one click
+
+`SESSION.bat` does the two-hour session by itself, in the order a careful person would, and logs every step to
+`data\session_<date>.log`: the probe (who answers on Modbus), the check (every point, values to compare with the
+screens), 30 minutes of trace on the master only so the comm-fail rate is measured without touching the SAU, then
+the SAU added every 5 s for the rest of the two hours with the fail rate compared every 10 minutes: if it clearly
+rises while we poll the SAU, the SAU is dropped again and the fact is logged. At the end: a report
+(`data\trace\report_<date>.md`: fails per session with lengths, whether both fall together, the SAU's response
+times and our connection tests next to the master's fails, the setpoint words, the regulator through each fail,
+the largest load fall in a minute) and a zip in `bundles\` with the trace files, the report, the probe and check
+output and the log. Then it keeps running lighter (master every 10 s, SAU every 30 s) and makes the same report
+and zip every morning for the day before. Close the window to stop. `python -m plantcollector.cli --config
+config\site.plant.yaml --data data bundle --date 2026-10-17` makes a zip for any day by hand; `report-trace`
+prints the report.
 
 ## Event studies: the trace
 
@@ -150,6 +166,9 @@ tools\plc_lab.py                    the PLC lab: the plant and the program live 
 tools\win_inspect.py                lists InteliConfig's windows and controls (first step of driving its read-only chores)
 docs\HANDOVER.md                    read this first: everything known, assumed, decided and open
 plantcollector\trace.py             the trace and the probe (read-only, own files)
+plantcollector\session.py           the one-click session: steps, the SAU guard, daily report and zip
+plantcollector\report.py            turns a day of trace files into the numbers (fails, SAU latency, words, regulator, load steps)
+bundles\                            the zips the session makes, one per day
 docs\site\visit_checklist.md        the read-only export steps for a site or remote session
 tools\neo_history.py                turns a History export into CSV tables
 tools\turkey_register_map.py        regenerates that map and fills the Turkey workbooks

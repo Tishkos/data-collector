@@ -32,12 +32,12 @@ Screenshots or export of:
 - [ ] ask the installer or Sineng for the **SAU-100 Modbus TCP point table** document
 
 ## The plant PC
-- [ ] `PROBE-PLANT.bat` - one read of one register per controller; shows who answers on Modbus TCP at all
-- [ ] `CHECK-PLANT.bat` - one poll, compare the values with the screens
-- [ ] `START-PLANT.bat` - hourly collector (master, three mains, SAU array)
-- [ ] `TRACE-PLANT.bat` in its own window for the event study - leave it running; `data\trace\` fills up,
-      about 30 MB a day at 1 s. Watch the master's comm-fail count before and after starting it.
-- [ ] at the end: copy `data\` to the stick
+- [ ] `SESSION.bat` in its own window and leave it: probe, check, 30 min master only, then the SAU every 5 s,
+      report and zip in `bundles\` after two hours, then the lighter long run with a zip every morning.
+      It watches the master's comm-fail rate itself and drops the SAU if the rate rises.
+- [ ] `START-PLANT.bat` - the hourly collector for the Turkey platform (separate from the session)
+- [ ] note the comm-fail count in the master's history at the start and at the end (the session logs its own too)
+- [ ] at the end: copy the newest zip from `bundles\` (and `data\` if there is room) to the stick
 
 ## At the panels (photos)
 - [ ] the two UPS nameplates and the cables in and out of them

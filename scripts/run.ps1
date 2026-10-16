@@ -6,6 +6,7 @@
 #   CHECK-PLANT.bat      one poll of the real plant, every point printed (no background task)
 #   PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
 #   TRACE-PLANT.bat      fast read-only trace to data\trace (1 s master, 5 s SAU) in this window, Ctrl+C stops
+#   SESSION.bat          the whole measuring session, one click: probe, check, trace in phases, report, zip, long run
 #   RUN-IN-WINDOW.bat    run in the console instead (no Windows task); shows every message
 #   STOP.bat             stop the background collector
 #   UNINSTALL.bat        remove the Windows task (data stays in data\)
@@ -18,6 +19,7 @@ param(
     [switch]$Check,
     [switch]$Trace,
     [switch]$Probe,
+    [switch]$Session,
     [switch]$Foreground,
     [switch]$NoBrowser,
     [switch]$Elevated,
@@ -61,7 +63,7 @@ if (-not (Test-Path $stamp) -or ((Get-Item requirements.txt).LastWriteTime -gt (
 
 # ---- 3. Config -------------------------------------------------------------------
 $cfg = "config\site.yaml"
-if ($Plant -or $Check -or $Trace -or $Probe) { $cfg = "config\site.plant.yaml" }
+if ($Plant -or $Check -or $Trace -or $Probe -or $Session) { $cfg = "config\site.plant.yaml" }
 if (-not (Test-Path $cfg)) { throw "config not found: $cfg" }
 New-Item -ItemType Directory -Force "data" | Out-Null
 Say "Config: $cfg"
@@ -75,6 +77,11 @@ if ($Check) {
 # ---- 4a'. PROBE / TRACE: read-only tools, run in this window ----------------------------------
 if ($Probe) {
     & $venvPy -m plantcollector.cli --config $cfg --data data probe
+    exit $LASTEXITCODE
+}
+if ($Session) {
+    Say "Session running in this window: probe, check, 30 min master only, then the SAU every 5 s, 2 h in all, report and zip in bundles\, then the long run. Closing the window stops it."
+    & $venvPy -m plantcollector.cli --config $cfg --data data session
     exit $LASTEXITCODE
 }
 if ($Trace) {

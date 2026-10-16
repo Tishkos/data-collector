@@ -7,6 +7,7 @@ plantcollector command line.
   python -m plantcollector.cli --config ... report --date 2026-10-12 --out report.xlsx
   python -m plantcollector.cli --config config/site.plant.yaml trace          1 s / 2 s trace to data/trace
   python -m plantcollector.cli --config config/site.plant.yaml probe          who answers on Modbus TCP
+  python -m plantcollector.cli --config config/site.plant.yaml session        the whole measuring session, one click
 """
 
 from __future__ import annotations
@@ -268,6 +269,35 @@ def cmd_probe(a) -> int:
     return 0
 
 
+def cmd_session(a) -> int:
+    """The whole measuring session, one click (see session.py)."""
+    from .session import Session
+    s = Session(a.config, a.data, hours=a.hours, phase1_min=a.phase1_min, sau_s=a.sau_s, long_run=not a.no_long, zip_hour=a.zip_hour,
+                bundles_dir=a.bundles)
+    try:
+        s.run()
+    except KeyboardInterrupt:
+        s.stop.set()
+        print("\n[session] stopped")
+    return 0
+
+
+def cmd_bundle(a) -> int:
+    """Report and zip one day's trace files (what the session does by itself every day)."""
+    from .session import Session
+    s = Session(a.config, a.data, bundles_dir=a.bundles, long_run=False)
+    date = a.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    print(s.step_report_and_bundle(date=date))
+    return 0
+
+
+def cmd_report_trace(a) -> int:
+    from .report import summarize
+    date = a.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    print(summarize(a.trace_dir or os.path.join(a.data, "trace"), date))
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="plantcollector", description="read-only plant data collector")
     ap.add_argument("--config", default=os.path.join("config", "site.yaml"))
@@ -308,6 +338,25 @@ def main(argv=None) -> int:
     t.add_argument("--connect-test", type=float, default=60.0, help="seconds between fresh-connection tests (0 = off)")
     t.add_argument("--out", help="folder for the files (default: <data>/trace)")
     t.set_defaults(fn=cmd_trace)
+
+    ss = sub.add_parser("session", help="the whole measuring session, one click: probe, check, trace in phases, report, bundle, then the long run")
+    ss.add_argument("--hours", type=float, default=2.0)
+    ss.add_argument("--phase1-min", type=float, default=30.0, help="minutes of master-only trace before the SAU is polled")
+    ss.add_argument("--sau-s", type=float, default=5.0, help="SAU read interval in the session")
+    ss.add_argument("--zip-hour", type=int, default=7, help="UTC hour of the daily report and bundle in the long run")
+    ss.add_argument("--no-long", action="store_true", help="stop after the session instead of continuing with the long run")
+    ss.add_argument("--bundles", help="folder for the zips (default: bundles/ next to data/)")
+    ss.set_defaults(fn=cmd_session)
+
+    bd = sub.add_parser("bundle", help="report and zip one day's trace files")
+    bd.add_argument("--date", help="YYYY-MM-DD (default: today, UTC)")
+    bd.add_argument("--bundles")
+    bd.set_defaults(fn=cmd_bundle)
+
+    rt = sub.add_parser("report-trace", help="print the report of one day's trace files")
+    rt.add_argument("--date")
+    rt.add_argument("--trace-dir")
+    rt.set_defaults(fn=cmd_report_trace)
 
     q = sub.add_parser("probe", help="which hosts answer on Modbus TCP (one read of one register each)")
     q.add_argument("--targets", action="extend", nargs="+", metavar="HOST[:PORT[:UNIT]]",

@@ -36,7 +36,8 @@ def test_registry_is_read_only(collector):
 
 def test_seeded_history_and_totals(collector):
     assert collector.store.count() > 1000
-    t = collector.daily_totals()["totals"]
+    from datetime import timedelta
+    t = collector.daily_totals(collector.now() - timedelta(days=1))["totals"]      # a full seeded day, whatever the hour now
     assert t["load_kwh"] > 0 and t["pv_kwh"] > 0
     assert abs(t["load_kwh"] - (t["pv_kwh"] + t["genset_kwh"] + t["grid_kwh"])) / t["load_kwh"] < 0.08
 
