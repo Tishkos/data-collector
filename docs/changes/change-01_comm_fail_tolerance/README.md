@@ -70,3 +70,5 @@ one genset runs alone.
 ## Rollback
 
 Load the 14 Oct archive; or in the editor put the constant 0 back on the switch's second input.
+
+See `design_review_v4.md` for the four-role review of v3 and v4, the revised v4 and the measurements that come first.
