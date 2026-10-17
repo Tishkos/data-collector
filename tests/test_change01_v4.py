@@ -127,6 +127,19 @@ def test_writer_blind_does_not_wind_the_hold_down():
     assert v4.max_step_kw < v3.max_step_kw + 150 < today.max_step_kw
 
 
+def test_late_writer_flag_costs_no_more_than_today():
+    # the writing session goes silent while the fail is already on, and its own flag only rises when it answers
+    # again (the 8 Sep pattern applied to a long silence): the guard lowers blind, but at most 4 s of it
+    keep = sim.DECLARE_LONG_S
+    sim.DECLARE_LONG_S = 1e9
+    try:
+        sc = sim.Scenario("late flag", ap_invalid=[(10, 50)], silent=[(14, 50, (0,))], load_steps=[(15, -600)])
+        today, v4 = sim.run("today", sc), sim.run("v4", sc)
+    finally:
+        sim.DECLARE_LONG_S = keep
+    assert v4.max_step_kw < today.max_step_kw + 100 and not v4.tripped
+
+
 def test_grid_falls_back_to_today():
     sc = sim.scenarios()[6][1]                                            # MCB 1 only, exporting at the limit, load drop
     today, v3, v4 = (sim.run(p, sc) for p in ("today", "v3", "v4"))

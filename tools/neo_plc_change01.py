@@ -259,7 +259,7 @@ def sheet10_timed(hold_s: float = HOLD_S) -> ET.Element:
 # the new blocks are placed where that order is also the order they must run in; nothing of the plant moves.
 B_COMM_LOST4 = (10436, 2)       # hold time over (as v3)
 B_TWO_SETS = (10436, 3)         # two or more gensets loaded (floor above 200 kW)
-B_LINK_BAD = (10436, 4)         # ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid, before the 2 s stretch
+B_SPENT = (10436, 4)            # the guard has acted CAP_S seconds in a row: it stops for the rest of the fail
 B_ABOVE_FLOOR = (10436, 5)      # gensets above their floor (with a 50 kW margin to switch back)
 B_GUARD = (10436, 6)            # guard active
 B_HOLD_ENDED = (10436, 7)       # hold time over OR fewer than two sets: back to today's 0
@@ -280,9 +280,9 @@ B_ECU2 = (11900, 1)             # ECU 2 = PV logger group 1, the session that wr
 GEN_NOMINAL_KW = (1000, 1000, 700, 1000, 1150)
 FLOOR_PCT = 15                  # the guard acts below 15 % of the loaded nominal (Gen P Min is 25 %, reverse power -10 %)
 FLOOR_MARGIN_KW = 50            # and stops once the gensets are 50 kW above it again
-TWO_SETS_KW = 200               # floor above 200 kW = two or more sets (largest single floor 172, smallest pair 255)
 STEP_PCT = 4                    # while it acts, the held value is multiplied by 0.96 every second cycle (about 20 % per s)
-STRETCH_S = 2.0                 # the hold stays 2 s after the link is back, until the values are fresh
+CAP_S = 4.0                     # the guard acts at most 4 s in a row (lowers by about half at most), then rests 60 s
+CAP_REST_S = 60.0
 
 
 def delay2_block(x, y, name, key, src, up_s, down_s) -> ET.Element:
@@ -321,6 +321,15 @@ def axbcd_block(x, y, name, comobj, flag, flag_name, a, b, c, d, res="1", dim="k
 def _floor_table(noms, pct) -> list:
     """Mux data: input k = floor of the sets whose select bits are set in k."""
     return [int(sum(n for i, n in enumerate(noms) if k >> i & 1) * pct / 100) for k in range(2 ** len(noms))]
+
+
+def two_sets_threshold(noms, pct) -> int:
+    """A floor above this means two or more sets: halfway between the largest single-set floor and the smallest
+    two-set floor (with today's nominals 172 and 255 -> 213)."""
+    single = max(int(n * pct / 100) for n in noms)
+    pair = min(int((a + b) * pct / 100) for i, a in enumerate(noms) for b in noms[i + 1:])
+    assert pair > single, "a pair of sets cannot be told from one set by the floor"
+    return (single + pair) // 2
 
 
 def sheet06_v4() -> ET.Element:
@@ -379,7 +388,7 @@ def _declare(root: ET.Element) -> None:
 
 
 def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int = STEP_PCT,
-               noms: tuple = GEN_NOMINAL_KW) -> ET.Element:
+               noms: tuple = GEN_NOMINAL_KW, cap_s: float = CAP_S) -> ET.Element:
     """The hold with a guard. Healthy link: identical to today, output by output. During a fail it holds what was
     sent to the SAU; on gensets it lowers that value while the gensets sit below their floor (only while the writing
     session works); on the grid, with fewer than two sets, or after `hold_s`, it does what today's program does: 0."""
@@ -388,7 +397,8 @@ def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int
     blocks = list(fb)
     lost = next(b for b in blocks if b.get("Identification") == "33" and b.find("Outputs")[0].get("Name") == "PV comm lost")
     lost.find("Inputs")[1].set("ValueOfConstant", str(int(hold_s * 10)))
-    # 1. the fail: ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid -> "PV link bad"; stretched 2 s -> "PV comm fail"
+    # 1. the fail: ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid (the ECU bit already stays about 2 s after
+    #    the SAU answers again, so no extra stretch)
     fail_or = next(b for b in blocks if b.get("Identification") == "1" and b.find("Outputs")[0].get("ComObject") == "10432"
                    and b.find("Outputs")[0].get("BitIndex") == "1")
     ins = fail_or.find("Inputs")
@@ -397,12 +407,6 @@ def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int
                          (3, ("Max Active Power Available invalid", B_MAX_INVALID))):
         ins.remove(ins[k])
         ins.insert(k, bin_in(nm, key))
-    out = fail_or.find("Outputs")[0]
-    out.set("Name", "PV link bad")
-    out.set("ComObject", str(B_LINK_BAD[0]))
-    out.set("BitIndex", str(B_LINK_BAD[1]))
-    fb.insert(list(fb).index(fail_or) + 1,
-              delay2_block(12, 19, "PV comm fail", (10432, 1), bin_in("PV link bad", B_LINK_BAD), 0.0, STRETCH_S))
     # 2. the hold keeps "PV req guarded" (computed last cycle from the ramp output: what was sent, at most one ramp
     #    step of 150 kW away from the value before a corrupted cycle)
     hold = next(b for b in fb if b.get("Identification") == "5" and b.find("Outputs")[0].get("ComObject") == "21279")
@@ -417,6 +421,7 @@ def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int
     rin.set("ComObject", str(A_REQ_FINAL4))
     # 3. the new blocks, after the plant's last column (X 36), in the order they run
     held = lambda: ana_in("PV req prot comm fail", 21279)
+    two = two_sets_threshold(noms, floor_pct)
     new = [
         mux_block(43, 30, "Gen floor 1-3", A_FLOOR_A,
                   [bin_in("Gen Loaded 1", (10196, 0)), bin_in("Gen Loaded 2", (10196, 1)), bin_in("Gen Loaded 3", (10196, 2))],
@@ -428,11 +433,12 @@ def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int
         math_block(52, 40, "Gen floor + margin", A_FLOOR_ON, 0, ana_in("Gen floor", A_FLOOR), const_in(FLOOR_MARGIN_KW)),
         hyst_block(60, 30, "Gensets above floor", B_ABOVE_FLOOR, ana_in("Gensets P", 20183),
                    ana_in("Gen floor + margin", A_FLOOR_ON), ana_in("Gen floor", A_FLOOR)),
-        hyst_block(60, 38, "Two sets loaded", B_TWO_SETS, ana_in("Gen floor", A_FLOOR), const_in(TWO_SETS_KW), const_in(TWO_SETS_KW)),
+        hyst_block(60, 38, "Two sets loaded", B_TWO_SETS, ana_in("Gen floor", A_FLOOR), const_in(two), const_in(two)),
         andor_block(68, 30, "PV guard active", B_GUARD, False, bin_in("PV comm fail", (10432, 1)),
                     bin_in("Any MCB close", (10424, 6), negated=True), bin_in("Gensets above floor", B_ABOVE_FLOOR, negated=True),
-                    bin_in("ECU 2 Comm Fail", B_ECU2, negated=True, ctype=1)),
-        andor_block(68, 40, "PV hold ended", B_HOLD_ENDED, True, bin_in("PV comm lost", B_COMM_LOST4),
+                    bin_in("ECU 2 Comm Fail", B_ECU2, negated=True, ctype=1), bin_in("PV guard spent", B_SPENT, negated=True)),
+        delay2_block(68, 40, "PV guard spent", B_SPENT, bin_in("PV guard active", B_GUARD), cap_s, CAP_REST_S),
+        andor_block(68, 48, "PV hold ended", B_HOLD_ENDED, True, bin_in("PV comm lost", B_COMM_LOST4),
                     bin_in("Two sets loaded", B_TWO_SETS, negated=True)),
         mux_block(76, 30, "PV guard factor", A_FACTOR,
                   [bin_in("PV guard active", B_GUARD), bin_in("Any MCB close", (10424, 6)), bin_in("PV comm fail", (10432, 1))],
@@ -457,6 +463,64 @@ Built from the sheet exports of 2026-10-14 by `tools/neo_plc_change01.py`. Same 
 in is: InteliConfig on a copy of the archive -> PLC editor -> import sheet -> compare -> save as a new archive.
 Nothing here writes to the controller; the plant loads the new archive itself, at low load, with the
 14 Oct archive at hand as the way back.
+
+## v4: the hold with a guard (the version to use; built and tested offline on 17 Oct, not imported yet)
+
+v4 replaces v2 and v3. Both of those let a negative request through to the SAU (they took the "negative request"
+out of the fail OR), hold a value that can already be corrupted, and have no protection against a load drop
+during the hold. The sections further down describe v2 and v3 and stay for the record.
+
+Files: `sheet10_PV_req_step_protection_v4_guard.xml` and `sheet06_Validation_v4.xml` (**both** must be imported;
+sheet 6 only declares its two existing invalid flags as sheet outputs, no block changes there), `program_v4/` the
+whole program as the model runs it, `program_v4.md` its listing, `v4_simulation.md` the closed-loop results
+(`tools/change01_sim.py`), tests in `tests/test_change01_v4.py`.
+
+| | today | v4 |
+|---|---|---|
+| healthy link | - | identical to today, output by output (also with a negative manual request: 0) |
+| what counts as a fail | ECU 2 OR ECU 3 comm fail OR negative request | ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid (the validators of sheet 6); the negative request still gives 0 while healthy |
+| during a fail, on two or more gensets | request forced to 0 | the value **actually sent** to the SAU is held (the ramp output: one corrupted cycle costs at most one ramp step of 150 kW) |
+| the guard | - | while held, if Gensets P falls below 15 % of the nominal of the sets actually loaded (Gen Loaded bits x per-set nominal), the held value is lowered by 4 % every second cycle (about 15 % per second) until the gensets are 50 kW above that floor again; only while ECU 2 (the session that writes) has no fail; at most 4 s in a row per fail. Lowering only |
+| on the grid, with one genset, or 60 s after the fail | 0 | 0, as today |
+
+Resources: 13 new blocks (no Analog Switch; Mux 2 -> 6, Comp Hyst +2, AND/OR +2, Math Fc +2, Delay +2,
+AxB/C+D +1, and v3's Comp 4 / AxB are not used), the seven binary PLC outputs that were still free (PLC-BOUT 13
+bits 2-7, PLC-BOUT 7 bit 0) and PLC-AOUT 21286-21292. All new blocks sit after the plant's last column, so the
+order they are listed in is also the order of their positions, as in every plant sheet.
+
+Per-set nominals in the two Mux tables: Gen 1 1,000, Gen 2 1,000 (ASSUMED: Gen 2 was not read, password), Gen 3
+700, Gen 4 1,000, Gen 5 1,150 kW (IG4 archives 17 Oct). If a set is re-rated or swapped, rebuild with the new
+figures. "Two sets loaded" means a floor above 213 kW (largest single-set floor 172, smallest pair 255).
+
+What the closed-loop model shows (details in `v4_simulation.md`; plant model with the measured session timing,
+writes through group 1 only, inverters falling 166 kW/s, reverse power 10 % / 5 s):
+- a 2.5 s pause like 8 Sep: today about 1.1 MW onto the gensets; v4 nothing;
+- the same pause with the AP read corrupted for 0.3 s before the fail bit: v3 about 1 MW, v4 150 kW;
+- one session lost and a load drop: largest drop the gensets survive without a reverse-power trip, Gen 4 + 5 at
+  2,000 kW load: v3 700 kW, v4 1,200 kW (today 1,400 kW, because it has already thrown the solar away - at the
+  price of a ~1.2 MW step at every fail); three sets: v3 1,100, v4 1,500 (today 1,800+);
+- the guard is faster than the inverters; its limit is how fast the inverters come down (166 kW/s on 8 Sep) and
+  the write delay. On a big drop the reverse-power dip itself is instant; the guard ends it inside the 5 s delay;
+- on the grid and with one genset v4 does exactly what today does;
+- if the writing session goes silent and its flag comes late, the guard lowers blind for at most 4 s; the step
+  when the link returns then stays within about 100 kW of today's.
+Known small effects: the held value alternates by up to about 2.5 kW from cycle to cycle (the hold loop runs over
+two cycles because the new blocks sit after the switch); the guard may lower somewhat more than needed (the write
+every second and the inverters' delay), which costs solar, never safety.
+
+Checks before it goes near the plant:
+1. Import both sheets on a **copy** of the archive (never the live controller). InteliConfig must accept the block
+   budget and the object numbers (only the Analog Switch limit is known).
+2. In the editor: the two floor Mux tables read 0/150/150/300/105/255/255/405 and 0/150/172/322; "PV guard factor"
+   reads 100/100/100/100/100/96/0/0; "PV req final" reads held/held/0/0/held/0/held/0; the switch's second input is
+   "PV req guarded"; the ramp reads "PV req final" and still shows 25 and 1500 per s; "PV guard spent" shows 4 s up
+   and 60 s down.
+3. From the recorder: AP and Max Available are never invalid outside comm fails (otherwise the hold also starts
+   then; still safe, it ends in 0 after 60 s as today); Gensets P stays valid during logger fails.
+4. The PLC cycle is 100 ms (the guard's rate assumes it).
+5. The kill criteria of the design review still stand: #14364 through a fail, and the read-back through
+   one-session fails.
+6. Compare with the 14 Oct archive: only sheets 6 and 10 differ; keep the 14 Oct archive as the way back.
 
 ## Why
 

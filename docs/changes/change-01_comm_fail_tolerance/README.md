@@ -5,6 +5,64 @@ in is: InteliConfig on a copy of the archive -> PLC editor -> import sheet -> co
 Nothing here writes to the controller; the plant loads the new archive itself, at low load, with the
 14 Oct archive at hand as the way back.
 
+## v4: the hold with a guard (the version to use; built and tested offline on 17 Oct, not imported yet)
+
+v4 replaces v2 and v3. Both of those let a negative request through to the SAU (they took the "negative request"
+out of the fail OR), hold a value that can already be corrupted, and have no protection against a load drop
+during the hold. The sections further down describe v2 and v3 and stay for the record.
+
+Files: `sheet10_PV_req_step_protection_v4_guard.xml` and `sheet06_Validation_v4.xml` (**both** must be imported;
+sheet 6 only declares its two existing invalid flags as sheet outputs, no block changes there), `program_v4/` the
+whole program as the model runs it, `program_v4.md` its listing, `v4_simulation.md` the closed-loop results
+(`tools/change01_sim.py`), tests in `tests/test_change01_v4.py`.
+
+| | today | v4 |
+|---|---|---|
+| healthy link | - | identical to today, output by output (also with a negative manual request: 0) |
+| what counts as a fail | ECU 2 OR ECU 3 comm fail OR negative request | ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid (the validators of sheet 6); the negative request still gives 0 while healthy |
+| during a fail, on two or more gensets | request forced to 0 | the value **actually sent** to the SAU is held (the ramp output: one corrupted cycle costs at most one ramp step of 150 kW) |
+| the guard | - | while held, if Gensets P falls below 15 % of the nominal of the sets actually loaded (Gen Loaded bits x per-set nominal), the held value is lowered by 4 % every second cycle (about 15 % per second) until the gensets are 50 kW above that floor again; only while ECU 2 (the session that writes) has no fail; at most 4 s in a row per fail. Lowering only |
+| on the grid, with one genset, or 60 s after the fail | 0 | 0, as today |
+
+Resources: 13 new blocks (no Analog Switch; Mux 2 -> 6, Comp Hyst +2, AND/OR +2, Math Fc +2, Delay +2,
+AxB/C+D +1, and v3's Comp 4 / AxB are not used), the seven binary PLC outputs that were still free (PLC-BOUT 13
+bits 2-7, PLC-BOUT 7 bit 0) and PLC-AOUT 21286-21292. All new blocks sit after the plant's last column, so the
+order they are listed in is also the order of their positions, as in every plant sheet.
+
+Per-set nominals in the two Mux tables: Gen 1 1,000, Gen 2 1,000 (ASSUMED: Gen 2 was not read, password), Gen 3
+700, Gen 4 1,000, Gen 5 1,150 kW (IG4 archives 17 Oct). If a set is re-rated or swapped, rebuild with the new
+figures. "Two sets loaded" means a floor above 213 kW (largest single-set floor 172, smallest pair 255).
+
+What the closed-loop model shows (details in `v4_simulation.md`; plant model with the measured session timing,
+writes through group 1 only, inverters falling 166 kW/s, reverse power 10 % / 5 s):
+- a 2.5 s pause like 8 Sep: today about 1.1 MW onto the gensets; v4 nothing;
+- the same pause with the AP read corrupted for 0.3 s before the fail bit: v3 about 1 MW, v4 150 kW;
+- one session lost and a load drop: largest drop the gensets survive without a reverse-power trip, Gen 4 + 5 at
+  2,000 kW load: v3 700 kW, v4 1,200 kW (today 1,400 kW, because it has already thrown the solar away - at the
+  price of a ~1.2 MW step at every fail); three sets: v3 1,100, v4 1,500 (today 1,800+);
+- the guard is faster than the inverters; its limit is how fast the inverters come down (166 kW/s on 8 Sep) and
+  the write delay. On a big drop the reverse-power dip itself is instant; the guard ends it inside the 5 s delay;
+- on the grid and with one genset v4 does exactly what today does;
+- if the writing session goes silent and its flag comes late, the guard lowers blind for at most 4 s; the step
+  when the link returns then stays within about 100 kW of today's.
+Known small effects: the held value alternates by up to about 2.5 kW from cycle to cycle (the hold loop runs over
+two cycles because the new blocks sit after the switch); the guard may lower somewhat more than needed (the write
+every second and the inverters' delay), which costs solar, never safety.
+
+Checks before it goes near the plant:
+1. Import both sheets on a **copy** of the archive (never the live controller). InteliConfig must accept the block
+   budget and the object numbers (only the Analog Switch limit is known).
+2. In the editor: the two floor Mux tables read 0/150/150/300/105/255/255/405 and 0/150/172/322; "PV guard factor"
+   reads 100/100/100/100/100/96/0/0; "PV req final" reads held/held/0/0/held/0/held/0; the switch's second input is
+   "PV req guarded"; the ramp reads "PV req final" and still shows 25 and 1500 per s; "PV guard spent" shows 4 s up
+   and 60 s down.
+3. From the recorder: AP and Max Available are never invalid outside comm fails (otherwise the hold also starts
+   then; still safe, it ends in 0 after 60 s as today); Gensets P stays valid during logger fails.
+4. The PLC cycle is 100 ms (the guard's rate assumes it).
+5. The kill criteria of the design review still stand: #14364 through a fail, and the read-back through
+   one-session fails.
+6. Compare with the 14 Oct archive: only sheets 6 and 10 differ; keep the 14 Oct archive as the way back.
+
 ## Why
 
 One lost Modbus reply on either PV-logger session raises "ECU 2/3 Comm Fail"; sheet 10 switches the PV request
