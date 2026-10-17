@@ -24,7 +24,11 @@ For each one, in InteliConfig, exactly as done for the master on 14 October:
 Screenshots or export of:
 - [ ] firmware version
 - [ ] Modbus TCP server settings, above all the maximum number of client connections
-- [ ] RS485 settings and statistics to the inverters (baud rate, poll cycle, error counters)
+- [ ] RS485 settings and statistics to the inverters (baud rate, poll cycle, **response delay**, error counters)
+- [ ] the real-time RS485 log page (Send/Recv frames, timeouts) while it runs: screenshots, and count the timeouts per minute
+- [ ] the device list with the communication status of every inverter and meter
+- [ ] the history log with the status flips and the "AC voltage low / abnormal" flags; export it if the page offers it
+- [ ] the nameplate: SAU-100 or SAU-300 (the old support email says SAU-300, protocol SAU300U211)
 - [ ] power control / ramp settings, communication watchdog or fallback when the master goes silent
 - [ ] event or alarm log
 - [ ] network settings of ETH0 and ETH1

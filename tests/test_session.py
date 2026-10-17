@@ -111,10 +111,11 @@ def _write_day(tmp_path, date="2026-10-16"):
             load_drop = 300 if 200 <= s < 260 else 0
             f.write(f"{iso(t0 + timedelta(seconds=s))},5,3,0,{'' if fail else 1000},{790 - load_drop},0,{31 if not fail else 5}\n")
     with open(d / f"pv-array_{date}.csv", "w") as f:
-        f.write("ts,ms,ok_blocks,failed_blocks,ac_power_kw,set_2100,set_2101,set_2102,set_2103\n")
+        f.write("ts,ms,ok_blocks,failed_blocks,ac_power_kw,inverters_online,set_2100,set_2101,set_2102,set_2103\n")
         for s in range(0, 600, 5):
             fail = 60 <= s < 72
-            f.write(f"{iso(t0 + timedelta(seconds=s))},{900 if fail else 40},{0 if fail else 3},{3 if fail else 0},998.5,0,{10912 if s % 10 else 0},{0 if s % 10 else 10912},0\n")
+            online = 9 if 40 <= s < 80 or 380 <= s < 420 else 10
+            f.write(f"{iso(t0 + timedelta(seconds=s))},{900 if fail else 40},{0 if fail else 3},{3 if fail else 0},998.5,{online},0,{10912 if s % 10 else 0},{0 if s % 10 else 10912},0\n")
     with open(d / f"connect_{date}.csv", "w") as f:
         f.write("ts,host,ok,ms,error\n")
         for s in range(0, 600, 60):
@@ -136,6 +137,7 @@ def test_report_reads_fails_sau_words_regulator_and_load_steps(tmp_path):
     assert "set_2101" in text and "group 2 layout" in text
     assert "curtailment % before/during/after 31.0 / 5.0 / 31.0" in text
     assert "Largest fall within one minute: 300 kW" in text
+    assert "the count fell 2 times" in text and "in the 30 s before them: 3 of 3" in text
 
 
 def test_report_on_an_empty_day(tmp_path):

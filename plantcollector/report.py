@@ -144,6 +144,26 @@ def summarize(trace_dir: str, date: str) -> str:
                  + (": " + ", ".join(f"{r['ts'][11:19]} {r['host']}" for r in fails_con[:10]) if fails_con else "") + ".")
     L.append("")
 
+    # ---- the inverters on the SAU's RS485 (the counts the SAU reports)
+    if sau and "inverters_online" in sau[0]:
+        L.append("## Inverters on the SAU's RS485 (online count the SAU reports)")
+        pts = [(_ts(r["ts"]), _num(r.get("inverters_online"))) for r in sau if _num(r.get("inverters_online")) is not None]
+        if pts:
+            vals = [v for _, v in pts]
+            drops = [(t, v) for (t, v), (t0, v0) in zip(pts[1:], pts[:-1]) if v < v0]
+            L.append(f"Online inverters: max {max(vals):.0f}, min {min(vals):.0f}; the count fell {len(drops)} times"
+                     + (": " + ", ".join(f"{t.strftime('%H:%M:%S')} to {v:.0f}" for t, v in drops[:12]) if drops else "") + ".")
+            if fails:
+                near = 0
+                for f in fails:
+                    if any(0 <= (f["start"] - t).total_seconds() <= 30 for t, _ in drops):
+                        near += 1
+                L.append(f"Master comm fails with an inverter dropping off the RS485 in the 30 s before them: {near} of {len(fails)}. "
+                         "A high share says the fail is born on the RS485 bus (inverter off, SAU stalled, master timed out).")
+        else:
+            L.append("No inverter counts in the SAU rows.")
+        L.append("")
+
     # ---- the setpoint words
     if sau and "set_2101" in sau[0]:
         L.append("## The setpoint words the master writes (read back from the SAU)")
