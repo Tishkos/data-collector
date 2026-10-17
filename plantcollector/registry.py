@@ -11,7 +11,10 @@ from enum import Enum
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+try:
+    from pydantic import BaseModel, Field
+except ImportError:                                     # the light package for slow sites: no pydantic
+    from ._mini_model import BaseModel, Field
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROFILES_DIR = os.path.join(ROOT, "profiles")
