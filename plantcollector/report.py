@@ -139,7 +139,7 @@ def _drop_catalogue(neo: list[dict], sau: list[dict], fails: list[dict], min_kw:
             fz = [_num(r.get("bus_frequency_hz")) for r in span if _num(r.get("bus_frequency_hz")) not in (None, 0)]
             if fz and (min(fz) < 48.5 or max(fz) > 51.5):
                 tags.append(f"bus frequency {min(fz):.2f}-{max(fz):.2f} Hz")
-            vr = [_num(r.get("bus_voltage_rel_pct")) for r in span if _num(r.get("bus_voltage_rel_pct")) is not None]
+            vr = [_num(r.get("bus_voltage_rel_pct")) for r in span if _num(r.get("bus_voltage_rel_pct")) not in (None, 0)]
             if vr and (min(vr) < 85 or max(vr) > 115):
                 tags.append(f"bus voltage {min(vr):.0f}-{max(vr):.0f} %")
             g0, g1 = _num(r0.get("power_kw")), max((_num(r.get("power_kw")) or 0) for r in near(rows, tmin, after_s=30))
@@ -247,10 +247,11 @@ def summarize(trace_dir: str, date: str) -> str:
             for ep in eps[:30]:
                 t0, t1 = _ts(ep[0]["ts"]), _ts(ep[-1]["ts"])
                 worst = max((_num(r["ms"]) or 0) for r in ep)
-                p_bad = sum(1 for r in pings if r.get("ok") != "1" and t0 - timedelta(seconds=2) <= _ts(r["ts"]) <= t1 + timedelta(seconds=2))
+                p_win = [r for r in pings if t0 - timedelta(seconds=2) <= _ts(r["ts"]) <= t1 + timedelta(seconds=2)]
+                p_bad = sum(1 for r in p_win if r.get("ok") != "1")
                 with_fail = any(f["start"] - timedelta(seconds=15) <= t1 and (f["end"] or f["start"] + timedelta(seconds=600)) >= t0 for f in fails)
                 L.append(f"- {t0.strftime('%H:%M:%S')} for {(t1 - t0).total_seconds() + 1:.0f} s, worst {worst:.0f} ms, "
-                         f"{sum(1 for r in ep if r.get('ok') != '1')} unanswered; ping {'failed ' + str(p_bad) + 'x' if p_bad else 'fine'}; "
+                         f"{sum(1 for r in ep if r.get('ok') != '1')} unanswered; " + ("no pings" if not p_win else f"ping failed {p_bad}x" if p_bad else "ping fine") + "; "
                          f"master fail at the same time: {'yes' if with_fail else 'no'}")
             if len(eps) > 30:
                 L.append(f"- ... {len(eps) - 30} more")
