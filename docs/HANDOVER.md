@@ -185,6 +185,11 @@ Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this
   192.168.1.50 every 1.3 s (a configured, absent host); the laptop on ETH1's subnet received 192.168.0.x
   broadcasts, so the two subnets shared one switch domain that day; 192.168.0.129 is an Intel NIC sending
   Windows-style LLDP and ARPing the genset controllers: an unknown PC, not the router (inventory gap).
+- **Cross-check with tshark 4.2.2 (Wireshark's decoder, 17 Oct): every fact above holds.** Unit 245 on all master
+  frames; group 1 (port 61415) does the writes, group 2 (61416) reads only; FC6 1007 refused with exception 06 in
+  104 of 104; GET /deviceLog/downloadRunTimeUrl at 09:08:29.25, then requests tid 634/13846 at 30.050 unanswered
+  until 32.564 (2.51 s), the engineer's own poll on ETH1 (tid 1910, 29.835) also answered only at 32.564, and the
+  master's next items at 31.971/31.973, 1.92 s after the abandoned requests.
 - **`SauGuard.txt` shows no watchdog restart of the application.** It holds 10 cold starts of the guard
   (box reboots: 18 Jun, 22 Jul, 30 Jul x2, 13 Aug x2, 19 Aug x2, 31 Aug, 1 Sep) and three SIGTERM stop/start
   pairs (22 Jun 14:02; **6 Sep 09:36:28 and 09:49:33**). The two on 6 Sep match, to the minute, the Sineng
