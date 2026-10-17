@@ -67,6 +67,7 @@ class Scenario:
     ap_zero: list = field(default_factory=list)     # (start, end): AP reads a valid 0 (a mispaired frame)
     ap_invalid: list = field(default_factory=list)  # (start, end): AP invalid without any comm fail bit
     on_grid: bool = False
+    mcb: tuple = (1, 1, 1)                          # mains breakers closed (on the grid)
     seconds: float = 120.0
 
 
@@ -76,8 +77,9 @@ class Result:
     min_gen_pct: float
     rp_seconds: float
     tripped: bool
-    pv_lost_kwh: float
     max_step_kw: float
+    export_over_s: float                            # seconds the export was above 1,300 kW per closed feeder
+    max_export_kw: float
     trace: list
 
 
@@ -90,7 +92,8 @@ def run(prog_name: str, sc: Scenario) -> Result:
     noms = [GEN_NOMINAL_KW[i] for i in sc.gensets]
     run_nom = 0.0 if sc.on_grid else float(sum(noms))
     load = sc.load_kw
-    p0 = min(sc.avail_kw, load) if sc.on_grid else max(0.0, load - GEN_P_MIN / 100 * run_nom)
+    cap = 1300.0 * sum(sc.mcb)
+    p0 = min(sc.avail_kw, load + cap) if sc.on_grid else max(0.0, load - GEN_P_MIN / 100 * run_nom)
     pv = p0
     curtail = 0.0 if sc.on_grid else p0 / MAX_AVAIL_KW * 100
     received = p0
@@ -101,7 +104,8 @@ def run(prog_name: str, sc: Scenario) -> Result:
     clear_at = [None, None]
     declare_at = [None, None]
     rp_t, rp_seconds, tripped = 0.0, 0.0, False
-    min_gen, max_step, lost = 1e9, 0.0, 0.0
+    min_gen, max_step = 1e9, 0.0
+    export_over, max_export = 0.0, 0.0
     gen_hist = []
     trace = []
     t = -60.0                                      # one minute to settle before the scenario clock starts
@@ -158,6 +162,9 @@ def run(prog_name: str, sc: Scenario) -> Result:
         inputs[19424] = max_val
         for i in range(5):
             inputs[(10196, i)] = int(i in sc.gensets and not sc.on_grid)
+        if sc.on_grid:
+            for k, n in enumerate((10169, 10170, 10752)):
+                inputs[(n, 0)] = int(sc.mcb[k])
         plc.step(inputs, DT)
         setpoint = plc.get(21267) or 0.0
         # group 1 writes the setpoint every second while it gets replies; group 2 writes nothing (8 Sep)
@@ -191,13 +198,17 @@ def run(prog_name: str, sc: Scenario) -> Result:
                         tripped = True
                 else:
                     rp_t = 0.0
-            lost += max(0.0, min(avail, p0 if not sc.load_steps else pv) - pv) * DT / 3600
+            if sc.on_grid:
+                max_export = max(max_export, pv - L)
+                if pv - L > cap + 1:
+                    export_over += DT
             if abs(t * 10 % 10) < 1e-6:
                 trace.append((round(t), round(L), round(pv), round(gen), round(setpoint), flags[0], flags[1]))
         t = round(t + DT, 1)
     return Result(min_gen_kw=min_gen if not sc.on_grid else 0.0,
                   min_gen_pct=(min_gen / run_nom * 100) if run_nom else 0.0,
-                  rp_seconds=round(rp_seconds, 1), tripped=tripped, pv_lost_kwh=lost, max_step_kw=max_step, trace=trace)
+                  rp_seconds=round(rp_seconds, 1), tripped=tripped, max_step_kw=max_step,
+                  export_over_s=round(export_over, 1), max_export_kw=max_export, trace=trace)
 
 
 def pv_energy(prog_name: str, sc: Scenario) -> float:
@@ -221,8 +232,10 @@ def scenarios() -> list[tuple[str, Scenario, str]]:
          "Both sessions silent 70 s: longer than the 60 s hold."),
         ("AP invalid 30 s, no fail bit", Scenario("AP invalid", ap_invalid=[(10, 40)]),
          "The AP value invalid for 30 s while both ECU fail bits stay 0."),
-        ("on the grid, group 2 lost", Scenario("grid", on_grid=True, silent=[(10, 50, (1,))], load_kw=1500, avail_kw=1400),
-         "On the grid: the guard must stay asleep."),
+        ("on the grid, group 2 lost, load drop", Scenario("grid", on_grid=True, mcb=(1, 0, 0), silent=[(10, 50, (1,))],
+                                                          load_kw=1500, avail_kw=3000, load_steps=[(15, -1000)]),
+         "On the grid through MCB 1 only (export limit 1,300 kW), exporting at the limit; group 2 lost 40 s and the "
+         "load drops 1,000 kW at 15 s. A hold would push the export over the limit; v4 does what today does."),
     ]
 
 
@@ -248,14 +261,14 @@ def report() -> str:
          "The master's PLC program run at 100 ms against a small plant model (tools/change01_sim.py). "
          "Reverse power trips the gensets at -10 % of the running nominal for 5 s (IG4, 17 Oct).", "",
          "## Scenarios", "",
-         "| Scenario | Program | Lowest genset load | Reverse power | Trip | Biggest step on the gensets (15 s) | PV energy in window |",
-         "|---|---|---|---|---|---|---|"]
+         "| Scenario | Program | Lowest genset load | Reverse power | Trip | Biggest step on the gensets (15 s) | Export over limit | PV energy in window |",
+         "|---|---|---|---|---|---|---|---|"]
     for title, sc, _ in scenarios():
         for p in ("today", "v3", "v4"):
             r = run(p, sc)
             e = sum(row[2] for row in r.trace) / 3600
             L.append(f"| {title} | {p} | {r.min_gen_kw:.0f} kW ({r.min_gen_pct:.0f} %) | {r.rp_seconds:.1f} s | "
-                     f"{'YES' if r.tripped else 'no'} | {r.max_step_kw:.0f} kW | {e:.1f} kWh |")
+                     f"{'YES' if r.tripped else 'no'} | {r.max_step_kw:.0f} kW | {r.export_over_s:.0f} s | {e:.1f} kWh |")
     L += ["", "Scenario notes:", ""]
     L += [f"- **{t}**: {n}" for t, _, n in scenarios()]
     L += ["", "## Load drop while one session is lost (the hold's real exposure)", "",

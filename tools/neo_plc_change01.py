@@ -252,28 +252,36 @@ def sheet10_timed(hold_s: float = HOLD_S) -> ET.Element:
     return root
 
 
-# --------------------------------------------------------------------------------------------- v4: v3 + the guard
-# Free objects on 14 Oct after v3: PLC-BOUT 13 bits 4..7 and PLC-BOUT 7 bit 0 (five bits, all used here);
-# PLC-AOUT 21289.. (the export shows 21248..21288 in use). No Analog Switch (none left).
+# --------------------------------------------------------------------------------------------- v4: the hold with a guard
+# Built after an independent review of the first v4 draft (17 Oct). Free objects on 14 Oct: PLC-BOUT 13 bits 2..7
+# and PLC-BOUT 7 bit 0 (seven bits, all used here); PLC-AOUT from 21286 (the export shows 21248..21285 in use by the
+# plant). No Analog Switch (none left). Block order: every sheet of the plant lists its blocks in (X, Y) order, so
+# the new blocks are placed where that order is also the order they must run in; nothing of the plant moves.
+B_COMM_LOST4 = (10436, 2)       # hold time over (as v3)
+B_TWO_SETS = (10436, 3)         # two or more gensets loaded (floor above 200 kW)
 B_LINK_BAD = (10436, 4)         # ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid, before the 2 s stretch
-B_ABOVE_FLOOR = (10436, 5)      # gensets above their floor
-B_GUARD = (10436, 6)            # guard active: comm fail AND gensets AND gensets below the floor
-B_FACTOR_INV = (10436, 7)       # invalid flag of "PV guard factor"
+B_ABOVE_FLOOR = (10436, 5)      # gensets above their floor (with a 50 kW margin to switch back)
+B_GUARD = (10436, 6)            # guard active
+B_HOLD_ENDED = (10436, 7)       # hold time over OR fewer than two sets: back to today's 0
 B_GUARDED_INV = (10430, 0)      # invalid flag of "PV req guarded"
-A_FLOOR_A = 21289               # floor of the loaded sets among Gen 1..3
-A_FLOOR_B = 21290               # floor of the loaded sets among Gen 4..5
-A_FLOOR = 21291                 # gensets floor, kW
-A_GUARD_N = 21292               # guard active as a number 0/1
-A_GUARD_N2 = 21293              # second output of the composer (unused)
-A_FACTOR = 21294                # 100 normally, 100 - step while the guard is active (%)
-A_GUARDED = 21295               # what was sent to the SAU, lowered by the factor: the value the hold keeps
+A_FLOOR_A = 21286               # floor of the loaded sets among Gen 1..3 (kW)
+A_FLOOR_B = 21287               # floor of the loaded sets among Gen 4..5 (kW)
+A_REQ_FINAL4 = 21288            # the request into the ramp (same object as v3's "PV req final")
+A_FLOOR = 21289                 # gensets floor (kW)
+A_FLOOR_ON = 21290              # floor + margin (kW)
+A_FACTOR = 21291                # 100 normally, 100 - step while the guard acts, 0 on the grid during a fail (%)
+A_GUARDED = 21292               # what was sent to the SAU, times the factor: the value the hold keeps
 B_AP_INVALID = (10432, 7)       # sheet 6: AP validator invalid flag (exists)
 B_MAX_INVALID = (10433, 0)      # sheet 6: Max Available validator invalid flag (exists)
+B_NEG_REQ = (10433, 6)          # sheet 10: "PV negative request" (request <= 0), exists
+B_ECU2 = (11900, 1)             # ECU 2 = PV logger group 1, the session that writes the setpoint (1 s, archive)
 
 # REAL (IG4 archives of 17 Oct) for Gen 1, 3, 4, 5; Gen 2 is password protected and unread: ASSUMED 1,000 kW
 GEN_NOMINAL_KW = (1000, 1000, 700, 1000, 1150)
 FLOOR_PCT = 15                  # the guard acts below 15 % of the loaded nominal (Gen P Min is 25 %, reverse power -10 %)
-STEP_PCT = 2                    # while it acts, the held value drops 2 % per PLC cycle (about 18 % per second at 100 ms)
+FLOOR_MARGIN_KW = 50            # and stops once the gensets are 50 kW above it again
+TWO_SETS_KW = 200               # floor above 200 kW = two or more sets (largest single floor 172, smallest pair 255)
+STEP_PCT = 4                    # while it acts, the held value is multiplied by 0.96 every second cycle (about 20 % per s)
 STRETCH_S = 2.0                 # the hold stays 2 s after the link is back, until the values are fresh
 
 
@@ -282,21 +290,17 @@ def delay2_block(x, y, name, key, src, up_s, down_s) -> ET.Element:
                  [pin_out(name, key[0], key[1], cat="BinValue")], [(6, "False", "Boolean"), (7, "0", "UInt")])
 
 
-def and_block(x, y, name, key, *ins) -> ET.Element:
+def andor_block(x, y, name, key, is_or, *ins) -> ET.Element:
     inputs = list(ins) + [hidden_in()] * (8 - len(ins))
-    return block(1, x, y, inputs, [pin_out(name, key[0], key[1], cat="BinValue")], [(0, "0", "UInt")])
+    return block(1, x, y, inputs, [pin_out(name, key[0], key[1], cat="BinValue")], [(0, "1" if is_or else "0", "UInt")])
 
 
-def unconnected_in() -> ET.Element:
-    return pin_in()
-
-
-def mux_block(x, y, name, comobj, selects: list, data: list, dim="kW") -> ET.Element:
-    """Mux: three select pins (first = least significant), eight data pins; unused selects stay unconnected,
-    unused data pins hidden, as in the plant's own sheets 8 and 9."""
-    sel = list(selects) + [unconnected_in() for _ in range(3 - len(selects))]
-    dat = [const_in(v) for v in data] + [hidden_in() for _ in range(8 - len(data))]
-    return block(45, x, y, sel + dat, [pin_out(name, comobj, cat="AnaValue", res="0", dim=dim)], [])
+def mux_block(x, y, name, comobj, selects: list, data: list, res="0", dim="kW") -> ET.Element:
+    """Mux: three select pins (first = least significant), eight data pins (constants or values); unused selects
+    stay unconnected, unused data pins hidden, as in the plant's own sheets 8 and 9."""
+    sel = list(selects) + [pin_in() for _ in range(3 - len(selects))]
+    dat = [d if isinstance(d, ET.Element) else const_in(d) for d in data] + [hidden_in() for _ in range(8 - len(data))]
+    return block(45, x, y, sel + dat, [pin_out(name, comobj, cat="AnaValue", res=res, dim=dim)], [])
 
 
 def math_block(x, y, name, comobj, op, *ins, res="0", dim="kW") -> ET.Element:
@@ -308,18 +312,15 @@ def hyst_block(x, y, name, key, x_in, on_in, off_in) -> ET.Element:
     return block(3, x, y, [x_in, on_in, off_in], [pin_out(name, key[0], key[1], cat="BinValue")], [])
 
 
-def axbcd_block(x, y, name, comobj, flag, a, b, c, d, res="1", dim="kW") -> ET.Element:
+def axbcd_block(x, y, name, comobj, flag, flag_name, a, b, c, d, res="1", dim="kW") -> ET.Element:
     return block(51, x, y, [a, b, c, d],
-                 [pin_out(name, comobj, cat="AnaValue", res=res, dim=dim), pin_out("", flag[0], flag[1], cat="BinValue")],
+                 [pin_out(name, comobj, cat="AnaValue", res=res, dim=dim), pin_out(flag_name, flag[0], flag[1], cat="BinValue")],
                  [(22, "0", "UInt"), (37, "0", "UInt"), (23, "False", "Boolean"), (38, "False", "Boolean"), (36, "0", "UInt")])
 
 
 def _floor_table(noms, pct) -> list:
     """Mux data: input k = floor of the sets whose select bits are set in k."""
-    out = []
-    for k in range(2 ** len(noms)):
-        out.append(int(sum(n for i, n in enumerate(noms) if k >> i & 1) * pct / 100))
-    return out
+    return [int(sum(n for i, n in enumerate(noms) if k >> i & 1) * pct / 100) for k in range(2 ** len(noms))]
 
 
 def sheet06_v4() -> ET.Element:
@@ -330,15 +331,63 @@ def sheet06_v4() -> ET.Element:
     return root
 
 
+# names of the objects the v4 sheet reads, for its declarations
+_NAMES4 = {
+    (10196, 0): "Gen Loaded 16", (10196, 1): "Gen Loaded 16", (10196, 2): "Gen Loaded 16", (10196, 3): "Gen Loaded 16",
+    (10196, 4): "Gen Loaded 16", 20183: "Gensets P",
+}
+
+
+def _declare(root: ET.Element) -> None:
+    """Declare what the sheet reads the way the plant's sheets do: a SheetInput for every object produced outside
+    the sheet, a ComObjectExport for every object read; output pins without a name get the object's name."""
+    prog = root.find("PlcProgramExport")
+    blocks = list(prog.find("FunctionBlocks"))
+    produced, fmt = set(), {20183: ("0", "kW")}
+    for b in blocks:
+        for o in b.find("Outputs"):
+            n, bit = int(o.get("ComObject")), int(o.get("BitIndex"))
+            produced.add((n, bit) if o.get("ComObjCategory") == "BinValue" else (n, None))
+            if o.get("ComObjCategory") != "BinValue":
+                fmt[n] = (o.get("ResolutionIndex") or "0", o.get("Dimension") or "")
+            if not o.get("Name"):
+                o.set("Name", f"PLC-BOUT {n - 10423}.{bit + 1}" if o.get("ComObjCategory") == "BinValue" else f"#{n}")
+    declared_in = {(int(e.get("ComObjectNumber")), int(e.get("BitIndex"))) for e in prog.find("PlcSheetInputs")}
+    co = root.find("CommunicationObjectsExport")
+    listed = {(int(e.get("ComObjectNumber")), e.get("BitIndex")) for e in co}
+    used_idx = {int(e.get("Index")) for sec in ("PlcSheetInputs", "PlcSheetOutputs") for e in prog.find(sec)}
+    nxt = max(used_idx) + 1
+    for b in blocks:
+        for i in b.find("Inputs"):
+            n = int(i.get("ComObject"))
+            if n < 0:
+                continue
+            binary = i.get("ComObjCategory") == "BinValue"
+            bit = int(i.get("BitIndex")) if binary else 0
+            key = (n, bit) if binary else (n, None)
+            if key not in produced and (n, bit) not in declared_in:
+                sheet_io(root, "in", n, bit, nxt, "Binary" if binary else "Analog")
+                declared_in.add((n, bit))
+                nxt += 1
+            lkey = (n, str(bit) if binary else "")
+            if lkey not in listed:
+                setpoint = i.get("ComObjCategory") == "AllSetpoint"
+                name = _NAMES4.get((n, bit) if binary else n) or i.get("Name") or f"#{n}"
+                res, dim = ("0", "") if binary else fmt.get(n, ("0", ""))
+                comobj_entry(root, name, n, bit=str(bit) if binary else "", setpoint=setpoint, res=res, dim=dim)
+                listed.add(lkey)
+
+
 def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int = STEP_PCT,
                noms: tuple = GEN_NOMINAL_KW) -> ET.Element:
-    """v3 plus: the fail also rises on an invalid AP or Max Available value and stays 2 s after the link is back;
-    the hold keeps what was actually sent to the SAU (the ramp output), not the request of that cycle; and while
-    a fail lasts, on gensets, with the gensets below `floor_pct` % of the loaded nominal, the held value drops by
-    `step_pct` % per cycle. Nothing changes while the link is healthy."""
-    root = sheet10_timed(hold_s)
+    """The hold with a guard. Healthy link: identical to today, output by output. During a fail it holds what was
+    sent to the SAU; on gensets it lowers that value while the gensets sit below their floor (only while the writing
+    session works); on the grid, with fewer than two sets, or after `hold_s`, it does what today's program does: 0."""
+    root = sheet10(False)                       # v2 (const): the switch holds; "PV comm lost" Delay; no negative-request OR
     fb = blocks_of(root)
     blocks = list(fb)
+    lost = next(b for b in blocks if b.get("Identification") == "33" and b.find("Outputs")[0].get("Name") == "PV comm lost")
+    lost.find("Inputs")[1].set("ValueOfConstant", str(int(hold_s * 10)))
     # 1. the fail: ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid -> "PV link bad"; stretched 2 s -> "PV comm fail"
     fail_or = next(b for b in blocks if b.get("Identification") == "1" and b.find("Outputs")[0].get("ComObject") == "10432"
                    and b.find("Outputs")[0].get("BitIndex") == "1")
@@ -352,47 +401,52 @@ def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int
     out.set("Name", "PV link bad")
     out.set("ComObject", str(B_LINK_BAD[0]))
     out.set("BitIndex", str(B_LINK_BAD[1]))
-    pos = list(fb).index(fail_or)
-    fb.insert(pos + 1, delay2_block(12, 19, "PV comm fail", (10432, 1), bin_in("PV link bad", B_LINK_BAD), 0.0, STRETCH_S))
-    # 2. the guard, just before the hold switch (so the switch reads this cycle's values)
+    fb.insert(list(fb).index(fail_or) + 1,
+              delay2_block(12, 19, "PV comm fail", (10432, 1), bin_in("PV link bad", B_LINK_BAD), 0.0, STRETCH_S))
+    # 2. the hold keeps "PV req guarded" (computed last cycle from the ramp output: what was sent, at most one ramp
+    #    step of 150 kW away from the value before a corrupted cycle)
     hold = next(b for b in fb if b.get("Identification") == "5" and b.find("Outputs")[0].get("ComObject") == "21279")
-    g = [
-        mux_block(43, 30, "Gen floor 1-3", A_FLOOR_A,
-                  [bin_in("Gen Loaded 1", (10196, 0)), bin_in("Gen Loaded 2", (10196, 1)), bin_in("Gen Loaded 3", (10196, 2))],
-                  _floor_table(noms[:3], floor_pct)),
-        mux_block(43, 40, "Gen floor 4-5", A_FLOOR_B,
-                  [bin_in("Gen Loaded 4", (10196, 3)), bin_in("Gen Loaded 5", (10196, 4))],
-                  _floor_table(noms[3:], floor_pct)),
-        math_block(52, 34, "Gen floor", A_FLOOR, 0, ana_in("Gen floor 1-3", A_FLOOR_A), ana_in("Gen floor 4-5", A_FLOOR_B)),
-        hyst_block(60, 30, "Gensets above floor", B_ABOVE_FLOOR, ana_in("Gensets P", 20183),
-                   ana_in("Gen floor", A_FLOOR), ana_in("Gen floor", A_FLOOR)),
-        and_block(68, 30, "PV guard active", B_GUARD, bin_in("PV comm fail", (10432, 1)),
-                  bin_in("Any MCB close", (10424, 6), negated=True), bin_in("Gensets above floor", B_ABOVE_FLOOR, negated=True)),
-        comp4_block(76, 30, "PV guard number", A_GUARD_N, A_GUARD_N2, bin_in("PV guard active", B_GUARD)),
-        axbcd_block(84, 30, "PV guard factor", A_FACTOR, B_FACTOR_INV, ana_in("PV guard number", A_GUARD_N),
-                    const_in(-step_pct), const_in(1), const_in(100), res="0", dim="%"),
-        axbcd_block(92, 30, "PV req guarded", A_GUARDED, B_GUARDED_INV, ana_in("PV req out ramp", 21267),
-                    ana_in("PV guard factor", A_FACTOR), const_in(100), const_in(0), res="1", dim="kW"),
-    ]
-    pos = list(fb).index(hold)
-    for k, b in enumerate(g):
-        fb.insert(pos + k, b)
-    # 3. the hold keeps the guarded value of what was sent, instead of its own output
     hin = hold.find("Inputs")
     assert hin[1].get("ComObject") == "21279"
     hin.remove(hin[1])
     hin.insert(1, ana_in("PV req guarded", A_GUARDED))
-    # declarations: new values from outside the sheet
-    for idx, (n, bit, typ) in enumerate(((B_AP_INVALID[0], B_AP_INVALID[1], "Binary"), (B_MAX_INVALID[0], B_MAX_INVALID[1], "Binary"),
-                                          (10196, 0, "Binary"), (10196, 1, "Binary"), (10196, 2, "Binary"),
-                                          (10196, 3, "Binary"), (10196, 4, "Binary"), (20183, 0, "Analog")), start=20):
-        sheet_io(root, "in", n, bit, idx, typ)
-    for k in range(5):
-        comobj_entry(root, "Gen Loaded 16", 10196, bit=str(k))
-    comobj_entry(root, "Gensets P", 20183, dim="kW")
-    comobj_entry(root, "PLC-BOUT 9", B_AP_INVALID[0], bit=str(B_AP_INVALID[1]))
-    comobj_entry(root, "PLC-BOUT 10", B_MAX_INVALID[0], bit=str(B_MAX_INVALID[1]))
-    root.find("Sheet").set("Width", "2400")
+    ramp = next(b for b in fb if b.get("Identification") == "61")
+    rin = ramp.find("Inputs")[0]
+    assert rin.get("ComObject") == "21279"
+    rin.set("Name", "PV req final")
+    rin.set("ComObject", str(A_REQ_FINAL4))
+    # 3. the new blocks, after the plant's last column (X 36), in the order they run
+    held = lambda: ana_in("PV req prot comm fail", 21279)
+    new = [
+        mux_block(43, 30, "Gen floor 1-3", A_FLOOR_A,
+                  [bin_in("Gen Loaded 1", (10196, 0)), bin_in("Gen Loaded 2", (10196, 1)), bin_in("Gen Loaded 3", (10196, 2))],
+                  _floor_table(noms[:3], floor_pct)),
+        mux_block(43, 46, "Gen floor 4-5", A_FLOOR_B,
+                  [bin_in("Gen Loaded 4", (10196, 3)), bin_in("Gen Loaded 5", (10196, 4))],
+                  _floor_table(noms[3:], floor_pct)),
+        math_block(52, 30, "Gen floor", A_FLOOR, 0, ana_in("Gen floor 1-3", A_FLOOR_A), ana_in("Gen floor 4-5", A_FLOOR_B)),
+        math_block(52, 40, "Gen floor + margin", A_FLOOR_ON, 0, ana_in("Gen floor", A_FLOOR), const_in(FLOOR_MARGIN_KW)),
+        hyst_block(60, 30, "Gensets above floor", B_ABOVE_FLOOR, ana_in("Gensets P", 20183),
+                   ana_in("Gen floor + margin", A_FLOOR_ON), ana_in("Gen floor", A_FLOOR)),
+        hyst_block(60, 38, "Two sets loaded", B_TWO_SETS, ana_in("Gen floor", A_FLOOR), const_in(TWO_SETS_KW), const_in(TWO_SETS_KW)),
+        andor_block(68, 30, "PV guard active", B_GUARD, False, bin_in("PV comm fail", (10432, 1)),
+                    bin_in("Any MCB close", (10424, 6), negated=True), bin_in("Gensets above floor", B_ABOVE_FLOOR, negated=True),
+                    bin_in("ECU 2 Comm Fail", B_ECU2, negated=True, ctype=1)),
+        andor_block(68, 40, "PV hold ended", B_HOLD_ENDED, True, bin_in("PV comm lost", B_COMM_LOST4),
+                    bin_in("Two sets loaded", B_TWO_SETS, negated=True)),
+        mux_block(76, 30, "PV guard factor", A_FACTOR,
+                  [bin_in("PV guard active", B_GUARD), bin_in("Any MCB close", (10424, 6)), bin_in("PV comm fail", (10432, 1))],
+                  [100, 100, 100, 100, 100, 100 - step_pct, 0, 0], dim="%"),
+        axbcd_block(84, 30, "PV req guarded", A_GUARDED, B_GUARDED_INV, "PV req guarded invalid",
+                    ana_in("PV req out ramp", 21267), ana_in("PV guard factor", A_FACTOR), const_in(100), const_in(0)),
+        mux_block(92, 16, "PV req final", A_REQ_FINAL4,
+                  [bin_in("PV hold ended", B_HOLD_ENDED), bin_in("PV negative request", B_NEG_REQ), bin_in("PV comm fail", (10432, 1))],
+                  [held(), held(), 0, 0, held(), 0, held(), 0], res="1"),
+    ]
+    for b in new:
+        fb.append(b)
+    _declare(root)
+    root.find("Sheet").set("Width", "2600")
     root.find("Sheet").set("Height", "1400")
     return root
 

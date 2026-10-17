@@ -130,19 +130,20 @@ Outputs wired to controller functions:
 13. **Delay** - PV prod > PV req del = Delay(PV Prod > PV req comp [#10424.2]; up PV Prod > PV req del [#65522 setpoint] s, down 0 s)
 14. **Delay** - Reverse Power PV not react = Delay(Reverse power Warning [#10432.5]; up 15 s, down 0 s)
 15. **Ramp** - PV req out ramp = Ramp(PV req final [#21288]; up 25 per s, down 1500 per s)
-16. **Mux** - Gen floor 1-3 = Mux(select bits Gen Loaded 1 [#10196.0], Gen Loaded 2 [#10196.1], Gen Loaded 3 [#10196.2]; inputs 0..7: 0, 150, 150, 300, 105, 255, 255, 405)
-17. **Mux** - Gen floor 4-5 = Mux(select bits Gen Loaded 4 [#10196.3], Gen Loaded 5 [#10196.4]; inputs 0..3: 0, 150, 172, 322)
-18. **Math Fc** - Gen floor = add(Gen floor 1-3 [#21289], Gen floor 4-5 [#21290])
-19. **Comp Hyst** - Gensets above floor = Comp Hyst(Gensets P [#20183]; on Gen floor [#21291], off Gen floor [#21291])
-20. **AND/OR** - PV guard active = PV comm fail [#10432.1] AND NOT Any MCB close [#10424.6] AND NOT Gensets above floor [#10436.5]
-21. **Comp 4** - PV guard number = Comp 4(PV guard active [#10436.6] x 1)
-22. **AxB/C+D** - PV guard factor = PV guard number [#21292] x -2 / 1 + 100  (invalid flag -> #10436)
-23. **AxB/C+D** - PV req guarded = PV req out ramp [#21267] x PV guard factor [#21294] / 100 + 0  (invalid flag -> #10430)
-24. **Ana Switch** - PV req prot comm fail = Ana Switch(PV req protected [#21269] when switch 0, PV req guarded [#21295] when switch 1; switch PV comm fail [#10432.1])
-25. **AND/OR** - PV Fail BRK Open = PV prod > PV req del [#10424.3] OR Reverse Power PV not react [#10433.1]
-26. **RS** - PV prod > PV req BRKR open = RS(set PV Fail BRK Open [#10432.6], reset FltRes Button Echo [#11897.0]; reset priority 1)
-27. **Comp 4** - PV allowed = Comp 4(NOT PV comm lost [#10436.2] x 1)
-28. **AxB/C+D** - PV req final = PV req prot comm fail [#21279] x PV allowed [#21286] / 1 + 0  (invalid flag -> #10436)
+16. **Ana Switch** - PV req prot comm fail = Ana Switch(PV req protected [#21269] when switch 0, PV req guarded [#21292] when switch 1; switch PV comm fail [#10432.1])
+17. **AND/OR** - PV Fail BRK Open = PV prod > PV req del [#10424.3] OR Reverse Power PV not react [#10433.1]
+18. **RS** - PV prod > PV req BRKR open = RS(set PV Fail BRK Open [#10432.6], reset FltRes Button Echo [#11897.0]; reset priority 1)
+19. **Mux** - Gen floor 1-3 = Mux(select bits Gen Loaded 1 [#10196.0], Gen Loaded 2 [#10196.1], Gen Loaded 3 [#10196.2]; inputs 0..7: 0, 150, 150, 300, 105, 255, 255, 405)
+20. **Mux** - Gen floor 4-5 = Mux(select bits Gen Loaded 4 [#10196.3], Gen Loaded 5 [#10196.4]; inputs 0..3: 0, 150, 172, 322)
+21. **Math Fc** - Gen floor = add(Gen floor 1-3 [#21286], Gen floor 4-5 [#21287])
+22. **Math Fc** - Gen floor + margin = add(Gen floor [#21289], 50)
+23. **Comp Hyst** - Gensets above floor = Comp Hyst(Gensets P [#20183]; on Gen floor + margin [#21290], off Gen floor [#21289])
+24. **Comp Hyst** - Two sets loaded = Comp Hyst(Gen floor [#21289]; on 200, off 200)
+25. **AND/OR** - PV guard active = PV comm fail [#10432.1] AND NOT Any MCB close [#10424.6] AND NOT Gensets above floor [#10436.5] AND NOT ECU 2 Comm Fail [#11900.1]
+26. **AND/OR** - PV hold ended = PV comm lost [#10436.2] OR NOT Two sets loaded [#10436.3]
+27. **Mux** - PV guard factor = Mux(select bits PV guard active [#10436.6], Any MCB close [#10424.6], PV comm fail [#10432.1]; inputs 0..7: 100, 100, 100, 100, 100, 96, 0, 0)
+28. **AxB/C+D** - PV req guarded = PV req out ramp [#21267] x PV guard factor [#21291] / 100 + 0  (invalid flag -> PV req guarded invalid)
+29. **Mux** - PV req final = Mux(select bits PV hold ended [#10436.7], PV negative request [#10433.6], PV comm fail [#10432.1]; inputs 0..7: PV req prot comm fail [#21279], PV req prot comm fail [#21279], 0, 0, PV req prot comm fail [#21279], 0, PV req prot comm fail [#21279], 0)
 
 Outputs wired to controller functions:
 - PV req out ramp -> ECU write: PV active power setpoint (SAU)
