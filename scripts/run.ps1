@@ -34,22 +34,41 @@ function Say($m) { Write-Host "[collector] $m" -ForegroundColor Cyan }
 function Warn($m) { Write-Host "[collector] $m" -ForegroundColor Yellow }
 
 # ---- 1. Python ---------------------------------------------------------------
-$py = Get-Command python -ErrorAction SilentlyContinue
-if (-not $py -or ((& python --version 2>&1) -notmatch "Python 3\.(1[0-9]|9)")) {
-    Say "Python 3 not found. Installing from python.org (one time, about a minute)..."
+# Windows ships a fake "python" (WindowsApps) that only opens the Microsoft Store; ignore it, never stop on it.
+function Test-Py($exe) {
+    if (-not $exe -or -not (Test-Path $exe) -or $exe -match "WindowsApps") { return $false }
+    try { $v = (& $exe --version 2>&1 | Out-String) } catch { return $false }
+    return ($v -match "Python 3\.(1[0-9]|9)")
+}
+$pyExe = $null
+$cands = @()
+$c = Get-Command python -ErrorAction SilentlyContinue
+if ($c) { $cands += $c.Source }
+foreach ($v in "313", "312", "311", "310") {
+    $cands += "$env:ProgramFiles\Python$v\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python$v\python.exe"
+}
+foreach ($x in $cands) { if (Test-Py $x) { $pyExe = $x; break } }
+if (-not $pyExe) {
+    Say "Python 3 not found. Downloading it from python.org (about 25 MB, one time; slow internet takes a while)..."
     $url = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
     $exe = Join-Path $env:TEMP "python-installer.exe"
+    $ProgressPreference = "SilentlyContinue"            # the progress bar makes the download many times slower
     Invoke-WebRequest $url -OutFile $exe
-    Start-Process $exe -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw "Python install failed - install it from python.org and tick 'Add to PATH'" }
+    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $all = if ($admin) { "1" } else { "0" }
+    Say "Installing Python (quiet, about a minute)..."
+    Start-Process $exe -ArgumentList "/quiet InstallAllUsers=$all PrependPath=1 Include_test=0" -Wait
+    foreach ($x in "$env:ProgramFiles\Python312\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe") {
+        if (Test-Py $x) { $pyExe = $x; break }
+    }
+    if (-not $pyExe) { throw "Python install failed - install Python 3.12 from python.org (tick 'Add to PATH') and start again" }
 }
-Say ("Python: " + (& python --version))
+Say ("Python: " + (& $pyExe --version 2>&1 | Out-String).Trim() + "  (" + $pyExe + ")")
 
 # ---- 2. Virtual environment + packages (first run only) --------------------------
 if (-not (Test-Path ".venv")) {
     Say "Creating virtual environment..."
-    & python -m venv .venv
+    & $pyExe -m venv .venv
 }
 $venvPy  = Join-Path $root ".venv\Scripts\python.exe"
 $venvPyw = Join-Path $root ".venv\Scripts\pythonw.exe"
