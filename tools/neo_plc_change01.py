@@ -252,6 +252,151 @@ def sheet10_timed(hold_s: float = HOLD_S) -> ET.Element:
     return root
 
 
+# --------------------------------------------------------------------------------------------- v4: v3 + the guard
+# Free objects on 14 Oct after v3: PLC-BOUT 13 bits 4..7 and PLC-BOUT 7 bit 0 (five bits, all used here);
+# PLC-AOUT 21289.. (the export shows 21248..21288 in use). No Analog Switch (none left).
+B_LINK_BAD = (10436, 4)         # ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid, before the 2 s stretch
+B_ABOVE_FLOOR = (10436, 5)      # gensets above their floor
+B_GUARD = (10436, 6)            # guard active: comm fail AND gensets AND gensets below the floor
+B_FACTOR_INV = (10436, 7)       # invalid flag of "PV guard factor"
+B_GUARDED_INV = (10430, 0)      # invalid flag of "PV req guarded"
+A_FLOOR_A = 21289               # floor of the loaded sets among Gen 1..3
+A_FLOOR_B = 21290               # floor of the loaded sets among Gen 4..5
+A_FLOOR = 21291                 # gensets floor, kW
+A_GUARD_N = 21292               # guard active as a number 0/1
+A_GUARD_N2 = 21293              # second output of the composer (unused)
+A_FACTOR = 21294                # 100 normally, 100 - step while the guard is active (%)
+A_GUARDED = 21295               # what was sent to the SAU, lowered by the factor: the value the hold keeps
+B_AP_INVALID = (10432, 7)       # sheet 6: AP validator invalid flag (exists)
+B_MAX_INVALID = (10433, 0)      # sheet 6: Max Available validator invalid flag (exists)
+
+# REAL (IG4 archives of 17 Oct) for Gen 1, 3, 4, 5; Gen 2 is password protected and unread: ASSUMED 1,000 kW
+GEN_NOMINAL_KW = (1000, 1000, 700, 1000, 1150)
+FLOOR_PCT = 15                  # the guard acts below 15 % of the loaded nominal (Gen P Min is 25 %, reverse power -10 %)
+STEP_PCT = 2                    # while it acts, the held value drops 2 % per PLC cycle (about 18 % per second at 100 ms)
+STRETCH_S = 2.0                 # the hold stays 2 s after the link is back, until the values are fresh
+
+
+def delay2_block(x, y, name, key, src, up_s, down_s) -> ET.Element:
+    return block(33, x, y, [src, const_in(int(round(up_s * 10))), const_in(int(round(down_s * 10))), pin_in()],
+                 [pin_out(name, key[0], key[1], cat="BinValue")], [(6, "False", "Boolean"), (7, "0", "UInt")])
+
+
+def and_block(x, y, name, key, *ins) -> ET.Element:
+    inputs = list(ins) + [hidden_in()] * (8 - len(ins))
+    return block(1, x, y, inputs, [pin_out(name, key[0], key[1], cat="BinValue")], [(0, "0", "UInt")])
+
+
+def unconnected_in() -> ET.Element:
+    return pin_in()
+
+
+def mux_block(x, y, name, comobj, selects: list, data: list, dim="kW") -> ET.Element:
+    """Mux: three select pins (first = least significant), eight data pins; unused selects stay unconnected,
+    unused data pins hidden, as in the plant's own sheets 8 and 9."""
+    sel = list(selects) + [unconnected_in() for _ in range(3 - len(selects))]
+    dat = [const_in(v) for v in data] + [hidden_in() for _ in range(8 - len(data))]
+    return block(45, x, y, sel + dat, [pin_out(name, comobj, cat="AnaValue", res="0", dim=dim)], [])
+
+
+def math_block(x, y, name, comobj, op, *ins, res="0", dim="kW") -> ET.Element:
+    inputs = list(ins) + [hidden_in()] * (8 - len(ins))
+    return block(17, x, y, inputs, [pin_out(name, comobj, cat="AnaValue", res=res, dim=dim)], [(12, str(op), "UInt")])
+
+
+def hyst_block(x, y, name, key, x_in, on_in, off_in) -> ET.Element:
+    return block(3, x, y, [x_in, on_in, off_in], [pin_out(name, key[0], key[1], cat="BinValue")], [])
+
+
+def axbcd_block(x, y, name, comobj, flag, a, b, c, d, res="1", dim="kW") -> ET.Element:
+    return block(51, x, y, [a, b, c, d],
+                 [pin_out(name, comobj, cat="AnaValue", res=res, dim=dim), pin_out("", flag[0], flag[1], cat="BinValue")],
+                 [(22, "0", "UInt"), (37, "0", "UInt"), (23, "False", "Boolean"), (38, "False", "Boolean"), (36, "0", "UInt")])
+
+
+def _floor_table(noms, pct) -> list:
+    """Mux data: input k = floor of the sets whose select bits are set in k."""
+    out = []
+    for k in range(2 ** len(noms)):
+        out.append(int(sum(n for i, n in enumerate(noms) if k >> i & 1) * pct / 100))
+    return out
+
+
+def sheet06_v4() -> ET.Element:
+    """Sheet 6 unchanged except that its two existing invalid flags are offered to the other sheets."""
+    root = read("sheet06_Validation.xml")
+    sheet_io(root, "out", B_AP_INVALID[0], B_AP_INVALID[1], 8, "Binary")
+    sheet_io(root, "out", B_MAX_INVALID[0], B_MAX_INVALID[1], 9, "Binary")
+    return root
+
+
+def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int = STEP_PCT,
+               noms: tuple = GEN_NOMINAL_KW) -> ET.Element:
+    """v3 plus: the fail also rises on an invalid AP or Max Available value and stays 2 s after the link is back;
+    the hold keeps what was actually sent to the SAU (the ramp output), not the request of that cycle; and while
+    a fail lasts, on gensets, with the gensets below `floor_pct` % of the loaded nominal, the held value drops by
+    `step_pct` % per cycle. Nothing changes while the link is healthy."""
+    root = sheet10_timed(hold_s)
+    fb = blocks_of(root)
+    blocks = list(fb)
+    # 1. the fail: ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid -> "PV link bad"; stretched 2 s -> "PV comm fail"
+    fail_or = next(b for b in blocks if b.get("Identification") == "1" and b.find("Outputs")[0].get("ComObject") == "10432"
+                   and b.find("Outputs")[0].get("BitIndex") == "1")
+    ins = fail_or.find("Inputs")
+    assert ins[2].get("IsHidden") == "true" and ins[3].get("IsHidden") == "true"
+    for k, (nm, key) in ((2, ("AP(active Power) validate invalid", B_AP_INVALID)),
+                         (3, ("Max Active Power Available invalid", B_MAX_INVALID))):
+        ins.remove(ins[k])
+        ins.insert(k, bin_in(nm, key))
+    out = fail_or.find("Outputs")[0]
+    out.set("Name", "PV link bad")
+    out.set("ComObject", str(B_LINK_BAD[0]))
+    out.set("BitIndex", str(B_LINK_BAD[1]))
+    pos = list(fb).index(fail_or)
+    fb.insert(pos + 1, delay2_block(12, 19, "PV comm fail", (10432, 1), bin_in("PV link bad", B_LINK_BAD), 0.0, STRETCH_S))
+    # 2. the guard, just before the hold switch (so the switch reads this cycle's values)
+    hold = next(b for b in fb if b.get("Identification") == "5" and b.find("Outputs")[0].get("ComObject") == "21279")
+    g = [
+        mux_block(43, 30, "Gen floor 1-3", A_FLOOR_A,
+                  [bin_in("Gen Loaded 1", (10196, 0)), bin_in("Gen Loaded 2", (10196, 1)), bin_in("Gen Loaded 3", (10196, 2))],
+                  _floor_table(noms[:3], floor_pct)),
+        mux_block(43, 40, "Gen floor 4-5", A_FLOOR_B,
+                  [bin_in("Gen Loaded 4", (10196, 3)), bin_in("Gen Loaded 5", (10196, 4))],
+                  _floor_table(noms[3:], floor_pct)),
+        math_block(52, 34, "Gen floor", A_FLOOR, 0, ana_in("Gen floor 1-3", A_FLOOR_A), ana_in("Gen floor 4-5", A_FLOOR_B)),
+        hyst_block(60, 30, "Gensets above floor", B_ABOVE_FLOOR, ana_in("Gensets P", 20183),
+                   ana_in("Gen floor", A_FLOOR), ana_in("Gen floor", A_FLOOR)),
+        and_block(68, 30, "PV guard active", B_GUARD, bin_in("PV comm fail", (10432, 1)),
+                  bin_in("Any MCB close", (10424, 6), negated=True), bin_in("Gensets above floor", B_ABOVE_FLOOR, negated=True)),
+        comp4_block(76, 30, "PV guard number", A_GUARD_N, A_GUARD_N2, bin_in("PV guard active", B_GUARD)),
+        axbcd_block(84, 30, "PV guard factor", A_FACTOR, B_FACTOR_INV, ana_in("PV guard number", A_GUARD_N),
+                    const_in(-step_pct), const_in(1), const_in(100), res="0", dim="%"),
+        axbcd_block(92, 30, "PV req guarded", A_GUARDED, B_GUARDED_INV, ana_in("PV req out ramp", 21267),
+                    ana_in("PV guard factor", A_FACTOR), const_in(100), const_in(0), res="1", dim="kW"),
+    ]
+    pos = list(fb).index(hold)
+    for k, b in enumerate(g):
+        fb.insert(pos + k, b)
+    # 3. the hold keeps the guarded value of what was sent, instead of its own output
+    hin = hold.find("Inputs")
+    assert hin[1].get("ComObject") == "21279"
+    hin.remove(hin[1])
+    hin.insert(1, ana_in("PV req guarded", A_GUARDED))
+    # declarations: new values from outside the sheet
+    for idx, (n, bit, typ) in enumerate(((B_AP_INVALID[0], B_AP_INVALID[1], "Binary"), (B_MAX_INVALID[0], B_MAX_INVALID[1], "Binary"),
+                                          (10196, 0, "Binary"), (10196, 1, "Binary"), (10196, 2, "Binary"),
+                                          (10196, 3, "Binary"), (10196, 4, "Binary"), (20183, 0, "Analog")), start=20):
+        sheet_io(root, "in", n, bit, idx, typ)
+    for k in range(5):
+        comobj_entry(root, "Gen Loaded 16", 10196, bit=str(k))
+    comobj_entry(root, "Gensets P", 20183, dim="kW")
+    comobj_entry(root, "PLC-BOUT 9", B_AP_INVALID[0], bit=str(B_AP_INVALID[1]))
+    comobj_entry(root, "PLC-BOUT 10", B_MAX_INVALID[0], bit=str(B_MAX_INVALID[1]))
+    root.find("Sheet").set("Width", "2400")
+    root.find("Sheet").set("Height", "1400")
+    return root
+
+
 README = """# Change 01 - PV logger communication tolerance
 
 Built from the sheet exports of 2026-10-14 by `tools/neo_plc_change01.py`. Same export format, so the way
@@ -349,6 +494,18 @@ def main() -> int:
         if f.endswith(".xml"):
             shutil.copy(os.path.join(SRC, f), os.path.join(prog3_dir, f))
     shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v3_timed.xml"), os.path.join(prog3_dir, "sheet10_PV_req_step_protection.xml"))
+    # v4 = v3 + the guard: sheet 10 v4 and sheet 6 offering its two invalid flags, the plant's own other sheets
+    write(sheet10_v4(), os.path.join(OUT, "sheet10_PV_req_step_protection_v4_guard.xml"))
+    write(sheet06_v4(), os.path.join(OUT, "sheet06_Validation_v4.xml"))
+    prog4_dir = os.path.join(OUT, "program_v4")
+    os.makedirs(prog4_dir, exist_ok=True)
+    for f in sorted(os.listdir(SRC)):
+        if f.endswith(".xml"):
+            shutil.copy(os.path.join(SRC, f), os.path.join(prog4_dir, f))
+    shutil.copy(os.path.join(OUT, "sheet10_PV_req_step_protection_v4_guard.xml"), os.path.join(prog4_dir, "sheet10_PV_req_step_protection.xml"))
+    shutil.copy(os.path.join(OUT, "sheet06_Validation_v4.xml"), os.path.join(prog4_dir, "sheet06_Validation.xml"))
+    with open(os.path.join(OUT, "program_v4.md"), "w", encoding="utf-8") as f:
+        f.write(describe(load_program(prog4_dir)).replace("sheet exports of 2026-10-14", "change 01 v4 applied to the sheet exports of 2026-10-14"))
     prog = load_program(prog_dir)
     with open(os.path.join(OUT, "program_v2.md"), "w", encoding="utf-8") as f:
         f.write(describe(prog).replace("sheet exports of 2026-10-14", "change 01 applied to the sheet exports of 2026-10-14"))

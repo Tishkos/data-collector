@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-16"?>
+<PlcSheetExport PlcFormatVersion="4" ExportFormatVersion="1" ConfigurationVersion="12" ControllerType="Ih500" ConfigFormatTerminal="9" ConfigFormatTerminalWithFont="9">
+  <Sheet Name="MCB &amp; PV Breakers restriction power" Comment="" Height="600" Width="1440" />
+  <PlcProgramExport>
+    <FunctionBlocks>
+      <FunctionBlockExport Identification="53">
+        <Position X="6" Y="2" />
+        <Inputs>
+          <Input Name="PV1 feedback" BitIndex="0" ComObject="8235" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="PV2 feedback" BitIndex="1" ComObject="8235" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="PV feedback number" BitIndex="0" ValueIndex="0" ComObject="21259" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="-" />
+          <Output Name="PLC-AOUT 13" BitIndex="0" ValueIndex="0" ComObject="21260" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="-" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="53">
+        <Position X="6" Y="14" />
+        <Inputs>
+          <Input Name="MCB Feedback" BitIndex="0" ComObject="10169" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="MCB Feedback" BitIndex="0" ComObject="10170" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="MCB Feedback" BitIndex="0" ComObject="10752" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="MCB feedback numbers" BitIndex="0" ValueIndex="0" ComObject="21271" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="-" />
+          <Output Name="PLC-AOUT 25" BitIndex="0" ValueIndex="0" ComObject="21272" ConnectedFunctionType="0" ComObjCategory="AnaValue" ResolutionIndex="0" Dimension="-" />
+        </Outputs>
+        <Properties />
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="24">
+        <Position X="19" Y="3" />
+        <Inputs>
+          <Input Name="PV feedback number" BitIndex="0" ComObject="21259" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+        </Inputs>
+        <Outputs>
+          <Output Name="PV feedback bit0" BitIndex="2" ValueIndex="0" ComObject="10430" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="PV feedback bit1" BitIndex="3" ValueIndex="0" ComObject="10430" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="PV feedback bit2" BitIndex="4" ValueIndex="0" ComObject="10430" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="PV feedback bit3" BitIndex="5" ValueIndex="0" ComObject="10430" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties>
+          <Property Identification="18" Value="0" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="24">
+        <Position X="19" Y="15" />
+        <Inputs>
+          <Input Name="MCB feedback numbers" BitIndex="0" ComObject="21271" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="AnaValue" />
+        </Inputs>
+        <Outputs>
+          <Output Name="MCB feedback bit0" BitIndex="5" ValueIndex="0" ComObject="10424" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="MCB feedback bit1" BitIndex="7" ValueIndex="0" ComObject="10430" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="MCB feedback bit2" BitIndex="2" ValueIndex="0" ComObject="10431" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+          <Output Name="MCB feedback bit3" BitIndex="3" ValueIndex="0" ComObject="10431" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties>
+          <Property Identification="18" Value="0" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+    </FunctionBlocks>
+    <PlcSheetInputs>
+      <SheetInput BitIndex="0" Index="0" Type="Binary" ComObjectNumber="8235" />
+      <SheetInput BitIndex="1" Index="1" Type="Binary" ComObjectNumber="8235" />
+      <SheetInput BitIndex="0" Index="5" Type="Binary" ComObjectNumber="10169" />
+      <SheetInput BitIndex="0" Index="6" Type="Binary" ComObjectNumber="10170" />
+      <SheetInput BitIndex="0" Index="7" Type="Binary" ComObjectNumber="10752" />
+    </PlcSheetInputs>
+    <PlcSheetOutputs />
+    <Wires>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="150" Y="30" />
+          <XmlPosition X="150" Y="85" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="140" Y="90" />
+          <XmlPosition X="140" Y="97" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="140" Y="330" />
+          <XmlPosition X="140" Y="373" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="140" Y="390" />
+          <XmlPosition X="140" Y="385" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="150" Y="450" />
+          <XmlPosition X="150" Y="397" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="404" Y="121" />
+          <XmlPosition X="404" Y="109" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="5">
+        <Points>
+          <XmlPosition X="404" Y="409" />
+          <XmlPosition X="404" Y="397" />
+        </Points>
+      </WirePlcSheetExport>
+    </Wires>
+  </PlcProgramExport>
+  <CommunicationObjectsExport>
+    <ComObjectExport Name="Binary Inputs" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="8235" Type="Value" BitIndex="0" />
+    <ComObjectExport Name="Binary Inputs" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="8235" Type="Value" BitIndex="1" />
+    <ComObjectExport Name="ECU-BIN 1" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10169" Type="Value" BitIndex="0" />
+    <ComObjectExport Name="ECU-BIN 2" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10170" Type="Value" BitIndex="0" />
+    <ComObjectExport Name="ECU-BIN 3" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10752" Type="Value" BitIndex="0" />
+    <ComObjectExport Name="PV feedback number" Dimension="-" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21259" Type="Value" BitIndex="" />
+    <ComObjectExport Name="MCB feedback numbers" Dimension="-" IsUserSetpoint="false" Resolution="0" ComObjectNumber="21271" Type="Value" BitIndex="" />
+  </CommunicationObjectsExport>
+</PlcSheetExport>

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-16"?>
+<PlcSheetExport PlcFormatVersion="4" ExportFormatVersion="1" ConfigurationVersion="12" ControllerType="Ih500" ConfigFormatTerminal="9" ConfigFormatTerminalWithFont="9">
+  <Sheet Name="" Comment="" Height="480" Width="1440" />
+  <PlcProgramExport>
+    <FunctionBlocks>
+      <FunctionBlockExport Identification="1">
+        <Position X="6" Y="5" />
+        <Inputs>
+          <Input Name="PV CB1 status" BitIndex="6" ComObject="10425" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="PV CB2 status plc" BitIndex="6" ComObject="10426" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="UPS1  status" BitIndex="6" ComObject="10427" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="Any PV CB on" BitIndex="6" ValueIndex="0" ComObject="10429" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties>
+          <Property Identification="0" Value="1" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+      <FunctionBlockExport Identification="1">
+        <Position X="19" Y="11" />
+        <Inputs>
+          <Input Name="Any PV CB on" BitIndex="6" ComObject="10429" ValueOfConstant="0" ConnectedFunctionType="0" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="PVCB Close/Open" BitIndex="7" ComObject="9145" ValueOfConstant="0" ConnectedFunctionType="1" IsHidden="false" ComObjCategory="BinValue" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+          <Input Name="" BitIndex="0" ComObject="-1" ValueOfConstant="0" ConnectedFunctionType="-1" IsHidden="true" ComObjCategory="Unknown" />
+        </Inputs>
+        <Outputs>
+          <Output Name="PVCB function status" BitIndex="0" ValueIndex="0" ComObject="10431" ConnectedFunctionType="0" ComObjCategory="BinValue" ResolutionIndex="" Dimension="" />
+        </Outputs>
+        <Properties>
+          <Property Identification="0" Value="0" ValueType="UInt" ValueIdentification="-1" />
+        </Properties>
+      </FunctionBlockExport>
+    </FunctionBlocks>
+    <PlcSheetInputs>
+      <SheetInput BitIndex="6" Index="0" Type="Binary" ComObjectNumber="10425" />
+      <SheetInput BitIndex="6" Index="1" Type="Binary" ComObjectNumber="10426" />
+      <SheetInput BitIndex="6" Index="2" Type="Binary" ComObjectNumber="10427" />
+      <SheetInput BitIndex="7" Index="6" Type="Binary" ComObjectNumber="9145" />
+    </PlcSheetInputs>
+    <PlcSheetOutputs>
+      <SheetOutput BitIndex="0" Index="3" Type="Binary" ComObject="10431">
+        <ExternalOutput>
+          <int>1101</int>
+        </ExternalOutput>
+      </SheetOutput>
+    </PlcSheetOutputs>
+    <Wires>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="4">
+        <Points>
+          <XmlPosition X="233" Y="30" />
+          <XmlPosition X="233" Y="157" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="4">
+        <Points>
+          <XmlPosition X="197" Y="90" />
+          <XmlPosition X="197" Y="169" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="4">
+        <Points>
+          <XmlPosition X="140" Y="150" />
+          <XmlPosition X="140" Y="181" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="4">
+        <Points>
+          <XmlPosition X="140" Y="390" />
+          <XmlPosition X="140" Y="313" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="4">
+        <Points>
+          <XmlPosition X="716" Y="349" />
+          <XmlPosition X="716" Y="210" />
+        </Points>
+      </WirePlcSheetExport>
+      <WirePlcSheetExport Type="User" IndentationHi="0" IndentationLo="0" SheetIndex="4">
+        <Points>
+          <XmlPosition X="404" Y="205" />
+          <XmlPosition X="404" Y="301" />
+        </Points>
+      </WirePlcSheetExport>
+    </Wires>
+  </PlcProgramExport>
+  <CommunicationObjectsExport>
+    <ComObjectExport Name="PLC-BOUT 2" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10425" Type="Value" BitIndex="6" />
+    <ComObjectExport Name="PLC-BOUT 3" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10426" Type="Value" BitIndex="6" />
+    <ComObjectExport Name="PLC-BOUT 4" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10427" Type="Value" BitIndex="6" />
+    <ComObjectExport Name="PLC-BOUT 6" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="10429" Type="Value" BitIndex="6" />
+    <ComObjectExport Name="Log Bout 3" Dimension="" IsUserSetpoint="false" Resolution="0" ComObjectNumber="9145" Type="Value" BitIndex="7" />
+  </CommunicationObjectsExport>
+</PlcSheetExport>
