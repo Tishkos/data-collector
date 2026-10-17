@@ -144,3 +144,29 @@ def test_nothing_in_the_trace_writes():
     import plantcollector.trace as t
     src = inspect.getsource(t)
     assert "write_register" not in src and "write_coil" not in src and "write_registers" not in src
+
+
+def test_watch_pings_and_reads_one_register_on_the_same_connection(plant, tmp_path):
+    reg = _registry()
+    tr = Trace(reg, str(tmp_path), {"neo-01": 0.3, "pv-array": 1.0}, connect_test_s=None, watch={"pv-array": 0.2})
+    tr.run(duration_s=1.5)
+    rows = list(csv.DictReader(open(glob.glob(str(tmp_path / "watch_*.csv"))[0])))
+    reads = [r for r in rows if r["kind"] == "read"]
+    pings = [r for r in rows if r["kind"] == "ping"]
+    assert len(reads) >= 4 and all(r["ok"] == "1" for r in reads) and all(float(r["ms"]) < 1000 for r in reads)
+    assert reads[0]["detail"] == "0"                     # the first mapped register of the SAU profile (1000, value 0)
+    assert (len(pings) >= 4 and all(r["ok"] == "1" for r in pings)) or (not pings and tr._ping_off)   # no ping in a bare container
+    assert tr.watch_rows == len(rows) and tr.stalls == 0
+    # the master's rows kept their cadence while the SAU was watched
+    neo = list(csv.DictReader(open(glob.glob(str(tmp_path / "neo-01_*.csv"))[0])))
+    assert len(neo) >= 4
+
+
+def test_watch_marks_a_silent_sau(tmp_path):
+    reg = _registry()
+    reg.devices["pv-array"].connection.update({"port": 15039, "timeout": 0.3})   # nobody listens here
+    tr = Trace(reg, str(tmp_path), {"pv-array": 1.0}, connect_test_s=None, watch={"pv-array": 0.2})
+    tr.run(duration_s=1.2)
+    rows = [r for r in csv.DictReader(open(glob.glob(str(tmp_path / "watch_*.csv"))[0])) if r["kind"] == "read"]
+    assert rows and all(r["ok"] == "0" for r in rows) and tr.stalls == len(rows)
+    assert all(r["detail"].startswith(("timeout", "error")) for r in rows)

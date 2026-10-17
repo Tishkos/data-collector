@@ -8,6 +8,7 @@ fails, the cadence of the setpoint words the master writes, the regulator throug
 
 from __future__ import annotations
 
+import collections
 import csv
 import os
 import statistics
@@ -117,6 +118,71 @@ def summarize(trace_dir: str, date: str) -> str:
         if len(fails) > 40:
             L.append(f"| ... | {len(fails) - 40} more | |")
     L.append("")
+
+    # ---- the stall catcher
+    watch = _read(os.path.join(trace_dir, f"watch_{date}.csv"))
+    if watch:
+        L.append("## The stall catcher (one ping and one one-register read of the SAU every second)")
+        reads = [r for r in watch if r.get("kind") == "read"]
+        pings = [r for r in watch if r.get("kind") == "ping"]
+        rms = [_num(r["ms"]) for r in reads if r.get("ok") == "1" and _num(r["ms"]) is not None]
+        bad_reads = [r for r in reads if r.get("ok") != "1"]
+        slow = [r for r in reads if r.get("ok") == "1" and (_num(r["ms"]) or 0) >= 1000]
+        bad_pings = [r for r in pings if r.get("ok") != "1"]
+        if rms:
+            L.append(f"Reads: {len(reads)}, answered median {statistics.median(rms):.0f} ms, p95 {_pct(rms, 0.95):.0f} ms, max {max(rms):.0f} ms; "
+                     f"unanswered {len(bad_reads)}, answered but slower than 1 s {len(slow)}. Pings: {len(pings)}, failed {len(bad_pings)}.")
+        else:
+            L.append(f"Reads: {len(reads)}, none answered. Pings: {len(pings)}, failed {len(bad_pings)}.")
+        stall_rows = sorted(bad_reads + slow, key=lambda r: r["ts"])
+        eps: list[list[dict]] = []
+        for r in stall_rows:
+            if eps and (_ts(r["ts"]) - _ts(eps[-1][-1]["ts"])).total_seconds() <= 10:
+                eps[-1].append(r)
+            else:
+                eps.append([r])
+        if eps:
+            L.append(f"Stall episodes (unanswered or >= 1 s, gaps under 10 s joined): {len(eps)}:")
+            for ep in eps[:30]:
+                t0, t1 = _ts(ep[0]["ts"]), _ts(ep[-1]["ts"])
+                worst = max((_num(r["ms"]) or 0) for r in ep)
+                p_bad = sum(1 for r in pings if r.get("ok") != "1" and t0 - timedelta(seconds=2) <= _ts(r["ts"]) <= t1 + timedelta(seconds=2))
+                with_fail = any(f["start"] - timedelta(seconds=15) <= t1 and (f["end"] or f["start"] + timedelta(seconds=600)) >= t0 for f in fails)
+                L.append(f"- {t0.strftime('%H:%M:%S')} for {(t1 - t0).total_seconds() + 1:.0f} s, worst {worst:.0f} ms, "
+                         f"{sum(1 for r in ep if r.get('ok') != '1')} unanswered; ping {'failed ' + str(p_bad) + 'x' if p_bad else 'fine'}; "
+                         f"master fail at the same time: {'yes' if with_fail else 'no'}")
+            if len(eps) > 30:
+                L.append(f"- ... {len(eps) - 30} more")
+        if fails:
+            verdicts = collections.Counter()
+            lines = []
+            for f in fails:
+                lo = f["start"] - timedelta(seconds=12)
+                hi = f["end"] or f["start"] + timedelta(seconds=30)
+                win_r = [r for r in reads if lo <= _ts(r["ts"]) <= hi]
+                win_p = [r for r in pings if lo <= _ts(r["ts"]) <= hi]
+                if not win_r:
+                    v = "no watch rows (SAU not watched then)"
+                else:
+                    unans = sum(1 for r in win_r if r.get("ok") != "1")
+                    worst = max((_num(r["ms"]) or 0) for r in win_r)
+                    p_bad = sum(1 for r in win_p if r.get("ok") != "1")
+                    if unans and p_bad:
+                        v = "SAU unreachable (ping failed too): the box or the network to it"
+                    elif unans or worst >= 2000:
+                        v = "SAU alive (ping ok) but its application answered nobody: a stall inside the SAU"
+                    elif worst >= 1000:
+                        v = "SAU slow to us (1-2 s) but answering: a stall near the master's limit"
+                    else:
+                        v = "SAU answered us normally: the fail is not the SAU being silent; look at the path to the master or the master's own module"
+                verdicts[v] += 1
+                lines.append(f"- {f['start'].strftime('%H:%M:%S')} {f['session']}: {v}")
+            L.append("")
+            L.append("Verdict per master comm fail (our reads and pings in the 12 s before and during it):")
+            L.extend(lines[:40])
+            L.append("")
+            L.append("Totals: " + "; ".join(f"{n} x {v}" for v, n in verdicts.most_common()) + ".")
+        L.append("")
 
     # ---- the SAU next to the fails
     L.append("## The SAU as we see it (our own reads and connection tests)")

@@ -227,14 +227,21 @@ def cmd_trace(a) -> int:
         print("nothing to trace: give --every <device>=<seconds>")
         return 2
     out = a.out or os.path.join(a.data, "trace")
-    tr = Trace(reg, out, every, connect_test_s=(a.connect_test or None))
+    watch: dict[str, float] = {}
+    for item in a.watch or []:
+        dev, _, sec = item.partition("=")
+        watch[dev.strip()] = float(sec or 1)
+    if watch:
+        for dev in watch:
+            every.setdefault(dev, 5.0)
+    tr = Trace(reg, out, every, connect_test_s=(a.connect_test or None), watch=watch)
     try:
         tr.run(duration_s=a.hours * 3600 if a.hours else None)
     except KeyboardInterrupt:
         tr.close()
         print("\n[trace] stopped")
     print("[trace] " + ", ".join(f"{d}: {tr.rows[d]} rows, {tr.failed[d]} failed reads" for d in every)
-          + f", {tr.events_logged} events, files in {out}")
+          + f", {tr.events_logged} events" + (f", watch {tr.watch_rows} rows, {tr.stalls} stalls" if watch else "") + f", files in {out}")
     return 0
 
 
@@ -272,7 +279,7 @@ def cmd_probe(a) -> int:
 def cmd_session(a) -> int:
     """The whole measuring session, one click (see session.py)."""
     from .session import Session
-    s = Session(a.config, a.data, hours=a.hours, phase1_min=a.phase1_min, sau_s=a.sau_s, long_run=not a.no_long, zip_hour=a.zip_hour,
+    s = Session(a.config, a.data, hours=a.hours, phase1_min=a.phase1_min, sau_s=a.sau_s, long_run=not a.no_long, zip_hour=a.zip_hour, watch_s=a.watch_s,
                 bundles_dir=a.bundles)
     try:
         s.run()
@@ -336,6 +343,8 @@ def main(argv=None) -> int:
                    help="device id and read interval, repeatable (default: neo-01=1 pv-array=5)")
     t.add_argument("--hours", type=float, default=None, help="stop after this many hours (default: until Ctrl+C)")
     t.add_argument("--connect-test", type=float, default=60.0, help="seconds between fresh-connection tests (0 = off)")
+    t.add_argument("--watch", action="append", metavar="DEVICE=SECONDS",
+                   help="stall catcher: ping the host and read one register on the device's connection this often (e.g. pv-array=1)")
     t.add_argument("--out", help="folder for the files (default: <data>/trace)")
     t.set_defaults(fn=cmd_trace)
 
@@ -343,6 +352,7 @@ def main(argv=None) -> int:
     ss.add_argument("--hours", type=float, default=2.0)
     ss.add_argument("--phase1-min", type=float, default=30.0, help="minutes of master-only trace before the SAU is polled")
     ss.add_argument("--sau-s", type=float, default=5.0, help="SAU read interval in the session")
+    ss.add_argument("--watch-s", type=float, default=1.0, help="stall catcher interval on the SAU in phase 2 and the long run (0 = off)")
     ss.add_argument("--zip-hour", type=int, default=7, help="UTC hour of the daily report and bundle in the long run")
     ss.add_argument("--no-long", action="store_true", help="stop after the session instead of continuing with the long run")
     ss.add_argument("--bundles", help="folder for the zips (default: bundles/ next to data/)")

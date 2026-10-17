@@ -250,9 +250,11 @@ than load minus the genset floor), not plain v3, plus the real UPS and IG4 figur
 |---|---|
 | Hourly collector + dashboard + Turkey Modbus server | `START-PLANT.bat` (first `CHECK-PLANT.bat`) |
 | Who answers on Modbus | `PROBE-PLANT.bat` (`plantcollector.cli probe`) |
-| The measuring session, one click: probe, check, master-only trace, then the SAU with a fail-rate guard, report, zip, long run with a daily zip | `SESSION.bat` (`plantcollector.cli session`) -> `data\trace\`, `bundles\` |
-| Fast read-only trace: 1 s master, 5 s SAU, setpoint read-back, response times, event log | `TRACE-PLANT.bat` (`plantcollector.cli trace`) -> `data\trace\` |
-| A day of trace files -> the numbers (fails, SAU latency, setpoint words, regulator through fails, load steps) | `plantcollector.cli report-trace --date` / `bundle --date` |
+| The measuring session, one click: probe, check, master-only trace, then the SAU with a fail-rate guard and the stall catcher, report, zip, long run with a daily zip | `SESSION.bat` (`plantcollector.cli session`) -> `data\trace\`, `bundles\` |
+| Fast read-only trace: 1 s master, 5 s SAU, setpoint read-back, response times, event log; each device in its own thread so a slow SAU never delays the master's rows | `TRACE-PLANT.bat` (`plantcollector.cli trace`) -> `data\trace\` |
+| The stall catcher: every second one ping of the SAU and one read of one register on the connection the trace already holds (no extra Modbus link); `watch_<date>.csv`; "answers_us" and "ping_ok" edges in the event log | `trace --watch pv-array=1`; on in `session` by default (`--watch-s 0` turns it off) |
+| A day of trace files -> the numbers (fails, SAU latency, setpoint words, regulator through fails, load steps) and **a verdict per master comm fail**: SAU unreachable / alive but silent / slow / answered us normally | `plantcollector.cli report-trace --date` / `bundle --date` |
+| A packet capture (Wireshark on the PC, or the router's sniffer streamed to it) -> Modbus latency per session, exception replies, slow transactions, the setpoint and PV series, traffic around each stall | `tools/pcap_modbus.py capture.pcapng` (needs scapy) |
 | Read the master's archive (plain parts) | `tools/neo_archive.py` |
 | List and execute the PLC program | `tools/neo_plc.py` (`--out`, `--demo`) |
 | Run a day of the plant | `tools/plant_model.py` (scenarios S0-S6, days) |

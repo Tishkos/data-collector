@@ -11,15 +11,24 @@ Files in <out>/ (one set per day, UTC date in the name):
   events_<date>.csv     every change of a boolean point, of a point marked 'edge: true' in its profile, and of
                         a device's reachability: ts, device, point, old, new
   connect_<date>.csv    the connection test: a fresh TCP connection to a host every N seconds, ts, host, ok, ms
+  watch_<date>.csv      the stall catcher (watch={device: seconds}): every second one ping of the device's host
+                        (is the box alive) and one read of one register on the device's existing connection
+                        (does the application answer, and in how many ms): ts, device, kind, ok, ms, detail
 
-Everything is read-only: the trace uses the same adapter as the collector, which has no write function.
+Each device runs in its own thread with its own connection, so a stalled SAU never delays the master's rows -
+the master's comm-fail bits are read on time while the SAU is being slow. Everything is read-only: the trace
+uses the same adapter as the collector, which has no write function.
 """
 
 from __future__ import annotations
 
 import csv
 import os
+import platform
+import re
 import socket
+import subprocess
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -74,18 +83,24 @@ class _DailyCsv:
 class Trace:
     def __init__(self, registry: Registry, out_dir: str, every: dict[str, float],
                  connect_test_s: float | None = 60.0, connect_hosts: list[tuple[str, int]] | None = None,
-                 log=print):
+                 log=print, watch: dict[str, float] | None = None):
         os.makedirs(out_dir, exist_ok=True)
         self.registry, self.out_dir, self.log = registry, out_dir, log
         self.every = {k: float(v) for k, v in every.items()}
-        for dev_id in self.every:
+        self.watch = {k: float(v) for k, v in (watch or {}).items()}
+        for dev_id in list(self.every) + list(self.watch):
             if dev_id not in registry.devices:
                 raise ValueError(f"unknown device '{dev_id}' (config has: {', '.join(registry.devices)})")
+        for dev_id in self.watch:
+            if dev_id not in self.every:
+                raise ValueError(f"watch device '{dev_id}' must also be traced (every)")
         self.adapters = {d: build_adapter(registry.devices[d]) for d in self.every}
         self.files = {d: _DailyCsv(out_dir, d, ["ts", "ms", "ok_blocks", "failed_blocks"] + [p.id for p in registry.devices[d].points])
                       for d in self.every}
         self.events = _DailyCsv(out_dir, "events", ["ts", "device", "point", "old", "new"])
         self.connect_file = _DailyCsv(out_dir, "connect", ["ts", "host", "ok", "ms", "error"])
+        self.watch_file = _DailyCsv(out_dir, "watch", ["ts", "device", "kind", "ok", "ms", "detail"])
+        self._lock = threading.RLock()                      # events, _last and the watch file are shared by threads
         self.connect_test_s = connect_test_s
         if connect_hosts is None:
             connect_hosts = []
@@ -98,6 +113,9 @@ class Trace:
         self.rows = {d: 0 for d in self.every}
         self.failed = {d: 0 for d in self.every}
         self.events_logged = 0
+        self.watch_rows = 0
+        self.stalls = 0                                      # watch reads slower than 1 s or unanswered
+        self._ping_off = False
 
     # ---- one read of one device ----------------------------------------------------------------
     def read_once(self, dev_id: str, ts: datetime | None = None) -> None:
@@ -126,13 +144,48 @@ class Trace:
 
     def _edge(self, ts: datetime, dev_id: str, point: str, value) -> None:
         key = (dev_id, point)
-        old = self._last.get(key, None)
-        if key in self._last and old == value:
+        with self._lock:
+            old = self._last.get(key, None)
+            if key in self._last and old == value:
+                return
+            if key in self._last:                           # the first value is a baseline, not a change
+                self.events.write(ts, [_iso(ts), dev_id, point, _plain(old), _plain(value)])
+                self.events_logged += 1
+            self._last[key] = value
+
+    # ---- the stall catcher ----------------------------------------------------------------------
+    def watch_read(self, dev_id: str, ts: datetime | None = None) -> None:
+        """One register on the device's own connection: did the application answer, in how many ms."""
+        ts = ts or datetime.now(timezone.utc)
+        ad = self.adapters[dev_id]
+        fn = getattr(ad, "ping_read", None)
+        if fn is None:
             return
-        if key in self._last:                               # the first value is a baseline, not a change
-            self.events.write(ts, [_iso(ts), dev_id, point, _plain(old), _plain(value)])
-            self.events_logged += 1
-        self._last[key] = value
+        status, ms, value = fn()
+        ok = 1 if status == "ok" else 0
+        with self._lock:
+            self.watch_file.write(ts, [_iso(ts), dev_id, "read", ok, ms, status if not ok else value])
+            self.watch_rows += 1
+            if not ok or ms >= 1000:
+                self.stalls += 1
+        self._edge(ts, dev_id, "answers_us", ok == 1)
+
+    def watch_ping(self, dev_id: str, ts: datetime | None = None) -> None:
+        ts = ts or datetime.now(timezone.utc)
+        host = self.registry.devices[dev_id].connection.get("host")
+        if not host:
+            return
+        if self._ping_off:
+            return
+        ok, ms, detail = ping(host)
+        if detail.startswith("ping unavailable"):           # no ping on this machine: say so once, stop trying
+            self._ping_off = True
+            self.log(f"[trace] {detail}; the stall catcher keeps the reads only")
+            return
+        with self._lock:
+            self.watch_file.write(ts, [_iso(ts), dev_id, "ping", ok, ms, detail])
+            self.watch_rows += 1
+        self._edge(ts, dev_id, "ping_ok", ok == 1)
 
     # ---- connection test ------------------------------------------------------------------------
     def connect_test(self, ts: datetime | None = None) -> None:
@@ -149,35 +202,66 @@ class Trace:
             self.connect_file.write(ts, [_iso(ts), f"{host}:{port}", ok, ms, err])
 
     # ---- the loop --------------------------------------------------------------------------------
+    def _device_loop(self, dev_id: str, end: float | None, stop) -> None:
+        period = self.every[dev_id]
+        due = time.monotonic()
+        while not stop.is_set() and (end is None or time.monotonic() < end):
+            if time.monotonic() >= due:
+                self.read_once(dev_id)
+                due = max(due + period, time.monotonic())        # no catching up after a slow read
+            self._nap(due, end, stop)
+
+    def _watch_loop(self, dev_id: str, fn, end: float | None, stop) -> None:
+        period = self.watch[dev_id]
+        due = time.monotonic()
+        while not stop.is_set() and (end is None or time.monotonic() < end):
+            if time.monotonic() >= due:
+                fn(dev_id)
+                due = max(due + period, time.monotonic())
+            self._nap(due, end, stop)
+
+    @staticmethod
+    def _nap(due: float, end: float | None, stop) -> None:
+        wait = due - time.monotonic()
+        if end is not None:
+            wait = min(wait, end - time.monotonic())
+        if wait > 0:
+            stop.wait(min(wait, 0.5))
+
     def run(self, duration_s: float | None = None, stop=None, status_every_s: float = 60.0) -> None:
         start = time.monotonic()
-        due = {d: start for d in self.every}
+        end = None if duration_s is None else start + duration_s
+        stop = stop or threading.Event()
         next_connect = start if self.connect_test_s else None
         next_status = start + status_every_s
         self.log(f"[trace] {', '.join(f'{d} every {s:g} s' for d, s in self.every.items())}"
+                 + (f"; watch {', '.join(f'{d} every {s:g} s' for d, s in self.watch.items())}" if self.watch else "")
                  + (f"; connection test every {self.connect_test_s:g} s" if self.connect_test_s else "")
                  + f"; files in {self.out_dir}")
+        threads = [threading.Thread(target=self._device_loop, args=(d, end, stop), daemon=True, name=f"trace-{d}") for d in self.every]
+        for d in self.watch:
+            threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_read, end, stop), daemon=True, name=f"watch-{d}"))
+            threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_ping, end, stop), daemon=True, name=f"ping-{d}"))
+        for t in threads:
+            t.start()
         try:
-            while True:
+            while not stop.is_set() and (end is None or time.monotonic() < end):
                 now = time.monotonic()
-                if duration_s is not None and now - start >= duration_s:
-                    break
-                if stop is not None and stop.is_set():
-                    break
-                for d, t in due.items():
-                    if now >= t:
-                        self.read_once(d)
-                        due[d] = max(t + self.every[d], time.monotonic())    # no catching up after a slow read
                 if next_connect is not None and now >= next_connect:
                     self.connect_test()
                     next_connect += self.connect_test_s
                 if now >= next_status:
                     self.log("[trace] " + ", ".join(f"{d}: {self.rows[d]} rows, {self.failed[d]} failed"
-                                                    for d in self.every) + f", {self.events_logged} events")
+                                                    for d in self.every) + f", {self.events_logged} events"
+                             + (f", watch {self.watch_rows} rows, {self.stalls} stalls" if self.watch else ""))
                     next_status += status_every_s
-                pending = [t for t in due.values()] + ([next_connect] if next_connect is not None else [])
-                time.sleep(max(0.02, min(pending) - time.monotonic()))
+                pending = [next_status] + ([next_connect] if next_connect is not None else [])
+                if end is not None:
+                    pending.append(end)
+                stop.wait(max(0.05, min(0.5, min(pending) - time.monotonic())))
         finally:
+            for t in threads:                               # let each thread finish its current read, then close
+                t.join(timeout=15)
             self.close()
 
     def close(self) -> None:
@@ -185,6 +269,7 @@ class Trace:
             f.close()
         self.events.close()
         self.connect_file.close()
+        self.watch_file.close()
         for ad in self.adapters.values():
             try:
                 ad.close()
@@ -198,7 +283,54 @@ def _plain(v) -> str:
     return "" if v is None else str(v)
 
 
+def ping(host: str, timeout_s: float = 1.0) -> tuple[int, float, str]:
+    """One ICMP echo with the system's ping (no privileges needed). Returns (ok, ms, detail)."""
+    win = platform.system().lower().startswith("win")
+    cmd = ["ping", "-n", "1", "-w", str(int(timeout_s * 1000)), host] if win else ["ping", "-c", "1", "-W", str(max(1, int(timeout_s))), host]
+    t0 = time.perf_counter()
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 2).stdout
+    except FileNotFoundError:
+        return _icmp_echo(host, timeout_s)                  # no ping binary (a bare container): try a datagram ICMP socket
+    except Exception as exc:
+        return 0, round((time.perf_counter() - t0) * 1000, 1), f"ping failed: {exc}"
+    low = out.lower()
+    if "ttl=" not in low:                                   # Windows prints "unreachable" replies with exit code 0
+        return 0, round((time.perf_counter() - t0) * 1000, 1), "no reply"
+    m = re.search(r"time[=<]\s*([\d.]+)", low)
+    return 1, float(m.group(1)) if m else round((time.perf_counter() - t0) * 1000, 1), ""
+
+
 # ---- probe: which hosts answer on Modbus at all ---------------------------------------------------
+def _icmp_echo(host: str, timeout_s: float) -> tuple[int, float, str]:
+    """ICMP echo through an unprivileged datagram socket (Linux with ping_group_range open). No raw socket."""
+    import struct as _struct
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP)
+    except (OSError, AttributeError) as exc:
+        return 0, 0.0, f"ping unavailable: {exc}"
+    try:
+        sock.settimeout(timeout_s)
+        payload = _struct.pack(">BBHHH", 8, 0, 0, 0, 1) + b"plantcollector"
+        csum = 0
+        data = payload if len(payload) % 2 == 0 else payload + b"\0"
+        for i in range(0, len(data), 2):
+            csum += (data[i] << 8) + data[i + 1]
+        csum = (csum >> 16) + (csum & 0xFFFF)
+        csum = (~(csum + (csum >> 16))) & 0xFFFF
+        payload = payload[:2] + _struct.pack(">H", csum) + payload[4:]
+        t0 = time.perf_counter()
+        sock.sendto(payload, (host, 0))
+        sock.recvfrom(1024)
+        return 1, round((time.perf_counter() - t0) * 1000, 2), ""
+    except socket.timeout:
+        return 0, round(timeout_s * 1000, 1), "no reply"
+    except OSError as exc:
+        return 0, 0.0, f"ping unavailable: {exc}"
+    finally:
+        sock.close()
+
+
 def probe(targets: list[tuple[str, int, int]], address: int = 0, timeout: float = 3.0) -> list[dict]:
     """For each (host, port, unit): open a TCP connection, send one read of one holding register, report.
     An exception reply (illegal address, illegal function) still proves a Modbus server answers."""

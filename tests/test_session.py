@@ -75,6 +75,8 @@ def test_session_runs_the_steps_reports_and_bundles(plant, tmp_path):
     assert "probe:" in log and "check:" in log
     rep = open(glob.glob(str(data / "trace" / "report_*.md"))[0], encoding="utf-8").read()
     assert "Comm fails" in rep and "None declared" in rep and "Response time" in rep and "set_2101" in rep
+    assert "stall catcher" in rep and "Pings:" in rep and "stall catcher on pv-array every 1 s" in log
+    assert any(n.startswith("trace/watch_") for n in names)
     assert not s.sau_dropped
 
 
@@ -120,6 +122,12 @@ def _write_day(tmp_path, date="2026-10-16"):
         f.write("ts,host,ok,ms,error\n")
         for s in range(0, 600, 60):
             f.write(f"{iso(t0 + timedelta(seconds=s))},127.0.0.1:502,{0 if s == 60 else 1},3,{'timed out' if s == 60 else ''}\n")
+    with open(d / f"watch_{date}.csv", "w") as f:            # fail 1 (60-72 s): SAU silent to us, ping fine; fail 3 (400-430): SAU answers us
+        f.write("ts,device,kind,ok,ms,detail\n")
+        for s in range(600):
+            silent = 58 <= s < 70
+            f.write(f"{iso(t0 + timedelta(seconds=s))},pv-array,read,{0 if silent else 1},{3000 if silent else 4},{'timeout' if silent else 5}\n")
+            f.write(f"{iso(t0 + timedelta(seconds=s))},pv-array,ping,1,1,\n")
     return str(d)
 
 
@@ -138,6 +146,9 @@ def test_report_reads_fails_sau_words_regulator_and_load_steps(tmp_path):
     assert "curtailment % before/during/after 31.0 / 5.0 / 31.0" in text
     assert "Largest fall within one minute: 300 kW" in text
     assert "the count fell 2 times" in text and "in the 30 s before them: 3 of 3" in text
+    assert "Stall episodes" in text and "master fail at the same time: yes" in text
+    assert "2 x SAU alive (ping ok) but its application answered nobody" in text
+    assert "1 x SAU answered us normally" in text
 
 
 def test_report_on_an_empty_day(tmp_path):

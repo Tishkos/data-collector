@@ -40,6 +40,7 @@ MAX_BLOCK = 100
 
 _POOL: dict[tuple[str, int], ModbusTcpClient] = {}
 _POOL_LOCK = threading.RLock()
+_CONN_LOCKS: dict[tuple[str, int], threading.RLock] = {}     # one request at a time per connection, not per process
 
 
 def shared_client(host: str, port: int, timeout: float) -> ModbusTcpClient:
@@ -47,7 +48,13 @@ def shared_client(host: str, port: int, timeout: float) -> ModbusTcpClient:
         key = (host, port)
         if key not in _POOL:
             _POOL[key] = ModbusTcpClient(host=host, port=port, timeout=timeout)
+            _CONN_LOCKS[key] = threading.RLock()
         return _POOL[key]
+
+
+def connection_lock(host: str, port: int) -> threading.RLock:
+    with _POOL_LOCK:
+        return _CONN_LOCKS.setdefault((host, port), threading.RLock())
 
 
 def close_all() -> None:
@@ -85,6 +92,7 @@ class ModbusTcpAdapter(Adapter):
         self.unit_id = int(c.get("unit_id", 1))
         self.address_offset = int(c.get("address_offset", 0))
         self._client = shared_client(c["host"], int(c.get("port", 502)), float(c.get("timeout", 3)))
+        self._lock = connection_lock(c["host"], int(c.get("port", 502)))
         self._blocks = self._plan_blocks(device.points)
         self.last_ok_blocks = 0                 # statistics of the last read(), for the trace
         self.last_failed_blocks = 0
@@ -120,8 +128,35 @@ class ModbusTcpAdapter(Adapter):
         self._client.close()
 
     def read(self) -> dict[str, Reading]:
-        with _POOL_LOCK:                    # one request at a time on a shared connection
+        with self._lock:                    # one request at a time on this connection; other hosts are not held up
             return self._read()
+
+    def ping_read(self) -> tuple[str, float, int | None]:
+        """One read of one register (the first mapped one) on the shared connection: the stall catcher.
+        Returns (status, ms, value): status is 'ok', 'exception <n>', 'timeout' or 'error <text>'."""
+        if not self._blocks:
+            return "error no register mapping", 0.0, None
+        fn, start, _count, _pts = self._blocks[0]
+        call = {"input": self._client.read_input_registers, "coil": self._client.read_coils,
+                "discrete": self._client.read_discrete_inputs}.get(fn, self._client.read_holding_registers)
+        with self._lock:
+            t0 = time.perf_counter()
+            try:
+                if not self._client.connected:
+                    self._client.connect()
+                rr = call(address=start + self.address_offset, count=1, device_id=self.unit_id)
+                ms = round((time.perf_counter() - t0) * 1000, 1)
+                if rr is None:
+                    return "timeout", ms, None
+                if rr.isError():
+                    code = getattr(rr, "exception_code", None)
+                    return f"exception {code if code is not None else rr}", ms, None
+                regs = rr.bits if fn in ("coil", "discrete") else rr.registers
+                return "ok", ms, int(regs[0])
+            except Exception as exc:
+                ms = round((time.perf_counter() - t0) * 1000, 1)
+                text = str(exc).lower()
+                return ("timeout" if "timeout" in text or "timed out" in text or "no response" in text else f"error {exc}"), ms, None
 
     def _read(self) -> dict[str, Reading]:
         t0 = time.perf_counter()

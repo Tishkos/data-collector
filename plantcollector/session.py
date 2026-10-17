@@ -8,9 +8,11 @@ Steps, logged to data/session_<date>.log and printed:
   2. check: one poll of every device through the collector, every point printed, values to compare with the screens
   3. trace, master only, for the first phase (default 30 min): the master's comm-fail rate is measured without us
      touching the SAU at all
-  4. trace, master every 1 s and the SAU every 5 s, for the rest of the session; every 10 min the comm-fail rate
-     is compared with phase 3: if it has clearly risen (more than double and at least 3 fails in the window) the SAU
-     is dropped from the trace again and the fact is logged - we must not be the ones making it worse
+  4. trace, master every 1 s and the SAU every 5 s, plus the stall catcher on the SAU every 1 s (one ping and one
+     read of one register on the connection the trace already holds), for the rest of the session; every 10 min
+     the comm-fail rate is compared with phase 3: if it has clearly risen (more than double and at least 3 fails in
+     the window) the SAU is dropped from the trace again and the fact is logged - we must not be the ones making
+     it worse
   5. at the end of the session: a report (data/trace/report_<date>.md) and a bundle
      (bundles/plant_<date>_<HHMM>.zip with the trace files, the report, the probe and check output, the log)
   6. then the long run: master every 10 s, SAU every 30 s, until the window is closed; every day at --zip-hour
@@ -36,9 +38,11 @@ from .trace import Trace, probe
 
 class Session:
     def __init__(self, config: str, data_dir: str, hours: float = 2.0, phase1_min: float = 30.0, sau_s: float = 5.0,
-                 long_run: bool = True, zip_hour: int = 7, bundles_dir: str | None = None, log=print, clock=None):
+                 long_run: bool = True, zip_hour: int = 7, bundles_dir: str | None = None, log=print, clock=None,
+                 watch_s: float = 1.0):
         self.config, self.data_dir = config, data_dir
         self.hours, self.phase1_min, self.sau_s = hours, phase1_min, sau_s
+        self.watch_s = watch_s
         self.long_run, self.zip_hour = long_run, zip_hour
         self.trace_dir = os.path.join(data_dir, "trace")
         self.bundles_dir = bundles_dir or os.path.join(os.path.dirname(os.path.abspath(data_dir)), "bundles")
@@ -103,11 +107,14 @@ class Session:
         self.log(f"check: {last[0].strip()}")
         return text
 
-    def _trace(self, every: dict, seconds: float, label: str) -> Trace:
-        tr = Trace(self.registry, self.trace_dir, every, connect_test_s=60.0, log=lambda m: None)
-        self.log(f"{label}: " + ", ".join(f"{d} every {s:g} s" for d, s in every.items()) + f", {seconds / 60:.0f} min")
+    def _trace(self, every: dict, seconds: float, label: str, connect_test_s: float = 60.0) -> Trace:
+        watch = {"pv-array": self.watch_s} if self.watch_s and "pv-array" in every else {}
+        tr = Trace(self.registry, self.trace_dir, every, connect_test_s=connect_test_s, log=lambda m: None, watch=watch)
+        self.log(f"{label}: " + ", ".join(f"{d} every {s:g} s" for d, s in every.items())
+                 + (f", stall catcher on pv-array every {self.watch_s:g} s" if watch else "") + f", {seconds / 60:.0f} min")
         tr.run(duration_s=seconds, stop=self.stop, status_every_s=1e9)
-        self.log(f"{label} done: " + ", ".join(f"{d} {tr.rows[d]} rows, {tr.failed[d]} unanswered" for d in every) + f", {tr.events_logged} events")
+        self.log(f"{label} done: " + ", ".join(f"{d} {tr.rows[d]} rows, {tr.failed[d]} unanswered" for d in every) + f", {tr.events_logged} events"
+                 + (f", watch {tr.watch_rows} rows, {tr.stalls} stalls" if watch else ""))
         return tr
 
     def step_trace(self) -> None:
@@ -182,8 +189,7 @@ class Session:
             nxt = now.replace(hour=self.zip_hour, minute=0, second=0, microsecond=0)
             if nxt <= now:
                 nxt += timedelta(days=1)
-            tr = Trace(self.registry, self.trace_dir, every, connect_test_s=300.0, log=lambda m: None)
-            tr.run(duration_s=(nxt - now).total_seconds(), stop=self.stop, status_every_s=1e9)
+            self._trace(every, (nxt - now).total_seconds(), "long run", connect_test_s=300.0)
             if self.stop.is_set():
                 break
             yesterday = (self.clock() - timedelta(hours=self.zip_hour + 1)).strftime("%Y-%m-%d")
