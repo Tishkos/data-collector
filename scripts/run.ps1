@@ -80,8 +80,8 @@ if ($Probe) {
     exit $LASTEXITCODE
 }
 if ($Session) {
-    Say "Session running in this window: probe, check, 30 min master only, then the SAU every 5 s, 2 h in all, report and zip in bundles\, then the long run. Closing the window stops it."
-    & $venvPy -m plantcollector.cli --config $cfg --data data session
+    Say "Session running in this window: probe, check, 15 min master only, then the SAU every 5 s with the stall catcher, 1 h in all, report and zip in bundles\, then the long run. Closing the window stops it."
+    & $venvPy -m plantcollector.cli --config $cfg --data data session --hours 1 --phase1-min 15
     exit $LASTEXITCODE
 }
 if ($Trace) {

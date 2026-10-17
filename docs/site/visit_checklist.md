@@ -69,9 +69,9 @@ Screenshots of:
 - [ ] `power sld salah.pdf`, the MV station SLD, `Si-Box Diesel microgrid configuration Guide.pdf`
 
 ## The plant PC
-- [ ] `SESSION.bat` in its own window and leave it: probe, check, 30 min master only, then the SAU every 5 s
+- [ ] `SESSION.bat` in its own window and leave it: probe, check, 15 min master only, then the SAU every 5 s
       plus the stall catcher (one ping and one one-register read of the SAU every second, on the same link),
-      report and zip in `bundles\` after two hours, then the lighter long run with a zip every morning.
+      report and zip in `bundles\` after one hour, then the lighter long run with a zip every morning.
       It watches the master's comm-fail rate itself and drops the SAU if the rate rises. The report gives a
       verdict per comm fail: SAU unreachable / alive but silent / slow / answered us normally.
 - [ ] `START-PLANT.bat` - the hourly collector for the Turkey platform (separate from the session)
