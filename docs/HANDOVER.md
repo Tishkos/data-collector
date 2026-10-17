@@ -290,7 +290,7 @@ these as directions, not numbers, until the collector has weeks of data.
 v4). Sheet 10 v4 plus sheet 6 v4 (declarations only). The fail also rises on an invalid AP or Max Available; the
 hold keeps the ramp output (what was sent); the guard lowers the held value while Gensets P is below 15 % of the
 loaded nominal, only while ECU 2 (the writing session) is fine, at most 4 s in a row; on the grid, with one set
-or after 60 s it gives today's 0; a negative request still gives 0. 13 blocks, the seven free PLC bits, AOUT
+or 10 s after the fail is declared it gives today's 0 (hold shortened from 60 s to 10 s on 17 Oct); a negative request still gives 0. 13 blocks, the seven free PLC bits, AOUT
 21286-21292, no Analog Switch, plant block order kept. Closed-loop model `tools/change01_sim.py` (report
 `v4_simulation.md`), 19 tests in `tests/test_change01_v4.py`, two independent review rounds, all findings closed
 or documented. Largest survivable load drop with one session lost, Gen 4 + 5 at 2,000 kW: v3 700, v4 1,200,

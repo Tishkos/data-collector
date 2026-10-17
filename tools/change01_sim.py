@@ -224,23 +224,23 @@ def scenarios() -> list[tuple[str, Scenario, str]]:
          "The SAU silent 2.5 s on both sessions, load 2,000 kW, three gensets (Gen 1, 4, 5)."),
         ("8 Sep pause, AP read as 0", Scenario("8 Sep pause, AP read as 0", silent=[(10, 12.5, (0, 1))], ap_zero=[(12.5, 12.8)]),
          "As above, and for 0.3 s after the SAU is back the AP read returns 0 (the mispaired frame) before the fail bit."),
-        ("group 2 lost 40 s", Scenario("group 2 lost 40 s", silent=[(10, 50, (1,))]),
-         "Only the reading session fails for 40 s; group 1 keeps writing. No load change."),
-        ("group 2 lost, cloud and sun back", Scenario("group 2 lost, cloud", silent=[(10, 50, (1,))], clouds=[(15, 30, 500.0)]),
-         "Group 2 lost 40 s; a cloud takes the sun down to 500 kW for 15 s and passes."),
-        ("all lost 70 s", Scenario("all lost 70 s", silent=[(10, 80, (0, 1))]),
-         "Both sessions silent 70 s: longer than the 60 s hold."),
-        ("AP invalid 30 s, no fail bit", Scenario("AP invalid", ap_invalid=[(10, 40)]),
-         "The AP value invalid for 30 s while both ECU fail bits stay 0."),
-        ("on the grid, group 2 lost, load drop", Scenario("grid", on_grid=True, mcb=(1, 0, 0), silent=[(10, 50, (1,))],
+        ("group 2 lost 10 s", Scenario("group 2 lost 10 s", silent=[(10, 20, (1,))]),
+         "Only the reading session fails for 10 s; group 1 keeps writing. No load change."),
+        ("group 2 lost, cloud and sun back", Scenario("group 2 lost, cloud", silent=[(10, 20, (1,))], clouds=[(14, 19, 500.0)]),
+         "Group 2 lost 10 s; a cloud takes the sun down to 500 kW for 5 s and passes."),
+        ("all lost 30 s", Scenario("all lost 30 s", silent=[(10, 40, (0, 1))]),
+         "Both sessions silent 30 s: longer than v4's 10 s hold (v3: 60 s)."),
+        ("AP invalid 8 s, no fail bit", Scenario("AP invalid", ap_invalid=[(10, 18)]),
+         "The AP value invalid for 8 s while both ECU fail bits stay 0."),
+        ("on the grid, group 2 lost, load drop", Scenario("grid", on_grid=True, mcb=(1, 0, 0), silent=[(10, 20, (1,))],
                                                           load_kw=1500, avail_kw=3000, load_steps=[(15, -1000)]),
-         "On the grid through MCB 1 only (export limit 1,300 kW), exporting at the limit; group 2 lost 40 s and the "
+         "On the grid through MCB 1 only (export limit 1,300 kW), exporting at the limit; group 2 lost 10 s and the "
          "load drops 1,000 kW at 15 s. A hold would push the export over the limit; v4 does what today does."),
     ]
 
 
 def load_drop(kw: float, sets=(0, 3, 4), sessions=(1,), at=15.0, load=2000.0) -> Scenario:
-    return Scenario(f"drop {kw:.0f}", gensets=sets, load_kw=load, silent=[(10, 50, sessions)], load_steps=[(at, -kw)])
+    return Scenario(f"drop {kw:.0f}", gensets=sets, load_kw=load, silent=[(10, 20, sessions)], load_steps=[(at, -kw)])
 
 
 def sweep(sets, sessions=(1,), load=2000.0, step=100, top=1800) -> dict:
@@ -272,7 +272,7 @@ def report() -> str:
     L += ["", "Scenario notes:", ""]
     L += [f"- **{t}**: {n}" for t, _, n in scenarios()]
     L += ["", "## Load drop while one session is lost (the hold's real exposure)", "",
-          "Group 2 lost from 10 s to 50 s, group 1 still writing; the load drops at 15 s. The figure is the largest "
+          "Group 2 lost from 10 s to 20 s, group 1 still writing; the load drops at 15 s. The figure is the largest "
           "drop (100 kW steps) the gensets survive without a reverse-power trip.", "",
           "| Gensets running | Load | today | v3 (plain hold) | v4 (hold + guard) |", "|---|---|---|---|---|"]
     for sets, label in (((3, 4), "Gen 4 + Gen 5 (2,150 kW)"), ((0, 3, 4), "Gen 1 + 4 + 5 (3,150 kW)")):

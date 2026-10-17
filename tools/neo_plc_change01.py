@@ -387,7 +387,11 @@ def _declare(root: ET.Element) -> None:
                 listed.add(lkey)
 
 
-def sheet10_v4(hold_s: float = HOLD_S, floor_pct: int = FLOOR_PCT, step_pct: int = STEP_PCT,
+HOLD_V4_S = 10.0                # v4 holds at most 10 s after the fail is declared, then 0 as today (covers pauses up to
+                                # about 10 s; the measured one was 2.5 s)
+
+
+def sheet10_v4(hold_s: float = HOLD_V4_S, floor_pct: int = FLOOR_PCT, step_pct: int = STEP_PCT,
                noms: tuple = GEN_NOMINAL_KW, cap_s: float = CAP_S) -> ET.Element:
     """The hold with a guard. Healthy link: identical to today, output by output. During a fail it holds what was
     sent to the SAU; on gensets it lowers that value while the gensets sit below their floor (only while the writing
@@ -481,7 +485,7 @@ whole program as the model runs it, `program_v4.md` its listing, `v4_simulation.
 | what counts as a fail | ECU 2 OR ECU 3 comm fail OR negative request | ECU 2 OR ECU 3 OR AP invalid OR Max Available invalid (the validators of sheet 6); the negative request still gives 0 while healthy |
 | during a fail, on two or more gensets | request forced to 0 | the value **actually sent** to the SAU is held (the ramp output: one corrupted cycle costs at most one ramp step of 150 kW) |
 | the guard | - | while held, if Gensets P falls below 15 % of the nominal of the sets actually loaded (Gen Loaded bits x per-set nominal), the held value is lowered by 4 % every second cycle (about 15 % per second) until the gensets are 50 kW above that floor again; only while ECU 2 (the session that writes) has no fail; at most 4 s in a row per fail. Lowering only |
-| on the grid, with one genset, or 60 s after the fail | 0 | 0, as today |
+| on the grid, with one genset, or 10 s after the fail is declared | 0 | 0, as today |
 
 Resources: 13 new blocks (no Analog Switch; Mux 2 -> 6, Comp Hyst +2, AND/OR +2, Math Fc +2, Delay +2,
 AxB/C+D +1, and v3's Comp 4 / AxB are not used), the seven binary PLC outputs that were still free (PLC-BOUT 13
@@ -513,10 +517,12 @@ Checks before it goes near the plant:
    budget and the object numbers (only the Analog Switch limit is known).
 2. In the editor: the two floor Mux tables read 0/150/150/300/105/255/255/405 and 0/150/172/322; "PV guard factor"
    reads 100/100/100/100/100/96/0/0; "PV req final" reads held/held/0/0/held/0/held/0; the switch's second input is
-   "PV req guarded"; the ramp reads "PV req final" and still shows 25 and 1500 per s; "PV guard spent" shows 4 s up
-   and 60 s down.
+   "PV req guarded"; the ramp reads "PV req final" and still shows 25 and 1500 per s; "PV comm lost" shows 10 s up;
+   "PV guard spent" shows 4 s up and 60 s down.
 3. From the recorder: AP and Max Available are never invalid outside comm fails (otherwise the hold also starts
-   then; still safe, it ends in 0 after 60 s as today); Gensets P stays valid during logger fails.
+   then; still safe, it ends in 0 after 10 s as today); Gensets P stays valid during logger fails; the length of
+   the real pauses (the 10 s maximum hold is set from the one measured pause of 2.5 s; 15 s would cover pauses up
+   to about 15 s, change `HOLD_V4_S` and rebuild).
 4. The PLC cycle is 100 ms (the guard's rate assumes it).
 5. The kill criteria of the design review still stand: #14364 through a fail, and the read-back through
    one-session fails.

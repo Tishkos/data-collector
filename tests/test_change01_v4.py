@@ -117,23 +117,24 @@ def test_closed_loop_load_drop_one_session_lost():
 def test_guard_sleeps_when_the_gensets_are_fine():
     for sc in (sim.scenarios()[2][1], sim.load_drop(200, sets=(0, 3, 4))):
         r = sim.run("v4", sc)
-        held = [row[4] for row in r.trace if 14 <= row[0] <= 49]
+        held = [row[4] for row in r.trace if 14 <= row[0] <= 21]
         assert max(held) - min(held) < 2                                  # nothing lowered
 
 
 def test_writer_blind_does_not_wind_the_hold_down():
     sc = sim.load_drop(600, sets=(0, 3, 4), sessions=(0,))                # group 1 (the writer) lost, load drop
     today, v3, v4 = (sim.run(p, sc) for p in ("today", "v3", "v4"))
-    assert v4.max_step_kw < v3.max_step_kw + 150 < today.max_step_kw
+    assert v4.max_step_kw < v3.max_step_kw + 150 and v4.max_step_kw < today.max_step_kw
 
 
 def test_late_writer_flag_costs_no_more_than_today():
     # the writing session goes silent while the fail is already on, and its own flag only rises when it answers
-    # again (the 8 Sep pattern applied to a long silence): the guard lowers blind, but at most 4 s of it
+    # again (the 8 Sep pattern applied to a long silence): the guard lowers blind, but at most 4 s of it, and the
+    # 10 s hold ends before the writer is back
     keep = sim.DECLARE_LONG_S
     sim.DECLARE_LONG_S = 1e9
     try:
-        sc = sim.Scenario("late flag", ap_invalid=[(10, 50)], silent=[(14, 50, (0,))], load_steps=[(15, -600)])
+        sc = sim.Scenario("late flag", ap_invalid=[(10, 20)], silent=[(12, 20, (0,))], load_steps=[(13, -600)])
         today, v4 = sim.run("today", sc), sim.run("v4", sc)
     finally:
         sim.DECLARE_LONG_S = keep
@@ -143,21 +144,28 @@ def test_late_writer_flag_costs_no_more_than_today():
 def test_grid_falls_back_to_today():
     sc = sim.scenarios()[6][1]                                            # MCB 1 only, exporting at the limit, load drop
     today, v3, v4 = (sim.run(p, sc) for p in ("today", "v3", "v4"))
-    assert v3.export_over_s > 30                                          # a hold on the grid pushes the export over the limit
+    assert v3.export_over_s > 10                                          # a hold on the grid pushes the export over the limit
     assert v4.export_over_s <= today.export_over_s + 1
 
 
 def test_one_genset_falls_back_to_today():
-    sc = sim.Scenario("one set", gensets=(3,), load_kw=1000, silent=[(10, 50, (1,))])
+    sc = sim.Scenario("one set", gensets=(3,), load_kw=1000, silent=[(10, 20, (1,))])
     today, v4 = sim.run("today", sc), sim.run("v4", sc)
-    assert [r[4] for r in v4.trace if 14 <= r[0] <= 49] == [r[4] for r in today.trace if 14 <= r[0] <= 49]
+    assert [r[4] for r in v4.trace if 14 <= r[0] <= 20] == [r[4] for r in today.trace if 14 <= r[0] <= 20]
 
 
 def test_long_fail_still_goes_to_zero_at_the_inverters():
     sc = sim.Scenario("group 2 lost 75 s", silent=[(10, 85, (1,))])        # the writer works: the 0 reaches the SAU
     r = sim.run("v4", sc)
-    assert all(row[4] == 0 for row in r.trace if 75 <= row[0] <= 84)      # 60 s after the fail is declared
-    assert min(row[2] for row in r.trace if 75 <= row[0] <= 86) < 50       # and the inverters follow
+    assert all(row[4] == 1214 for row in r.trace if 14 <= row[0] <= 22)   # held: declared at 13 s, 10 s hold
+    assert all(row[4] == 0 for row in r.trace if 25 <= row[0] <= 84)      # then 0, as today
+    assert min(row[2] for row in r.trace if 25 <= row[0] <= 40) < 50       # and the inverters follow
+
+
+def test_pauses_up_to_ten_seconds_are_ridden_through():
+    for p, held in ((2.5, True), (8, True), (20, False)):
+        r = sim.run("v4", sim.Scenario("pause", silent=[(10, 10 + p, (0, 1))]))
+        assert (r.max_step_kw < 50) == held
 
 
 def test_stuck_invalid_value_holds_instead_of_capping():

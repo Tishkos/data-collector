@@ -119,7 +119,7 @@ Outputs wired to controller functions:
 2. **Comp Hyst** - NOT PV negative request = Comp Hyst(PV req (kW) [#21265]; on 0, off 0)
 3. **Math Fc** - PV pro > PV req = add(PV req (kW) [#21265], PV Prod > PV req [#65523 setpoint])
 4. **Comp Hyst** - NOT reverse power = Comp Hyst(Load P site [#21256]; on -10, off -10)
-5. **Delay** - PV comm lost = Delay(PV comm fail [#10432.1]; up 60 s, down 0 s)
+5. **Delay** - PV comm lost = Delay(PV comm fail [#10432.1]; up 10 s, down 0 s)
 6. **Comp Hyst** - PV req > PV power = Comp Hyst(PV req (kW) [#21265]; on PV AP + step prot [#21268], off PV AP + step prot [#21268])
 7. **AND/OR** - PV comm fail = ECU 2 Comm Fail [#11900.1] OR ECU 3 Comm Fail [#11900.2] OR PLC-BOUT 9.8 [#10432.7] OR PLC-BOUT 10.1 [#10433.0]
 8. **Comp Hyst** - PV Prod > PV req comp = Comp Hyst(AP(active Power) validate [#21281]; on PV pro > PV req [#21270], off PV pro > PV req [#21270])
