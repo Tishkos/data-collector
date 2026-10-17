@@ -29,6 +29,13 @@ engineer's yes.
 Screenshots of:
 - [ ] firmware version (the application is "SmartCMS"; the watchdog is "SauGuard")
 - [ ] the system status page: CPU load (1/5/15 min), memory, the message queue number (22,487 was seen at a fail)
+- [ ] Device Monitor > Communication diagnostic information: **Network interface** tab (RX/TX errors, dropped,
+      collisions, speed and duplex of ETH0 and ETH1) - the most valuable single screenshot; then Network
+      Connections (send queues of the :502 sessions, how many clients), Routing table
+- [ ] in the real-time RS485 log: count per minute the broadcast frames `00 10 FE D1 ...` and compare with how
+      often the master's setpoint changes (every write may become a broadcast plus a wait on the bus)
+- [ ] active power control mode setting (66900: Remote scheduling expected), the anti-reflux parameters
+      67191-67214 if shown, and what 192.168.1.50 is in the forwarding / platform / NTP settings
 - [ ] Modbus TCP server settings, above all the maximum number of client connections
 - [ ] RS485 settings and statistics to the inverters (baud rate, poll cycle, **response delay**, error counters,
       the communication success rate per inverter)
@@ -48,6 +55,10 @@ Screenshots of:
 ## The MikroTik router (RB4011) and the switch
 - [ ] export the Netwatch log (SAU up/down events with times) and the ping statistics page; it is an
       independent witness of the SAU stalls and costs the plant nothing
+- [ ] the port counters of the port the SAU side comes in on (rx/tx errors, FCS errors, drops) and of the
+      master's port; the switch's port counters too if it is managed
+- [ ] if the router can sniff (Tools > Packet Sniffer, stream to the PC), a capture of master <-> SAU during the
+      session is free and touches nothing; `tools/pcap_modbus.py` reads it
 - [ ] note the router's own clock against the PC clock
 - [ ] photos of the media converters fitted on 24 Sep and their management IPs (an IP conflict until 26 Sep)
 

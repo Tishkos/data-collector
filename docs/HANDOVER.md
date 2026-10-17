@@ -144,6 +144,63 @@ Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this
 - People in the chat by role: the solar site engineer (operates the SAU, writes the reports), the sponsor,
   two plant (CCI) engineers, the previous integrator, Sineng after-sales, SAU support, sales and management.
 
+### What the files from the chat show (read 17 Oct; analysis tool `tools/pcap_modbus.py`)
+
+- **The 8 Sep capture (105 s at the SAU, 09:08:08-09:09:52 plant time) is the mechanism on film.** The master's
+  group 1 (one TCP session) does every 1 s: read 1000 x6, write FC6 1007 = 0, write FC16 2100 x2 (AP Set,
+  0.1 kW), write FC16 2102 x2 (RP Set = 0), write coil 4002 ON. Group 2 (second session) every 2 s: seven reads
+  (1000 x99, 1017, 1019, 1021, 1187, 1189, 1195) and **no writes at all** in 105 s, so the 2100/2101 overlap
+  did not show; downgrade it to "verify on a longer trace". **Every FC6 write to 1007 is refused with
+  exception 06 (104 of 104, in 1 ms)**: the master never sets that register and lives with one error reply per
+  cycle; the SAU reads 1007 = 1. At 09:08:30.05 the SAU answered nobody for 2.5 s (both sessions and the
+  Sineng engineer's own Modbus Poll on ETH1 waited 2.5-2.7 s; TCP ACKs came at once, the application was
+  silent) while it **prepared a 5 MB log export** that then streamed 09:08:32-33. The reply arrived under the
+  3,000 ms timeout and yet the master's request fell 2,583.6 -> 1,233.6 -> **0.0 kW at 09:08:34** (the 1,500
+  kW/s down-ramp), the PV fell 2,484 -> 153 kW in 14 s, then the request climbed from 0 at 25 kW/s capped at
+  actual + 100 kW (about 12 kW/s net). So a stall shorter than the timeout zeroes the solar: either the ECU
+  fail bit fires below 3 s or the invalid-value path (negative request) does. **Raising the timeout alone would
+  not have saved this event; the hold (v3) keyed on the same PV comm fail signal would have.** Which path it
+  was is exactly kill criterion 1's measurement. The SAU's ETH1 ARPs for 192.168.1.50 every 1.3 s (configured,
+  absent host). Another device, 192.168.0.129, ARPs the ComAp IPs (probably the router's ping monitor).
+- **`SauGuard.txt` shows no watchdog restart of the application.** It holds 10 cold starts of the guard
+  (box reboots: 18 Jun, 22 Jul, 30 Jul x2, 13 Aug x2, 19 Aug x2, 31 Aug, 1 Sep) and three SIGTERM stop/start
+  pairs (22 Jun 14:02; **6 Sep 09:36:28 and 09:49:33**). The two on 6 Sep match, to the minute, the Sineng
+  engineer changing the SAU's IP to 192.168.20.128 and back during his remote test (chat 08:41-09:00 Budapest
+  = 09:41-10:00 plant), and the router's "down 09:37:48 - up 09:51:05". The "absolute proof of crashes" sent to
+  Sineng on 7 Sep rests on this file; **our side must not repeat it.** The stalls are real anyway (capture).
+- `Device data service.txt` (6 Sep): inverters are SAU devices 3-12 (slave 1-10), firmware SP320KHU212 /
+  111A / 111B; the SAU re-sends an inverter's slave address by serial number (FC71) when its comm is abnormal.
+  Devices 200 and 201 go "disconnected" 22-30 s after every start. On 6 Sep the five inverters of one RS485
+  channel dropped together 14:08-14:37 and the other five 14:55-15:21 (26-28 min each, all five within 40 s):
+  a channel- or breaker-level event, not single wires. Which group sits behind PV CB1 / CB2 matters here.
+- `data_change_history_record` (SAU, 24 May - 20 Jun): 9,764 changes; inverter comm-status drops of all ten
+  at once are night events (AC lost, DSP restarts on return); daytime single-inverter RS485 drops were rare
+  (about ten in four weeks, 5-30 s). The volume is grid-protection flags: "AC voltage abnormal" 2,047 daytime
+  rises in 28 days, "AC volt high", "AC frequency low/high"; 29 May alone 577. Winding 1 inverters flag
+  twice as often as winding 2.
+- Inverter history exports (6 inverters, 18 Jun - 22 Jul): per inverter about 1,000 records in 3-4 weeks,
+  top codes 261 frequency low, 260 voltage abnormal, 258 overvoltage, 262 frequency high, 257 undervoltage,
+  264/265 LVRT/HVRT, **517 DSP restart 38-64 per inverter**, 507 hardware DC-bus overvoltage 20-26 per inverter;
+  heavy days 1 Jul (408), 9 Jul (477), 13 Jul (373). This was on the grid (no gensets that month). So in
+  June-July the inverters' own grid-protection trips were a large, separate cause of solar drops; the limits
+  were widened on 25 Jul. Not seen by the master as a comm fail.
+- `Si-Box Diesel microgrid configuration Guide` (Sineng, A00): the SAU / Si-Logger has its own **"Diesel
+  microgrid" active-power control mode** (next to Disallow, Derating prohibited, Remote scheduling, Local, DI,
+  Anti-reflux): with a grid meter and a diesel meter on its RS485 (DTSU666 among the supported) it keeps the
+  gensets above a "minimum load power of diesel" setting by itself. Its anti-reflux logic derates the PV on
+  **meter communication abnormal after a 30 s confirmation, to a configurable percentage of rated, not to
+  zero** (parameters 67194-67198), with decline/climb factors. Needs Si-Box software "Diesel Micro Network
+  0.5.42+" and inverter software that "supports diesel engine safety regulations" (after-sales upgrade). The
+  plant is today in Remote scheduling (the master writes). This is a second, local layer worth studying for
+  the one-genset stage; it is not a quick fix and needs meters the SAU can read.
+- SAU diagnostics page (Device Monitor > Communication diagnostic > Network Connections): the two master
+  sessions at :502 showed **send queues of 21 and 207 bytes** = exactly one group-1 reply (21 B) and one group-2
+  99-register reply (207 B) waiting unacknowledged; the 22,487 seen on 10 Oct is about a hundred replies
+  queued. A full send queue means the SAU produced the answer and the master's ACK did not come back: loss in
+  the SAU -> master direction (SAU port, duplex, media converters, fibre, switch) is a second mechanism beside
+  the application stall. The page's "Network interface" tab (errors, dropped, collisions, duplex) and the
+  router/switch port counters decide it. Listening ports seen: 21, 22, 111, 502, 1888, 2404 (IEC 104), 8080.
+
 ## 4. What the model says (tools/plant_model.py; *model*, calibrated only on 14 Oct)
 
 Fuel from a Willans line (ASSUMED 3,500-4,500 l/day absolute), curtailment regulator ASSUMED (0.03 %/s per
