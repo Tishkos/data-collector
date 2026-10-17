@@ -41,10 +41,10 @@ function Test-Py($exe) {
     return ($v -match "Python 3\.(1[0-9]|9)")
 }
 $pyExe = $null
-$cands = @()
+$cands = @("$env:ProgramFiles\Python312\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe")   # the wheels are for 3.12
 $c = Get-Command python -ErrorAction SilentlyContinue
 if ($c) { $cands += $c.Source }
-foreach ($v in "313", "312", "311", "310") {
+foreach ($v in "313", "311", "310") {
     $cands += "$env:ProgramFiles\Python$v\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python$v\python.exe"
 }
 foreach ($x in $cands) { if (Test-Py $x) { $pyExe = $x; break } }
@@ -73,37 +73,35 @@ if (-not (Test-Path ".venv")) {
 $venvPy  = Join-Path $root ".venv\Scripts\python.exe"
 $venvPyw = Join-Path $root ".venv\Scripts\pythonw.exe"
 $stamp = Join-Path $root ".venv\.installed"
-$offline = $false
+$need = "import pymodbus, yaml, pydantic, fastapi, uvicorn, openpyxl, requests, xlrd"
 if (-not (Test-Path $stamp) -or ((Get-Item requirements.txt).LastWriteTime -gt (Get-Item $stamp).LastWriteTime)) {
-    $ErrorActionPreference = "Continue"                 # pip writes notices to stderr; judge it by its exit code
-    if (Test-Path "wheels") {
-        # offline: the site's internet does not reach the package server; install what is in the wheels folder
+    $ErrorActionPreference = "Continue"                 # pip writes notices to stderr; judge by exit codes
+    $ok = $false
+    if (Test-Path "wheels\*.whl") {
+        # first from the wheels folder in the repository: no internet needed (the site's line does not reach the package server)
         Say "Installing packages from the wheels folder (no internet needed)..."
         $whl = @(Get-ChildItem "wheels\*.whl" | ForEach-Object { $_.FullName })
         & $venvPy -m pip install --quiet --no-index --find-links wheels @whl
+        & $venvPy -c $need 2>$null
         $ok = ($LASTEXITCODE -eq 0)
-        $offline = $true
-    } else {
-        Say "Installing packages (first run only)..."
-        & $venvPy -m pip install --quiet --upgrade pip
-        & $venvPy -m pip install --quiet -r requirements.txt
+        if (-not $ok) { Warn "Some packages from the wheels folder did not install (another Python version?); trying the internet..." }
+    }
+    if (-not $ok) {
+        Say "Installing packages from the internet (first run only)..."
+        & $venvPy -m pip install --quiet --timeout 20 -r requirements.txt
+        & $venvPy -c $need 2>$null
         $ok = ($LASTEXITCODE -eq 0)
     }
-    & $venvPy -c "import pymodbus, yaml" 2>$null
     $ErrorActionPreference = "Stop"
-    if (-not $ok -and $LASTEXITCODE -ne 0) {
-        Warn "The packages could not be installed (the package server is not reachable from this PC)."
-        Warn "Put the 'wheels' folder from Tishko next to SESSION.bat and start again."
-        exit 1
-    }
-    if ($ok -and -not $offline) { New-Item -ItemType File -Force $stamp | Out-Null }   # only a full online install is remembered
+    if ($ok) { New-Item -ItemType File -Force $stamp | Out-Null }   # remembered only when everything is in
 }
 $ErrorActionPreference = "Continue"
-& $venvPy -c "import pymodbus, yaml" 2>$null
+& $venvPy -c "import pymodbus, yaml" 2>$null                # what the measuring session needs at the least
 $pkgOk = ($LASTEXITCODE -eq 0)
 $ErrorActionPreference = "Stop"
 if (-not $pkgOk) {
-    Warn "Packages missing in .venv. Put the 'wheels' folder next to SESSION.bat, delete the .venv folder, start again."
+    Warn "The packages could not be installed: no wheels folder for this Python and no route to the package server."
+    Warn "Delete the .venv folder, check that the 'wheels' folder is next to SESSION.bat (Python 3.12), start again."
     exit 1
 }
 
