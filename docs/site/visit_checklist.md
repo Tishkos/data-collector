@@ -21,19 +21,41 @@ For each one, in InteliConfig, exactly as done for the master on 14 October:
 - [ ] file names: `<gen1|gen2|...|main1|main2|main3>_<what>_<yyyy-mm-dd>.*`, one folder per controller
 
 ## The SAU-100 (web page at 192.168.0.128, the plant's login)
-Screenshots or export of:
-- [ ] firmware version
+**Downloading or exporting a log from the SAU page has made the SAU stop answering the master and dropped the
+solar (5-6 Sep, reproduced with Modbus Poll). While the sun is up: screenshots only, one page at a time, no
+downloads, no exports, no "delete record", and write down the clock time of every page you open so the trace
+can show whether the fail rate moved while the page was open.** Exports only after sunset and with the plant
+engineer's yes.
+Screenshots of:
+- [ ] firmware version (the application is "SmartCMS"; the watchdog is "SauGuard")
+- [ ] the system status page: CPU load (1/5/15 min), memory, the message queue number (22,487 was seen at a fail)
 - [ ] Modbus TCP server settings, above all the maximum number of client connections
-- [ ] RS485 settings and statistics to the inverters (baud rate, poll cycle, **response delay**, error counters)
+- [ ] RS485 settings and statistics to the inverters (baud rate, poll cycle, **response delay**, error counters,
+      the communication success rate per inverter)
 - [ ] the real-time RS485 log page (Send/Recv frames, timeouts) while it runs: screenshots, and count the timeouts per minute
-- [ ] the device list with the communication status of every inverter and meter
-- [ ] the history log with the status flips and the "AC voltage low / abnormal" flags; export it if the page offers it
-- [ ] the nameplate: SAU-100 or SAU-300 (the old support email says SAU-300, protocol SAU300U211)
-- [ ] power control / ramp settings, communication watchdog or fallback when the master goes silent
+- [ ] the device list with the communication status of every device: inverters, meters, PID 101/102, RMU 202,
+      and the two without a model (200 "PDC#2 UPS", 201 "PDC#1 dehumidifier"), the weather station
+- [ ] the history log with the status flips and the "AC voltage low / abnormal" flags (no export by day)
+- [ ] the nameplate: SAU-100 or SAU-300 (the support email says SAU-300, protocol SAU300U211)
+- [ ] power control / ramp settings, the two "valid delay" 3,000 ms settings, communication watchdog or
+      fallback when the master goes silent
 - [ ] event or alarm log
-- [ ] network settings of ETH0 and ETH1
-- [ ] one inverter's parameter page (frequency response, ramp)
+- [ ] network settings of ETH0 and ETH1, and **look** whether a cable is plugged into ETH1 and where it goes
+      (two ports of one box on one switch is a known cause of intermittent unreachability) - look, do not unplug
+- [ ] one inverter's parameter page (grid protection limits, frequency response, ramp)
 - [ ] ask the installer or Sineng for the **SAU-100 Modbus TCP point table** document
+
+## The MikroTik router (RB4011) and the switch
+- [ ] export the Netwatch log (SAU up/down events with times) and the ping statistics page; it is an
+      independent witness of the SAU stalls and costs the plant nothing
+- [ ] note the router's own clock against the PC clock
+- [ ] photos of the media converters fitted on 24 Sep and their management IPs (an IP conflict until 26 Sep)
+
+## Files that already exist (ask the solar engineer, no new work)
+- [ ] `SauGuard.txt`, `SmartCMSHU121.txt`, `Device data service.txt` (SAU logs of 6-7 Sep)
+- [ ] `20260908SAU-TCP.pcapng` (capture at the SAU, 8 Sep) and the 10 Oct Wireshark capture
+- [ ] `Problem SAU 300.pdf`, the daily report PDFs, the inverter alarm history exports (CSV / XLS / zip)
+- [ ] `power sld salah.pdf`, the MV station SLD, `Si-Box Diesel microgrid configuration Guide.pdf`
 
 ## The plant PC
 - [ ] `SESSION.bat` in its own window and leave it: probe, check, 30 min master only, then the SAU every 5 s,
@@ -52,10 +74,14 @@ Screenshots or export of:
 
 ## To ask
 - [ ] why the gensets run by hand since 1 October
-- [ ] what the two mode changes on normal days are for
+- [ ] what the two mode changes on normal days are for (the 14 Oct ones were meter calibration)
 - [ ] what the UPS feed, new or existing, make and model, autonomy
-- [ ] production hours of the lines and chillers
+- [ ] production hours of the lines and chillers; the plant says the load is stable with no rush current -
+      the trace's one-minute load falls will show it
 - [ ] single-line diagram, fuel log (deliveries and daily tank readings)
+- [ ] the HMI clock against local time (the controller ran one hour behind on 10 Oct)
+- [ ] does the dehumidifier in the PV station cabinet run at all; how hot is the SAU's cabinet in the afternoon
+- [ ] whether Sineng's R&D came back after 11 Oct, and whether a newer SAU firmware exists
 
 ## At the end
 - [ ] screenshot of the HMI state and the time

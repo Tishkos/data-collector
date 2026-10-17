@@ -69,6 +69,80 @@ changes. The sister repository `qs-ai-hybird` is not to be touched.
   UPS and their breakers are wired at all is **unverified**; the history shows UPS breaker fail warnings.
 - Reactive control is dead by design (sheet 11). Grid export is allowed.
 - The OFF/AUTO toggles on 14 Oct were energy-meter calibration by the plant, not alarm clearing.
+- The master's clock is one hour behind local time (plant engineer, 10 Oct). History hours in this file are
+  controller time; add one hour for local. Record the offset on every session (HMI clock vs PC clock).
+
+### What the vendor group chat adds (export of the "Remote monitoring" group, Sept 2025 - 15 Oct 2026)
+
+Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this repository.
+
+- The drops are old. First explicit report 12 Jun 2026 ("sudden production drops, ComAp error on screen");
+  the solar engineer says the problem began about April-May 2026 and got worse with heat; "20 times a day"
+  in July; a Saturday in late September (26 Sep) had an hour or two of timeouts from 09:00. The plant (CCI)
+  says the gensets have already needed major maintenance because of the steps and that **even one drop a
+  day is not acceptable**; they also say the **plant load is stable, there is no rush current** (so the
+  model's load-event parameter is contested by the plant; the trace's one-minute load falls decide).
+- The SAU is the box that stalls, with direct evidence, all from the chat:
+  - 31 Aug: ping to .128 times out in bursts; a MikroTik router (RB4011) between the SAU and the controller
+    logs the SAU IP flapping up/down with **no Ethernet link-down event**; with the SAU powered off the network
+    is clean. If a stall is under about 5 min it recovers alone, longer ones need a SAU restart.
+  - 5-6 Sep: downloading the SAU's "soft runtime log" from its web page makes the SAU stop answering
+    Modbus TCP for seconds; the ComAp shows "PV logger group 1,2 comm fail" and the solar fell 809 -> 400 kW.
+    Reproduced with Modbus Poll (timeout, Err=8, about 3 s) on a click of download. **Never download or
+    export logs from the SAU while the sun is up.**
+  - 6 Sep 09:37-09:51: SAU unreachable 13 min; the SAU's own `SauGuard` watchdog log shows the main
+    application restarted at 09:36:55 and 09:49:56 (SIGTERM, crash and restart); `ModbusTcpServer.cpp` log
+    shows the TCP server dropping sockets (read returned <= 0) and clients reconnecting (connids 101-110).
+    The MikroTik also logged SAU down on 7 Sep at 19:33 and 19:34, after sunset: the stalls do not need sun.
+  - 8-9 Sep: Sineng captured packets at the SAU itself (mirror to ETH1). The integrator found in the same
+    file: master -> SAU request, ACKed at once, **answer 2.5 s later with Modbus exception 06 "Server Device
+    Busy"**; a second request answered 2.5 s later; a request on the other port (ETH1) answered 2.7 s later;
+    both ports recover together. Sineng's reading of the same file: "no interruption, not the SAU".
+  - 10 Sep: SAU CPU load page: 1-min load 121 % (5-min 115 %, 15-min 89 %), half an hour later 36 %.
+    10 Oct: SAU status page shows an internal message queue of 22,487 (localhost) at the moment it stops
+    answering. 10 Oct: a Wireshark capture shows TCP retransmissions to .128 at the fail.
+  - RS485 side: communication success rate per inverter 80-85 % in June, 35 % with gensets and 65 % on the
+    grid on 20 Jun; Sineng says it must be above 95 %. Two devices with **no protocol model assigned**
+    (ID 200 "PDC#2 UPS" on RS485-7 - a UPS in the PV station's own cabinet, presumably not one of the plant's
+    350 kVA units - and ID 201 "PDC#1 dehumidifier" on RS485-3) are polled forever and time out every cycle;
+    if the dehumidifier really is dead the cabinet climate is uncontrolled in a hot station; a weather station that is not installed is configured too; PID box (101/102) and RMU (202)
+    also sit on the SAU. The inverters' RS485 is wired five in parallel per channel, shield grounded at one
+    end, termination inside the devices (Sineng), communication board SP225KHI4 A02. Sineng's own line is
+    "the RS485 quality is the problem, the SAU is fine".
+  - Both SAU Ethernet ports were cabled to the same switch (ETH0 .128, ETH1 192.168.1.123). Two network
+    cards of one Linux box on one switch can by themselves cause intermittent unreachability (ARP answered
+    on the wrong port). **Hypothesis, cheap to check by looking, not by unplugging.**
+  - New media converters were fitted on 24 Sep and caused an IP conflict until 26 Sep 14:00; the solar
+    engineer blames the 26 Sep burst on it, the plant says the burst started at 09:00 before any work. The
+    history after 29 Sep still has 133 fails, so the conflict is not the whole story.
+  - Sineng changed the SAU's IP to 192.168.20.128 during a remote test on 6 Sep (cutting the master off) to
+    show "no power change without the EMS"; it was put back. Sineng has remote access to a site PC
+    (Sunlogin/AweSun and AnyDesk) and the SAU's debug tool; the site was told not to use high-privilege SAU
+    accounts. Sineng: "SAU-100 cannot be changed"; the nameplate says SAU-300, protocol SAU300U211.
+  - Sineng statements to verify, not to repeat: "communication loss cannot change power, the inverters
+    transmit at full power when there is no communication" (what the SAU does when the master's writes stop
+    is exactly the open question behind the v4 stage 2); the SAU has two "valid delay" settings of 3,000 ms
+    for inverter and box-transformer power data; the master's PV logger modules have Pause Before Request
+    0 ms and Response Timeout 3,000 ms (screenshot in the chat, 10 Oct). On 11 Oct Sineng said they no
+    longer need a capture "for reproducing the issue" and did not say why.
+- A second way the solar drops, without any comm fail: inverter grid-protection trips. In June-July the
+  800 V bus rose to 860 V at high production (phase imbalance 820/840 V) and inverters tripped on high and
+  low voltage; on 25 Jul Sineng widened the limits remotely to 800 V +/-15 % and 50 Hz +/-1.5 Hz (48.5-51.5)
+  and refused 47-52 Hz. On gensets a large load step moves frequency; a dip below 48.5 Hz would trip the
+  inverters and dump the load on the sets. Some inverter alarms are not shown on the web page, only in the
+  debug tool. Not measured by us yet; the trace shows PV drops without a fail bit if it happens.
+- Older open items from the chat: the PID box has been off since autumn 2025 because with it on all inverters
+  trip "PV fuse" at sunrise (earth terminals were opened in Jan 2026, floating-voltage checks, insulation
+  >= 17 MOhm); one inverter lost a month of production statistics (Jul); the transformer breather/oil cup
+  maintenance; night no-load loss about 90 kWh toward the transformers; the SAU's clock was off.
+- Documents that exist in the chat and should be collected: a single-line diagram (`power sld salah.pdf`),
+  the MV station SLD (`ITS-6500-MV-20 ... SLD`), `Si-Box Diesel microgrid configuration Guide.pdf` (Sineng's
+  own diesel-hybrid guide), the DTSU666 meter guide, SAU300 and SAU200 manuals, SP-350K-H1 installation
+  manual and datasheet, `Problem SAU 300.pdf`, the SAU log files `SauGuard.txt`, `SmartCMSHU121.txt`,
+  `Device data service.txt`, the capture `20260908SAU-TCP.pcapng`, inverter alarm histories (CSV/XLS/zip),
+  the daily report PDFs from 28 Sep.
+- People in the chat by role: the solar site engineer (operates the SAU, writes the reports), the sponsor,
+  two plant (CCI) engineers, the previous integrator, Sineng after-sales, SAU support, sales and management.
 
 ## 4. What the model says (tools/plant_model.py; *model*, calibrated only on 14 Oct)
 
@@ -152,7 +226,14 @@ tests, screenshots and rollback).
 - Why the gensets run by hand since 1 Oct; the two mode changes on normal days (plant).
 - UPS: in service, what they feed, wiring of the master's commands and feedbacks, make, model, ports (plant).
 - SAU: point table (2100/2101), max client connections, firmware, RS485 counters, watchdog or fallback when
-  the master goes silent, ramp rates (SAU web page, installer or Sineng).
+  the master goes silent, ramp rates (SAU web page, installer or Sineng). From the chat: is ETH1 still cabled
+  to the same switch; what the two 3,000 ms "valid delay" settings do; can the phantom devices (200, 201,
+  weather station) be removed from the device list and who may do it; did Sineng R&D find anything on 11 Oct;
+  how the master's PV logger module treats a Modbus exception reply (06 Busy) - as a failed request at once,
+  and how many failed requests make the fail bit (archive / InteliConfig, not a guess).
+- Inverters: trip windows after 25 Jul (800 V +/-15 %, 48.5-51.5 Hz) against the genset frequency and 800 V
+  bus excursions on load steps; alarms visible only in the debug tool (solar engineer, SAU history export
+  after sunset).
 - IG4: nominal ratings, reverse-power threshold and delay, Modbus servers on or off (archives, probe).
 - Which inverter group sits behind PV CB1 and PV CB2; where the SAU meters M1 and M3 measure.
 - Network: switch, cable path, Wi-Fi links, 192.168.0.1; remote access CCI allows.
