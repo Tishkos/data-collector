@@ -11,22 +11,22 @@ The master's PLC program run at 100 ms against a small plant model (tools/change
 | 8 Sep pause | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.4 kWh |
 | 8 Sep pause, AP read as 0 | today | 780 kW (25 %) | 0.0 s | no | 1104 kW | 0 s | 32.6 kWh |
 | 8 Sep pause, AP read as 0 | v3 | 780 kW (25 %) | 0.0 s | no | 1004 kW | 0 s | 33.8 kWh |
-| 8 Sep pause, AP read as 0 | v4 | 780 kW (25 %) | 0.0 s | no | 151 kW | 0 s | 40.2 kWh |
+| 8 Sep pause, AP read as 0 | v4 | 780 kW (25 %) | 0.0 s | no | 151 kW | 0 s | 40.3 kWh |
 | group 2 lost 40 s | today | 780 kW (25 %) | 0.0 s | no | 1214 kW | 0 s | 20.4 kWh |
 | group 2 lost 40 s | v3 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.5 kWh |
 | group 2 lost 40 s | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.5 kWh |
 | group 2 lost, cloud and sun back | today | 780 kW (25 %) | 0.0 s | no | 1214 kW | 0 s | 20.4 kWh |
 | group 2 lost, cloud and sun back | v3 | 776 kW (25 %) | 0.0 s | no | 714 kW | 0 s | 35.1 kWh |
-| group 2 lost, cloud and sun back | v4 | 769 kW (24 %) | 0.0 s | no | 714 kW | 0 s | 35.2 kWh |
+| group 2 lost, cloud and sun back | v4 | 776 kW (25 %) | 0.0 s | no | 714 kW | 0 s | 35.1 kWh |
 | all lost 70 s | today | 785 kW (25 %) | 0.0 s | no | 1114 kW | 0 s | 33.0 kWh |
 | all lost 70 s | v3 | 785 kW (25 %) | 0.0 s | no | 1117 kW | 0 s | 33.0 kWh |
-| all lost 70 s | v4 | 785 kW (25 %) | 0.0 s | no | 1162 kW | 0 s | 32.6 kWh |
+| all lost 70 s | v4 | 785 kW (25 %) | 0.0 s | no | 1114 kW | 0 s | 33.0 kWh |
 | AP invalid 30 s, no fail bit | today | 780 kW (25 %) | 0.0 s | no | 1115 kW | 0 s | 25.4 kWh |
 | AP invalid 30 s, no fail bit | v3 | 780 kW (25 %) | 0.0 s | no | 1115 kW | 0 s | 25.4 kWh |
 | AP invalid 30 s, no fail bit | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.4 kWh |
 | on the grid, group 2 lost, load drop | today | 0 kW (0 %) | 0.0 s | no | 0 kW | 6 s | 33.5 kWh |
 | on the grid, group 2 lost, load drop | v3 | 0 kW (0 %) | 0.0 s | no | 0 kW | 45 s | 75.9 kWh |
-| on the grid, group 2 lost, load drop | v4 | 0 kW (0 %) | 0.0 s | no | 0 kW | 6 s | 32.6 kWh |
+| on the grid, group 2 lost, load drop | v4 | 0 kW (0 %) | 0.0 s | no | 0 kW | 6 s | 33.5 kWh |
 
 Scenario notes:
 
@@ -61,4 +61,4 @@ The guard lowers the request faster than the inverters can follow, so the limit 
 |---|---|
 | 100 kW/s | 1000 kW |
 | 166 kW/s | 1200 kW |
-| 300 kW/s | 1400 kW |
+| 300 kW/s | 1200 kW |
