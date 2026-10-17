@@ -227,6 +227,44 @@ Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this
   with the kernel alive (8 Sep, 5-6 Sep) and the box not answering pings (31 Aug, 7 Sep 19:33, 10 Oct), which
   is kernel or path. Listening ports seen: 21, 22, 111, 502, 1888, 2404 (IEC 104), 8080.
 
+### What the exports of 17 Oct show (master, Gen 1/3/4/5, Main 1-3; Gen 2 .106 is password-protected, skipped)
+
+- **No PV logger comm fail on 15, 16 or 17 Oct** (master history to 17 Oct 12:07), after 19 on the 13th and 20 on
+  the 14th. The master's ECU definitions are byte-identical to 14 Oct and no setpoint changed: nothing on the
+  master explains it. Whatever changed is on the SAU, the network, or in how people used the SAU page. Ask
+  nobody yet; the trace and the next exports will show whether it holds.
+- **Genset protections (Gen 1/3/4/5, identical): Reverse Power 10 % for 5.0 s, Overload Wrn 105 % / BOC 120 %
+  after 5 s, isochronous load sharing, load ramp 10 s, all four in MAN** (Power Management off). The lab's
+  assumed 5 %/5 s is replaced by 10 %/5 s: with sets held at Gen P Min 25 %, a load step down (or a solar
+  return) of more than about 35 % of the running nominal sustained 5 s trips them.
+- **Nominals: Gen 1 (.105) 1,000 kW, Gen 3 (.113) 700 kW, Gen 4 (.114) 1,000 kW, Gen 5 (.115) 1,150 kW**;
+  Gen 2 unknown (probably 1,000). Priorities 5/3/2/1. Governor frequency gain differs (8/10/8/5 %) and Gen 1's
+  excitation-loss setting differs (40 % 7 s against 30 % 5 s): the four sets are not tuned alike.
+- **The gensets carry all the plant's reactive power**: about 1,000-1,130 kVAr at 400-470 kW, PF 0.34-0.39
+  lagging (master and genset values, 17 Oct). The solar gives none (PV Q forced to 0 in the PLC, PV PF request
+  1.000). The inverters could supply it; that would unload the sets' excitation and is a candidate improvement.
+- **15 Oct 14:26-14:28, Gen 1 could not be paralleled**: manual start, sync, GCB closed, loaded to ~460 kW, and
+  within 8 s it absorbed 625 kVAr (PF 0.60 leading) -> BOC Excitation Loss; reset, the same again (-571 kVAr);
+  then its engine ran down to an underspeed shutdown. The running sets were carrying ~1,100 kVAr and pushed
+  reactive into the incoming set instead of sharing it: a VAr-sharing / AVR problem on Gen 1 or in the group.
+  The bus stayed up (no blackout in the master history).
+- **Every evening at the transfer back to the grid (~18:00) breakers trip in a cascade**: "Other CB Trip" on all
+  three mains and "OtherGCBTrip" on the sets, and on 14 Oct Gen 3 BOC under-frequency/under-voltage and Gen 5
+  Sd Generator L2 Overvoltage at 18:07. The reverse-synchronisation back to the grid is rough.
+- **"Max Num CU on CAN Exceeded"** first appeared on 1 Oct 08:06, the same morning as a series of changes over
+  Ethernet: controller mode OFF, Gen P Min 20 -> 15 -> 25 %, Min Run Power 50 -> 210 kW. It has stayed active.
+  1 Oct is also when the gensets went to manual. The controller added or replaced that day is the suspect
+  (Gen 2, the only one with a password, is a candidate).
+- The master commands UPS1 OFF and UPS2 OFF (binary outputs 6 and 8) with both UPS feedbacks at 1; why is in
+  the PLC sheets 2-3 (the archive copy of 17 Oct).
+- SAU (two short page visits, 17 Oct 15:05-15:12 SAU time, about 3-4 min behind local): CPU 71/61/66 %, 49 MB
+  RAM free; Modbus links in use 3 of 5 (master x2, internal 127.0.0.1 x1); the web page open permanently on
+  192.168.0.50 (two connections) and 192.168.1.50 (on eth1), besides ours; two default routes with eth1 ->
+  192.168.1.1 first; "4G dialing status: abnormal"; serial counters since the last start: COM1 and COM2 (the two
+  inverter chains) 4.40 M requests each with 588,902 / 588,910 failed (13.4 %, identical: systematic, not wiring;
+  broadcasts counted as failures is the leading explanation), COM3 43.8 % and COM7 12.6 % failed (the two
+  devices without a model), COM4-6 practically perfect. All ten inverters online, "comm status" orange on all.
+
 ## 4. What the model says (tools/plant_model.py; *model*, calibrated only on 14 Oct)
 
 Fuel from a Willans line (ASSUMED 3,500-4,500 l/day absolute), curtailment regulator ASSUMED (0.03 %/s per
