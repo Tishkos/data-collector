@@ -73,11 +73,38 @@ if (-not (Test-Path ".venv")) {
 $venvPy  = Join-Path $root ".venv\Scripts\python.exe"
 $venvPyw = Join-Path $root ".venv\Scripts\pythonw.exe"
 $stamp = Join-Path $root ".venv\.installed"
+$offline = $false
 if (-not (Test-Path $stamp) -or ((Get-Item requirements.txt).LastWriteTime -gt (Get-Item $stamp).LastWriteTime)) {
-    Say "Installing packages (first run only)..."
-    & $venvPy -m pip install --quiet --upgrade pip
-    & $venvPy -m pip install --quiet -r requirements.txt
-    New-Item -ItemType File -Force $stamp | Out-Null
+    $ErrorActionPreference = "Continue"                 # pip writes notices to stderr; judge it by its exit code
+    if (Test-Path "wheels") {
+        # offline: the site's internet does not reach the package server; install what is in the wheels folder
+        Say "Installing packages from the wheels folder (no internet needed)..."
+        $whl = @(Get-ChildItem "wheels\*.whl" | ForEach-Object { $_.FullName })
+        & $venvPy -m pip install --quiet --no-index --find-links wheels @whl
+        $ok = ($LASTEXITCODE -eq 0)
+        $offline = $true
+    } else {
+        Say "Installing packages (first run only)..."
+        & $venvPy -m pip install --quiet --upgrade pip
+        & $venvPy -m pip install --quiet -r requirements.txt
+        $ok = ($LASTEXITCODE -eq 0)
+    }
+    & $venvPy -c "import pymodbus, yaml" 2>$null
+    $ErrorActionPreference = "Stop"
+    if (-not $ok -and $LASTEXITCODE -ne 0) {
+        Warn "The packages could not be installed (the package server is not reachable from this PC)."
+        Warn "Put the 'wheels' folder from Tishko next to SESSION.bat and start again."
+        exit 1
+    }
+    if ($ok -and -not $offline) { New-Item -ItemType File -Force $stamp | Out-Null }   # only a full online install is remembered
+}
+$ErrorActionPreference = "Continue"
+& $venvPy -c "import pymodbus, yaml" 2>$null
+$pkgOk = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = "Stop"
+if (-not $pkgOk) {
+    Warn "Packages missing in .venv. Put the 'wheels' folder next to SESSION.bat, delete the .venv folder, start again."
+    exit 1
 }
 
 # ---- 3. Config -------------------------------------------------------------------
