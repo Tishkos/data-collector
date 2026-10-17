@@ -265,6 +265,16 @@ Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this
   broadcasts counted as failures is the leading explanation), COM3 43.8 % and COM7 12.6 % failed (the two
   devices without a model), COM4-6 practically perfect. All ten inverters online, "comm status" orange on all.
 
+- **UPS, from the master's history (bit order verified against the 17 Oct screen: BOUT string left to right =
+  outputs 1..8)**: the program sheds the UPS input breakers when Gen Load exceeds 70 % (UPS1) / 80 % (UPS2) and
+  closes them below 35 % after 10 s (sheets 2-3, PV setpoints). **Since 3 Oct 13:13 the master commands UPS1 OFF
+  and UPS2 OFF in every row, while both UPS feedback inputs read 1 in every row**; at 13:13:38 that day it logged
+  "UPS1 fail to open" and "UPS2 fail to open". On 1 Oct 08:01-08:19 a burst of UPS1/UPS2 fail to close / fail
+  to open / other fail (the same morning as the CAN alarm, the setpoint changes and the switch to manual). So
+  the UPS relief does not work today: the breakers do not follow the command or the feedback does not report
+  them. "UPS Shedding" alarms (about one a day) come at the evening transfer and at solar drops. A one-genset
+  plan needs working UPS breakers and feedback, corrected UPS math and the hold first.
+
 ## 4. What the model says (tools/plant_model.py; *model*, calibrated only on 14 Oct)
 
 Fuel from a Willans line (ASSUMED 3,500-4,500 l/day absolute), curtailment regulator ASSUMED (0.03 %/s per
