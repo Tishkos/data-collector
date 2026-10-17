@@ -4,29 +4,29 @@ The master's PLC program run at 100 ms against a small plant model (tools/change
 
 ## Scenarios
 
-| Scenario | Program | Lowest genset load | Reverse power | Trip | Biggest step on the gensets (15 s) | PV energy in window |
-|---|---|---|---|---|---|---|
-| 8 Sep pause | today | 780 kW (25 %) | 0.0 s | no | 1104 kW | 32.6 kWh |
-| 8 Sep pause | v3 | 785 kW (25 %) | 0.0 s | no | 1 kW | 40.4 kWh |
-| 8 Sep pause | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 40.4 kWh |
-| 8 Sep pause, AP read as 0 | today | 780 kW (25 %) | 0.0 s | no | 1104 kW | 32.6 kWh |
-| 8 Sep pause, AP read as 0 | v3 | 780 kW (25 %) | 0.0 s | no | 1004 kW | 33.8 kWh |
-| 8 Sep pause, AP read as 0 | v4 | 780 kW (25 %) | 0.0 s | no | 151 kW | 40.2 kWh |
-| group 2 lost 40 s | today | 780 kW (25 %) | 0.0 s | no | 1214 kW | 20.4 kWh |
-| group 2 lost 40 s | v3 | 785 kW (25 %) | 0.0 s | no | 1 kW | 40.5 kWh |
-| group 2 lost 40 s | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 40.5 kWh |
-| group 2 lost, cloud and sun back | today | 780 kW (25 %) | 0.0 s | no | 1214 kW | 20.4 kWh |
-| group 2 lost, cloud and sun back | v3 | 776 kW (25 %) | 0.0 s | no | 714 kW | 35.1 kWh |
-| group 2 lost, cloud and sun back | v4 | 769 kW (24 %) | 0.0 s | no | 714 kW | 35.2 kWh |
-| all lost 70 s | today | 785 kW (25 %) | 0.0 s | no | 1114 kW | 33.0 kWh |
-| all lost 70 s | v3 | 785 kW (25 %) | 0.0 s | no | 1117 kW | 33.0 kWh |
-| all lost 70 s | v4 | 785 kW (25 %) | 0.0 s | no | 1162 kW | 32.6 kWh |
-| AP invalid 30 s, no fail bit | today | 780 kW (25 %) | 0.0 s | no | 1115 kW | 25.4 kWh |
-| AP invalid 30 s, no fail bit | v3 | 780 kW (25 %) | 0.0 s | no | 1115 kW | 25.4 kWh |
-| AP invalid 30 s, no fail bit | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 40.4 kWh |
-| on the grid, group 2 lost | today | 0 kW (0 %) | 0.0 s | no | 0 kW | 22.3 kWh |
-| on the grid, group 2 lost | v3 | 0 kW (0 %) | 0.0 s | no | 0 kW | 46.7 kWh |
-| on the grid, group 2 lost | v4 | 0 kW (0 %) | 0.0 s | no | 0 kW | 46.7 kWh |
+| Scenario | Program | Lowest genset load | Reverse power | Trip | Biggest step on the gensets (15 s) | Export over limit | PV energy in window |
+|---|---|---|---|---|---|---|---|
+| 8 Sep pause | today | 780 kW (25 %) | 0.0 s | no | 1104 kW | 0 s | 32.6 kWh |
+| 8 Sep pause | v3 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.4 kWh |
+| 8 Sep pause | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.4 kWh |
+| 8 Sep pause, AP read as 0 | today | 780 kW (25 %) | 0.0 s | no | 1104 kW | 0 s | 32.6 kWh |
+| 8 Sep pause, AP read as 0 | v3 | 780 kW (25 %) | 0.0 s | no | 1004 kW | 0 s | 33.8 kWh |
+| 8 Sep pause, AP read as 0 | v4 | 780 kW (25 %) | 0.0 s | no | 151 kW | 0 s | 40.2 kWh |
+| group 2 lost 40 s | today | 780 kW (25 %) | 0.0 s | no | 1214 kW | 0 s | 20.4 kWh |
+| group 2 lost 40 s | v3 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.5 kWh |
+| group 2 lost 40 s | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.5 kWh |
+| group 2 lost, cloud and sun back | today | 780 kW (25 %) | 0.0 s | no | 1214 kW | 0 s | 20.4 kWh |
+| group 2 lost, cloud and sun back | v3 | 776 kW (25 %) | 0.0 s | no | 714 kW | 0 s | 35.1 kWh |
+| group 2 lost, cloud and sun back | v4 | 769 kW (24 %) | 0.0 s | no | 714 kW | 0 s | 35.2 kWh |
+| all lost 70 s | today | 785 kW (25 %) | 0.0 s | no | 1114 kW | 0 s | 33.0 kWh |
+| all lost 70 s | v3 | 785 kW (25 %) | 0.0 s | no | 1117 kW | 0 s | 33.0 kWh |
+| all lost 70 s | v4 | 785 kW (25 %) | 0.0 s | no | 1162 kW | 0 s | 32.6 kWh |
+| AP invalid 30 s, no fail bit | today | 780 kW (25 %) | 0.0 s | no | 1115 kW | 0 s | 25.4 kWh |
+| AP invalid 30 s, no fail bit | v3 | 780 kW (25 %) | 0.0 s | no | 1115 kW | 0 s | 25.4 kWh |
+| AP invalid 30 s, no fail bit | v4 | 785 kW (25 %) | 0.0 s | no | 1 kW | 0 s | 40.4 kWh |
+| on the grid, group 2 lost, load drop | today | 0 kW (0 %) | 0.0 s | no | 0 kW | 6 s | 33.5 kWh |
+| on the grid, group 2 lost, load drop | v3 | 0 kW (0 %) | 0.0 s | no | 0 kW | 45 s | 75.9 kWh |
+| on the grid, group 2 lost, load drop | v4 | 0 kW (0 %) | 0.0 s | no | 0 kW | 6 s | 32.6 kWh |
 
 Scenario notes:
 
@@ -36,7 +36,7 @@ Scenario notes:
 - **group 2 lost, cloud and sun back**: Group 2 lost 40 s; a cloud takes the sun down to 500 kW for 15 s and passes.
 - **all lost 70 s**: Both sessions silent 70 s: longer than the 60 s hold.
 - **AP invalid 30 s, no fail bit**: The AP value invalid for 30 s while both ECU fail bits stay 0.
-- **on the grid, group 2 lost**: On the grid: the guard must stay asleep.
+- **on the grid, group 2 lost, load drop**: On the grid through MCB 1 only (export limit 1,300 kW), exporting at the limit; group 2 lost 40 s and the load drops 1,000 kW at 15 s. A hold would push the export over the limit; v4 does what today does.
 
 ## Load drop while one session is lost (the hold's real exposure)
 
