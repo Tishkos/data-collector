@@ -20,10 +20,18 @@ def _ts(s: str) -> datetime:
 
 
 def _read(path: str) -> list[dict]:
+    """Rows of a trace CSV; a row whose timestamp does not parse (a cut last line) is dropped, not fatal."""
     if not os.path.exists(path):
         return []
+    out = []
     with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+        for r in csv.DictReader(f):
+            try:
+                _ts(r["ts"])
+            except (ValueError, KeyError, TypeError):
+                continue
+            out.append(r)
+    return out
 
 
 def _num(v, default=None):
@@ -78,6 +86,95 @@ def _in_fail(t: datetime, fails: list[dict], margin_s: float = 0) -> bool:
     return False
 
 
+def _drop_catalogue(neo: list[dict], sau: list[dict], fails: list[dict], min_kw: float = 200.0, min_pct: float = 0.2) -> list[str]:
+    """Every fall of the solar reading of at least min_kw and min_pct within 30 s, tagged with what else moved:
+    the comm-fail bits, the setpoint the SAU holds, the sun (available kW), the inverter counts, the bus
+    frequency and voltage, and whether the gensets or the grid took the step (a fall nobody took is a reading)."""
+    rows = [(_ts(r["ts"]), r) for r in neo if _num(r.get("pv_prod_kw")) is not None]
+    out = ["## Solar drops and their most likely cause (falls of >= 200 kW and >= 20 % within 30 s)"]
+    if len(rows) < 2:
+        out += ["No usable solar rows.", ""]
+        return out
+    sau_rows = [(_ts(r["ts"]), r) for r in sau] if sau else []
+
+    def near(seq, t, before_s=0.0, after_s=0.0):
+        return [r for tt, r in seq if t - timedelta(seconds=before_s) <= tt <= t + timedelta(seconds=after_s)]
+
+    def setpoint(r):
+        a, b = _num(r.get("set_2100")), _num(r.get("set_2101"))
+        return None if a is None or b is None else (int(a) << 16 | int(b)) * 0.1
+
+    events, verdicts = [], collections.Counter()
+    i = 0
+    while i < len(rows):
+        t0, r0 = rows[i]
+        pv0 = _num(r0["pv_prod_kw"])
+        window = [(t, r) for t, r in rows[i:] if (t - t0).total_seconds() <= 30]
+        tmin, rmin = min(window, key=lambda x: _num(x[1]["pv_prod_kw"]))
+        fall = pv0 - _num(rmin["pv_prod_kw"])
+        if fall >= min_kw and pv0 > 0 and fall / pv0 >= min_pct:
+            for t, r in window:                                   # the fall starts at the last row still near the level before
+                if t >= tmin:
+                    break
+                if _num(r["pv_prod_kw"]) >= pv0 - 0.05 * pv0:
+                    t0, r0 = t, r
+            tags = []
+            if any(f["start"] - timedelta(seconds=5) <= tmin and (f["end"] or f["start"] + timedelta(seconds=600)) >= t0 - timedelta(seconds=5) for f in fails):
+                tags.append("comm fail")
+            before_sau, during_sau = near(sau_rows, t0, before_s=20), near(sau_rows, tmin, before_s=5, after_s=10)
+            sp0 = next((setpoint(r) for r in reversed(before_sau) if setpoint(r) is not None), None)
+            sp1 = next((setpoint(r) for r in during_sau if setpoint(r) is not None), None)
+            if sp0 is not None and sp1 is not None and sp1 < 0.5 * max(sp0, 1):
+                tags.append(f"setpoint on the SAU fell {sp0:.0f} -> {sp1:.0f} kW")
+            av0 = next((_num(r.get("available_kw")) for r in reversed(before_sau) if _num(r.get("available_kw")) is not None), None)
+            av1 = next((_num(r.get("available_kw")) for r in during_sau if _num(r.get("available_kw")) is not None), None)
+            if av0 is not None and av1 is not None and (av0 - av1) >= 0.5 * fall:
+                tags.append(f"the sun fell too (available {av0:.0f} -> {av1:.0f} kW)")
+            for key in ("inverters_online", "inverters_working", "inverters_faulty", "inverters_alarm"):
+                v0 = next((_num(r.get(key)) for r in reversed(before_sau) if _num(r.get(key)) is not None), None)
+                v1 = next((_num(r.get(key)) for r in during_sau if _num(r.get(key)) is not None), None)
+                if v0 is not None and v1 is not None and v0 != v1:
+                    tags.append(f"{key} {v0:.0f} -> {v1:.0f}")
+            span = near(rows, tmin, before_s=(tmin - t0).total_seconds() + 5, after_s=5)
+            fz = [_num(r.get("bus_frequency_hz")) for r in span if _num(r.get("bus_frequency_hz")) not in (None, 0)]
+            if fz and (min(fz) < 48.5 or max(fz) > 51.5):
+                tags.append(f"bus frequency {min(fz):.2f}-{max(fz):.2f} Hz")
+            vr = [_num(r.get("bus_voltage_rel_pct")) for r in span if _num(r.get("bus_voltage_rel_pct")) is not None]
+            if vr and (min(vr) < 85 or max(vr) > 115):
+                tags.append(f"bus voltage {min(vr):.0f}-{max(vr):.0f} %")
+            g0, g1 = _num(r0.get("power_kw")), max((_num(r.get("power_kw")) or 0) for r in near(rows, tmin, after_s=30))
+            m0, m1 = _num(r0.get("mains_power_kw")), max((_num(r.get("mains_power_kw")) or 0) for r in near(rows, tmin, after_s=30))
+            took = "the gensets took it" if g0 is not None and g1 - g0 >= 0.3 * fall else \
+                   "the grid took it" if m0 is not None and m1 - m0 >= 0.3 * fall else "nobody took it (a reading, not a real drop)"
+            if "comm fail" in tags:
+                cause = "comm fail -> zero setpoint"
+            elif any(t.startswith("setpoint on the SAU fell") for t in tags):
+                cause = "zero or low setpoint without a comm fail (invalid-value path)"
+            elif any(t.startswith("the sun fell") for t in tags):
+                cause = "cloud"
+            elif any(t.startswith(("bus frequency", "bus voltage", "inverters_faulty", "inverters_alarm")) for t in tags):
+                cause = "inverter grid-protection trip"
+            elif took.startswith("nobody"):
+                cause = "reading artefact (inverters lost by the SAU)"
+            else:
+                cause = "unexplained"
+            verdicts[cause] += 1
+            events.append(f"- {t0.strftime('%H:%M:%S')} {pv0:.0f} -> {pv0 - fall:.0f} kW in {(tmin - t0).total_seconds():.0f} s: {cause}; {took}"
+                          + (f"; {', '.join(tags)}" if tags else ""))
+            i += len(window) + 60
+        else:
+            i += 1
+    if not events:
+        out += ["None in the master's rows.", ""]
+        return out
+    out.append(f"{len(events)} drops: " + "; ".join(f"{n} x {c}" for c, n in verdicts.most_common()) + ".")
+    out += events[:40]
+    if len(events) > 40:
+        out.append(f"- ... {len(events) - 40} more")
+    out.append("")
+    return out
+
+
 def summarize(trace_dir: str, date: str) -> str:
     """A markdown summary of one day's files. Every number says what it is counted from."""
     neo = _read(os.path.join(trace_dir, f"neo-01_{date}.csv"))
@@ -114,7 +211,8 @@ def summarize(trace_dir: str, date: str) -> str:
         L.append("| start (UTC) | session | seconds |")
         L.append("|---|---|---|")
         for f in fails[:40]:
-            L.append(f"| {f['start'].strftime('%H:%M:%S')} | {f['session']} | {'open' if f['seconds'] is None else f'{f['seconds']:.0f}'} |")
+            secs = "open" if f["seconds"] is None else f"{f['seconds']:.0f}"
+            L.append(f"| {f['start'].strftime('%H:%M:%S')} | {f['session']} | {secs} |")
         if len(fails) > 40:
             L.append(f"| ... | {len(fails) - 40} more | |")
     L.append("")
@@ -134,6 +232,9 @@ def summarize(trace_dir: str, date: str) -> str:
                      f"unanswered {len(bad_reads)}, answered but slower than 1 s {len(slow)}. Pings: {len(pings)}, failed {len(bad_pings)}.")
         else:
             L.append(f"Reads: {len(reads)}, none answered. Pings: {len(pings)}, failed {len(bad_pings)}.")
+        macs = sorted({str(r.get("detail")) for r in watch if r.get("kind") == "arp" and r.get("ok") == "1"})
+        if macs:
+            L.append(f"MAC address seen for the SAU: {', '.join(macs)}" + (" - MORE THAN ONE: two boxes answer for this address (ARP flux or an IP conflict)." if len(macs) > 1 else " (one, as it should be)."))
         stall_rows = sorted(bad_reads + slow, key=lambda r: r["ts"])
         eps: list[list[dict]] = []
         for r in stall_rows:
@@ -164,17 +265,24 @@ def summarize(trace_dir: str, date: str) -> str:
                 if not win_r:
                     v = "no watch rows (SAU not watched then)"
                 else:
-                    unans = sum(1 for r in win_r if r.get("ok") != "1")
+                    timeouts = [r for r in win_r if r.get("ok") != "1" and str(r.get("detail", "")).startswith(("timeout", "error"))]
+                    excs = [r for r in win_r if r.get("ok") != "1" and str(r.get("detail", "")).startswith("exception")]
                     worst = max((_num(r["ms"]) or 0) for r in win_r)
+                    gaps = [(_ts(b["ts"]) - _ts(a["ts"])).total_seconds() for a, b in zip(win_r, win_r[1:])]
+                    queued = max(gaps) if gaps else 0                      # a hole in our 1-s reads = our request was stuck behind a stalled one
                     p_bad = sum(1 for r in win_p if r.get("ok") != "1")
-                    if unans and p_bad:
-                        v = "SAU unreachable (ping failed too): the box or the network to it"
-                    elif unans or worst >= 2000:
-                        v = "SAU alive (ping ok) but its application answered nobody: a stall inside the SAU"
+                    ping_txt = "no pings" if not win_p else ("ping failed too" if p_bad else "ping ok")
+                    if timeouts and p_bad:
+                        v = f"SAU unreachable ({ping_txt}): the box or the network to it"
+                    elif timeouts or worst >= 2000 or queued >= 3:
+                        v = f"SAU alive ({ping_txt}) but its application answered nobody for {max(worst, queued * 1000) / 1000:.1f} s: a stall inside the SAU"
+                    elif excs:
+                        slow_exc = max((_num(r["ms"]) or 0) for r in excs)
+                        v = f"SAU answered us with a Modbus exception ({excs[0].get('detail')}) after {slow_exc:.0f} ms ({ping_txt}): the server is alive and the backend is busy; a longer timeout would not help, the hold would"
                     elif worst >= 1000:
-                        v = "SAU slow to us (1-2 s) but answering: a stall near the master's limit"
+                        v = f"SAU slow to us ({worst:.0f} ms) but answering ({ping_txt}): a stall near the master's limit"
                     else:
-                        v = "SAU answered us normally: the fail is not the SAU being silent; look at the path to the master or the master's own module"
+                        v = f"SAU answered us normally ({ping_txt}): the fail is not the SAU being silent; look at the path to the master or the master's own module"
                 verdicts[v] += 1
                 lines.append(f"- {f['start'].strftime('%H:%M:%S')} {f['session']}: {v}")
             L.append("")
@@ -267,13 +375,20 @@ def summarize(trace_dir: str, date: str) -> str:
         L.append("If the curtailment % collapses during a fail and is still low after it, the hold is undone the moment the link returns.")
         L.append("")
 
+    # ---- every solar drop, with its most likely cause
+    if neo:
+        L.extend(_drop_catalogue(neo, sau, fails))
+
     # ---- load steps
     if neo:
         L.append("## Load steps (from gensets + solar + mains, one-minute windows)")
         series = []
+        fails_all = fails_from_events(ev)
         for r in neo:
             g, pv = _num(r.get("power_kw")), _num(r.get("pv_prod_kw"))
             if g is None or pv is None:                       # an invalid solar reading (during a fail) is not a load drop
+                continue
+            if fails_all and _in_fail(_ts(r["ts"]), fails_all, margin_s=5):   # the master reports PV = 0 inside a fail: not load
                 continue
             mains = _num(r.get("mains_power_kw"), 0.0)
             series.append((_ts(r["ts"]), g + pv + max(0.0, mains)))

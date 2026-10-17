@@ -9,10 +9,16 @@ password to open its configuration, stop and ask the plant.
 - [ ] Say it once to the plant engineer: reading only, nothing changes today
 - [ ] Is InteliConfig on the PC you are using? If not, the plant exports with its own laptop while you guide
 
-## The eight controllers (about 10 minutes each)
+## The eight controllers (about 10 minutes each; they do not fit in one hour with everything else)
 Gensets IG4 200: 192.168.0.105, .106, .113, .114, .115 - Mains IM210 G2: 192.168.0.107, .111, .110
 
-For each one, in InteliConfig, exactly as done for the master on 14 October:
+Order of value: (1) **before 16:00, offline, no plant time**: open the 14 Oct archive copy of the master in
+InteliConfig and read the PV logger / ECU module settings and their help text: Response timeout, Pause before
+request, retries, and the rule that raises "Comm Fail" and how an exception reply counts - the capture shows
+the master abandoning a request after 1.9 s and pairing replies by arrival, so this page decides whether a
+timeout change has any mechanism at all. (2) One genset IG4 (.105): reverse power threshold and delay,
+overload, nominal, start-to-load. (3) The rest another day. For each one connected, exactly as done for the
+master on 14 October:
 - [ ] connect by IP, open the configuration from the controller, **save the archive** to a file
 - [ ] **export the Modbus register list** (same export as the master's `neo_modbus_table`)
 - [ ] **export the history**
@@ -21,36 +27,28 @@ For each one, in InteliConfig, exactly as done for the master on 14 October:
 - [ ] file names: `<gen1|gen2|...|main1|main2|main3>_<what>_<yyyy-mm-dd>.*`, one folder per controller
 
 ## The SAU-100 (web page at 192.168.0.128, the plant's login)
-**Downloading or exporting a log from the SAU page has made the SAU stop answering the master and dropped the
-solar (5-6 Sep, reproduced with Modbus Poll). While the sun is up: screenshots only, one page at a time, no
-downloads, no exports, no "delete record", and write down the clock time of every page you open so the trace
-can show whether the fail rate moved while the page was open.** Exports only after sunset and with the plant
-engineer's yes.
-Screenshots of:
-- [ ] firmware version (the application is "SmartCMS"; the watchdog is "SauGuard")
-- [ ] the system status page: CPU load (1/5/15 min), memory, the message queue number (22,487 was seen at a fail)
-- [ ] Device Monitor > Communication diagnostic information: **Network interface** tab (RX/TX errors, dropped,
-      collisions, speed and duplex of ETH0 and ETH1) - the most valuable single screenshot; then Network
-      Connections (send queues of the :502 sessions, how many clients), Routing table
-- [ ] in the real-time RS485 log: count per minute the broadcast frames `00 10 FE D1 ...` and compare with how
-      often the master's setpoint changes (every write may become a broadcast plus a wait on the bus)
-- [ ] active power control mode setting (66900: Remote scheduling expected), the anti-reflux parameters
-      67191-67214 if shown, and what 192.168.1.50 is in the forwarding / platform / NTP settings
-- [ ] Modbus TCP server settings, above all the maximum number of client connections
-- [ ] RS485 settings and statistics to the inverters (baud rate, poll cycle, **response delay**, error counters,
-      the communication success rate per inverter)
-- [ ] the real-time RS485 log page (Send/Recv frames, timeouts) while it runs: screenshots, and count the timeouts per minute
-- [ ] the device list with the communication status of every device: inverters, meters, PID 101/102, RMU 202,
-      and the two without a model (200 "PDC#2 UPS", 201 "PDC#1 dehumidifier"), the weather station
-- [ ] the history log with the status flips and the "AC voltage low / abnormal" flags (no export by day)
-- [ ] the nameplate: SAU-100 or SAU-300 (the support email says SAU-300, protocol SAU300U211)
-- [ ] power control / ramp settings, the two "valid delay" 3,000 ms settings, communication watchdog or
-      fallback when the master goes silent
-- [ ] event or alarm log
-- [ ] network settings of ETH0 and ETH1, and **look** whether a cable is plugged into ETH1 and where it goes
-      (two ports of one box on one switch is a known cause of intermittent unreachability) - look, do not unplug
-- [ ] one inverter's parameter page (grid protection limits, frequency response, ramp)
-- [ ] ask the installer or Sineng for the **SAU-100 Modbus TCP point table** document
+**The page itself is the biggest load the SAU sees** (its dashboard polls five endpoints every 5 s plus a 31 KB
+POST every 6 s; a log export froze the whole application for 2.5 s on 8 Sep and dropped the solar). So, while
+the sun is up: **two visits of about one minute, at 16:05 and 16:55**, screenshots only, then close the tab.
+No download, no export, no "delete record", nothing under Logs. Write down the clock time of each visit. Use a
+viewer login or let the plant engineer drive: a high-privilege account changes a setting with one click.
+Each visit, in this order (Device Monitor > Communication diagnostic information):
+- [ ] **Network Connections**, scrolled so the Remote address column is fully visible: count the :502 sockets and
+      their remote addresses (the limit is five; the master holds two, our trace one, 127.0.0.1 one), HTTP
+      clients on :80/:8080 and on which port (ETH0 192.168.0.x, ETH1 192.168.1.x), any SYN_SENT, any send
+      queue above a few hundred bytes
+- [ ] **Network interface**: per port speed/duplex, RX/TX errors, dropped, collisions
+- [ ] Routing table and Domain Name Server (is the gateway/DNS reachable; what is 192.168.1.50)
+- [ ] the inverter list with the **communication success rate per inverter** (60-min window)
+- [ ] Run info once: uptime, load, temperature if shown; firmware/About once
+- [ ] the second visit also: the device list with the status of every device (inverters, meters, PID 101/102,
+      RMU 202, the two without a model 200/201, the weather station) and the power-scheduling page (active
+      power control mode, expected Remote scheduling; the anti-reflux parameters if shown)
+After sunset only, with the plant's yes: RS485 settings and statistics (baud, poll cycle, response delay, the
+two 3,000 ms "valid delay" settings), the real-time RS485 log (count timeouts and `00 10 FE D1` broadcasts per
+minute), the history log, Modbus TCP server settings (max clients), network settings of ETH0/ETH1, one
+inverter's parameter page, exports.
+- [ ] Only look, never unplug: is a cable in ETH1 and where does it go (ask, or a photo of the switch ports)
 
 ## The MikroTik router (RB4011) and the switch
 - [ ] export the Netwatch log (SAU up/down events with times) and the ping statistics page; it is an
@@ -74,8 +72,16 @@ Screenshots of:
       report and zip in `bundles\` after one hour, then the lighter long run with a zip every morning.
       It watches the master's comm-fail rate itself and drops the SAU if the rate rises. The report gives a
       verdict per comm fail: SAU unreachable / alive but silent / slow / answered us normally.
-- [ ] `START-PLANT.bat` - the hourly collector for the Turkey platform (separate from the session)
+- [ ] `START-PLANT.bat` - the hourly collector for the Turkey platform: start it **after** the hour, or leave the
+      scheduled task as it is; it takes one of the SAU's five Modbus links for a few seconds every hour. If the
+      16:05 socket count shows five :502 sockets, stop it (STOP.bat) for the day
 - [ ] note the comm-fail count in the master's history at the start and at the end (the session logs its own too)
+- [ ] once: `arp -a` in a command window (every 192.168.0.x host with its MAC; media converter management IPs; any
+      192.168.1.x entry = the two subnets share one switch; .128 should show one MAC only) and
+      `tracert 192.168.0.128` (one hop = the router is not routing it); paste both into a text file
+- [ ] if a fail happens: write the time, what you had open, and in InteliConfig's value view the two bits
+      ECU 2 / ECU 3 Comm Fail, PV logger AP, Max Available, Online/Work/Alarm inverter numbers - how long the
+      bits stay up (about 2 s = the abandon-and-mispair mode seen on 8 Sep; tens of seconds = a real outage)
 - [ ] at the end: copy the newest zip from `bundles\` (and `data\` if there is room) to the stick
 
 ## At the panels (photos)

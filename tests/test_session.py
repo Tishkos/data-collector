@@ -75,26 +75,27 @@ def test_session_runs_the_steps_reports_and_bundles(plant, tmp_path):
     assert "probe:" in log and "check:" in log
     rep = open(glob.glob(str(data / "trace" / "report_*.md"))[0], encoding="utf-8").read()
     assert "Comm fails" in rep and "None declared" in rep and "Response time" in rep and "set_2101" in rep
-    assert "stall catcher" in rep and "Pings:" in rep and "stall catcher on pv-array every 1 s" in log
+    assert "stall catcher" in rep and "Pings:" in rep and "watch read of pv-array every 1 s" in log
     assert any(n.startswith("trace/watch_") for n in names)
     assert not s.sau_dropped
 
 
-def test_sau_guard_drops_the_sau_when_fails_rise(plant, tmp_path, monkeypatch):
+def test_sau_guard_pauses_then_resumes_when_fails_go_on_without_us(plant, tmp_path, monkeypatch):
     data = tmp_path / "data"
-    s = Session(_config(tmp_path), str(data), hours=0.004, phase1_min=0.03, sau_s=0.5, long_run=False, bundles_dir=str(tmp_path / "bundles"))
+    s = Session(_config(tmp_path), str(data), hours=0.004, phase1_min=0.03, sau_s=0.5, long_run=False,
+                bundles_dir=str(tmp_path / "bundles"), guard_window_s=3.0)
     calls = {"n": 0}
 
-    def fake_count(since, until=None):          # phase 1: 0 fails; first phase-2 window: 6 fails
+    def fake_count(since, until=None):          # phase 1: 0 fails; first window: 6 fails (pause); while paused: 4 (resume)
         calls["n"] += 1
-        return 0 if calls["n"] == 1 else 6
+        return 0 if calls["n"] == 1 else 6 if calls["n"] == 2 else 4
     monkeypatch.setattr(s, "fail_count", fake_count)
     monkeypatch.setattr(s, "step_probe", lambda: "")
     monkeypatch.setattr(s, "step_check", lambda: "")
     s.run()
     assert s.sau_dropped
     log = open(s.log_path, encoding="utf-8").read()
-    assert "SAU polling dropped" in log
+    assert "SAU reads paused for one window" in log and "SAU reads resumed" in log
 
 
 def _write_day(tmp_path, date="2026-10-16"):
@@ -111,7 +112,9 @@ def _write_day(tmp_path, date="2026-10-16"):
         for s in range(600):
             fail = 60 <= s < 72 or 400 <= s < 430
             load_drop = 300 if 200 <= s < 260 else 0
-            f.write(f"{iso(t0 + timedelta(seconds=s))},5,3,0,{'' if fail else 1000},{790 - load_drop},0,{31 if not fail else 5}\n")
+            pv = "" if fail else (400 if 300 <= s < 340 else 1000)          # a 600 kW solar drop at 300 s the gensets take
+            gen = 790 - load_drop + (600 if 300 <= s < 340 else 0)
+            f.write(f"{iso(t0 + timedelta(seconds=s))},5,3,0,{pv},{gen},0,{31 if not fail else 5}\n")
     with open(d / f"pv-array_{date}.csv", "w") as f:
         f.write("ts,ms,ok_blocks,failed_blocks,ac_power_kw,inverters_online,set_2100,set_2101,set_2102,set_2103\n")
         for s in range(0, 600, 5):
@@ -145,6 +148,7 @@ def test_report_reads_fails_sau_words_regulator_and_load_steps(tmp_path):
     assert "set_2101" in text and "group 2 layout" in text
     assert "curtailment % before/during/after 31.0 / 5.0 / 31.0" in text
     assert "Largest fall within one minute: 300 kW" in text
+    assert "Solar drops" in text and "1 drops: 1 x unexplained" in text and "the gensets took it" in text
     assert "the count fell 2 times" in text and "in the 30 s before them: 3 of 3" in text
     assert "Stall episodes" in text and "master fail at the same time: yes" in text
     assert "2 x SAU alive (ping ok) but its application answered nobody" in text

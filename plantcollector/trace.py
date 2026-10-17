@@ -11,9 +11,13 @@ Files in <out>/ (one set per day, UTC date in the name):
   events_<date>.csv     every change of a boolean point, of a point marked 'edge: true' in its profile, and of
                         a device's reachability: ts, device, point, old, new
   connect_<date>.csv    the connection test: a fresh TCP connection to a host every N seconds, ts, host, ok, ms
-  watch_<date>.csv      the stall catcher (watch={device: seconds}): every second one ping of the device's host
-                        (is the box alive) and one read of one register on the device's existing connection
-                        (does the application answer, and in how many ms): ts, device, kind, ok, ms, detail
+  watch_<date>.csv      the stall catcher: a ping of every traced host every ping_s seconds (is the box alive,
+                        the master as a control for the PC's own network card) and, for the devices in
+                        watch={device: seconds}, one small read on the device's existing connection (does the
+                        application answer, and in how many ms): ts, device, kind, ok, ms, detail. The read goes
+                        to the setpoint words 2100-2101 when the profile maps them (the second the master's value
+                        lands), otherwise to the first mapped register; if the device refuses that address the
+                        catcher falls back to the first register by itself.
 
 Each device runs in its own thread with its own connection, so a stalled SAU never delays the master's rows -
 the master's comm-fail bits are read on time while the SAU is being slow. Everything is read-only: the trace
@@ -30,7 +34,7 @@ import socket
 import subprocess
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .adapters import build_adapter
 from .registry import Quality, Registry
@@ -78,16 +82,21 @@ class _DailyCsv:
         if self._f:
             self._f.close()
             self._f = self._w = None
+            self._date = None                               # a late write from a thread reopens in append mode
 
 
 class Trace:
     def __init__(self, registry: Registry, out_dir: str, every: dict[str, float],
                  connect_test_s: float | None = 60.0, connect_hosts: list[tuple[str, int]] | None = None,
-                 log=print, watch: dict[str, float] | None = None):
+                 log=print, watch: dict[str, float] | None = None, ping_s: float | None = None):
         os.makedirs(out_dir, exist_ok=True)
         self.registry, self.out_dir, self.log = registry, out_dir, log
         self.every = {k: float(v) for k, v in every.items()}
         self.watch = {k: float(v) for k, v in (watch or {}).items()}
+        self.ping_s = float(ping_s) if ping_s else (1.0 if self.watch else None)
+        self._paused: set[str] = set()                       # devices whose reads are paused (pings go on)
+        self._watch_target: dict[str, tuple] = {}
+        self._watch_refused: dict[str, int] = {}
         for dev_id in list(self.every) + list(self.watch):
             if dev_id not in registry.devices:
                 raise ValueError(f"unknown device '{dev_id}' (config has: {', '.join(registry.devices)})")
@@ -95,8 +104,9 @@ class Trace:
             if dev_id not in self.every:
                 raise ValueError(f"watch device '{dev_id}' must also be traced (every)")
         self.adapters = {d: build_adapter(registry.devices[d]) for d in self.every}
-        self.files = {d: _DailyCsv(out_dir, d, ["ts", "ms", "ok_blocks", "failed_blocks"] + [p.id for p in registry.devices[d].points])
+        self.files = {d: _DailyCsv(out_dir, d, ["ts", "ms", "wait_ms", "ok_blocks", "failed_blocks"] + [p.id for p in registry.devices[d].points])
                       for d in self.every}
+        self._done = threading.Event()
         self.events = _DailyCsv(out_dir, "events", ["ts", "device", "point", "old", "new"])
         self.connect_file = _DailyCsv(out_dir, "connect", ["ts", "host", "ok", "ms", "error"])
         self.watch_file = _DailyCsv(out_dir, "watch", ["ts", "device", "kind", "ok", "ms", "detail"])
@@ -116,10 +126,11 @@ class Trace:
         self.watch_rows = 0
         self.stalls = 0                                      # watch reads slower than 1 s or unanswered
         self._ping_off = False
+        self._arp_off = False
+        self.arp_s = 10.0
 
     # ---- one read of one device ----------------------------------------------------------------
     def read_once(self, dev_id: str, ts: datetime | None = None) -> None:
-        ts = ts or datetime.now(timezone.utc)
         ad = self.adapters[dev_id]
         dev = self.registry.devices[dev_id]
         try:
@@ -130,7 +141,10 @@ class Trace:
         ok = getattr(ad, "last_ok_blocks", 0)
         failed = getattr(ad, "last_failed_blocks", 0)
         ms = getattr(ad, "last_ms", 0.0)
-        self.files[dev_id].write(ts, [_iso(ts), ms, ok, failed] + [_cell(out.get(p.id)) for p in dev.points])
+        wait_ms = getattr(ad, "last_wait_ms", 0.0)
+        # the row's time is when the request left, not when the thread started waiting for the connection
+        ts = ts or (datetime.now(timezone.utc) - timedelta(milliseconds=ms))
+        self.files[dev_id].write(ts, [_iso(ts), ms, wait_ms, ok, failed] + [_cell(out.get(p.id)) for p in dev.points])
         self.rows[dev_id] += 1
         if ok == 0:
             self.failed[dev_id] += 1
@@ -154,21 +168,61 @@ class Trace:
             self._last[key] = value
 
     # ---- the stall catcher ----------------------------------------------------------------------
+    def pause(self, dev_id: str) -> None:
+        """Stop reading this device (poll and watch read); its ping goes on; the connection stays open."""
+        self._paused.add(dev_id)
+
+    def resume(self, dev_id: str) -> None:
+        self._paused.discard(dev_id)
+
+    def paused(self, dev_id: str) -> bool:
+        return dev_id in self._paused
+
     def watch_read(self, dev_id: str, ts: datetime | None = None) -> None:
-        """One register on the device's own connection: did the application answer, in how many ms."""
-        ts = ts or datetime.now(timezone.utc)
+        """One small read on the device's own connection: did the application answer, in how many ms."""
+        if dev_id in self._paused:
+            return
         ad = self.adapters[dev_id]
         fn = getattr(ad, "ping_read", None)
         if fn is None:
             return
-        status, ms, value = fn()
+        target = self._watch_target.get(dev_id) or getattr(ad, "watch_default", lambda: None)()
+        status, ms, values, t_req = fn(target)
+        ts = ts or t_req
         ok = 1 if status == "ok" else 0
+        if status.startswith("exception") and status.split()[-1] in ("2", "3") and target and target[1] != ad._blocks[0][1]:
+            self._watch_refused[dev_id] = self._watch_refused.get(dev_id, 0) + 1
+            if self._watch_refused[dev_id] >= 3:             # the device refuses that address: fall back for good
+                fb = ad._blocks[0]
+                self._watch_target[dev_id] = (fb[0], fb[1], 1)
+                self.log(f"[trace] {dev_id} refuses the watch read at {target[1]} ({status}); watching {fb[1]} instead")
+        elif target:
+            self._watch_target[dev_id] = target
+        detail = status if not ok else ";".join(str(v) for v in values)
         with self._lock:
-            self.watch_file.write(ts, [_iso(ts), dev_id, "read", ok, ms, status if not ok else value])
+            self.watch_file.write(ts, [_iso(ts), dev_id, "read", ok, ms, detail])
             self.watch_rows += 1
             if not ok or ms >= 1000:
                 self.stalls += 1
         self._edge(ts, dev_id, "answers_us", ok == 1)
+
+    def watch_arp(self, dev_id: str, ts: datetime | None = None) -> None:
+        """The MAC the PC currently has for the host (arp -a / ip neigh): a change means two boxes answer for
+        one address (ARP flux, an IP conflict). Logged every arp_s, a change goes to the event log."""
+        ts = ts or datetime.now(timezone.utc)
+        host = self.registry.devices[dev_id].connection.get("host")
+        if not host or self._arp_off:
+            return
+        mac = arp_lookup(host)
+        if mac is None:
+            self._arp_off = True
+            self.log("[trace] no arp command on this machine; MAC watch off")
+            return
+        with self._lock:
+            self.watch_file.write(ts, [_iso(ts), dev_id, "arp", 1 if mac else 0, 0, mac or "no entry"])
+            self.watch_rows += 1
+        if mac:
+            self._edge(ts, dev_id, "mac", mac)
 
     def watch_ping(self, dev_id: str, ts: datetime | None = None) -> None:
         ts = ts or datetime.now(timezone.utc)
@@ -202,21 +256,30 @@ class Trace:
             self.connect_file.write(ts, [_iso(ts), f"{host}:{port}", ok, ms, err])
 
     # ---- the loop --------------------------------------------------------------------------------
+    def _running(self, end: float | None, stop) -> bool:
+        return not stop.is_set() and not self._done.is_set() and (end is None or time.monotonic() < end)
+
     def _device_loop(self, dev_id: str, end: float | None, stop) -> None:
         period = self.every[dev_id]
         due = time.monotonic()
-        while not stop.is_set() and (end is None or time.monotonic() < end):
+        while self._running(end, stop):
             if time.monotonic() >= due:
-                self.read_once(dev_id)
+                try:
+                    if dev_id not in self._paused:
+                        self.read_once(dev_id)
+                except Exception as exc:                        # a disk error must not kill the thread silently
+                    self.log(f"[trace] {dev_id}: {exc}")
                 due = max(due + period, time.monotonic())        # no catching up after a slow read
             self._nap(due, end, stop)
 
-    def _watch_loop(self, dev_id: str, fn, end: float | None, stop) -> None:
-        period = self.watch[dev_id]
+    def _watch_loop(self, dev_id: str, fn, end: float | None, stop, period: float) -> None:
         due = time.monotonic()
-        while not stop.is_set() and (end is None or time.monotonic() < end):
+        while self._running(end, stop):
             if time.monotonic() >= due:
-                fn(dev_id)
+                try:
+                    fn(dev_id)
+                except Exception as exc:
+                    self.log(f"[trace] {dev_id} watch: {exc}")
                 due = max(due + period, time.monotonic())
             self._nap(due, end, stop)
 
@@ -235,13 +298,21 @@ class Trace:
         next_connect = start if self.connect_test_s else None
         next_status = start + status_every_s
         self.log(f"[trace] {', '.join(f'{d} every {s:g} s' for d, s in self.every.items())}"
-                 + (f"; watch {', '.join(f'{d} every {s:g} s' for d, s in self.watch.items())}" if self.watch else "")
+                 + (f"; watch read {', '.join(f'{d} every {s:g} s' for d, s in self.watch.items())}" if self.watch else "")
+                 + (f"; ping every {self.ping_s:g} s" if self.ping_s else "")
                  + (f"; connection test every {self.connect_test_s:g} s" if self.connect_test_s else "")
                  + f"; files in {self.out_dir}")
         threads = [threading.Thread(target=self._device_loop, args=(d, end, stop), daemon=True, name=f"trace-{d}") for d in self.every]
-        for d in self.watch:
-            threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_read, end, stop), daemon=True, name=f"watch-{d}"))
-            threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_ping, end, stop), daemon=True, name=f"ping-{d}"))
+        for d, period in self.watch.items():
+            threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_read, end, stop, period), daemon=True, name=f"watch-{d}"))
+        if self.ping_s:
+            hosts_done = set()
+            for d in self.every:
+                host = self.registry.devices[d].connection.get("host")
+                if host and host not in hosts_done:               # one ping per host, the master as a control
+                    hosts_done.add(host)
+                    threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_ping, end, stop, self.ping_s), daemon=True, name=f"ping-{d}"))
+                    threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_arp, end, stop, self.arp_s), daemon=True, name=f"arp-{d}"))
         for t in threads:
             t.start()
         try:
@@ -260,7 +331,8 @@ class Trace:
                     pending.append(end)
                 stop.wait(max(0.05, min(0.5, min(pending) - time.monotonic())))
         finally:
-            for t in threads:                               # let each thread finish its current read, then close
+            self._done.set()                                # tell every thread to leave after its current read
+            for t in threads:
                 t.join(timeout=15)
             self.close()
 
@@ -272,7 +344,12 @@ class Trace:
         self.watch_file.close()
         for ad in self.adapters.values():
             try:
-                ad.close()
+                lock = getattr(ad, "_lock", None)
+                if lock is not None:
+                    with lock:                              # never close a connection under a read in flight
+                        ad.close()
+                else:
+                    ad.close()
             except Exception:
                 pass
 
@@ -283,25 +360,89 @@ def _plain(v) -> str:
     return "" if v is None else str(v)
 
 
+_ICMP_HANDLE = None
+
+
+def _icmp_windows(host: str, timeout_s: float) -> tuple[int, float, str] | None:
+    """ICMP echo through Windows' iphlpapi (no admin rights, no process per second, language independent).
+    Returns None when this is not Windows or the call is unavailable, so the caller falls back to ping.exe."""
+    global _ICMP_HANDLE
+    if not platform.system().lower().startswith("win"):
+        return None
+    try:
+        import ctypes
+        import struct as _struct
+        iphlpapi = ctypes.windll.iphlpapi
+        kernel32 = ctypes.windll.kernel32
+        iphlpapi.IcmpCreateFile.restype = ctypes.c_void_p
+        iphlpapi.IcmpSendEcho.restype = ctypes.c_ulong
+        iphlpapi.IcmpSendEcho.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_char_p, ctypes.c_ushort,
+                                          ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong]
+        if _ICMP_HANDLE is None:
+            _ICMP_HANDLE = iphlpapi.IcmpCreateFile()
+            if not _ICMP_HANDLE or _ICMP_HANDLE == ctypes.c_void_p(-1).value:
+                _ICMP_HANDLE = None
+                return None
+        addr = _struct.unpack("<L", socket.inet_aton(socket.gethostbyname(host)))[0]
+        data = b"plantcollector"
+        size = 128 + len(data)
+        buf = ctypes.create_string_buffer(size)
+        n = iphlpapi.IcmpSendEcho(_ICMP_HANDLE, addr, data, len(data), None, buf, size, int(timeout_s * 1000))
+        if n == 0:
+            err = kernel32.GetLastError()
+            return 0, round(timeout_s * 1000, 1), "no reply" if err in (11010, 11003, 11002) else f"icmp error {err}"
+        _a, status, rtt = _struct.unpack_from("<LLL", buf.raw, 0)
+        if status == 0:
+            return 1, float(rtt), ""
+        return 0, float(rtt), "no reply" if status in (11010, 11003, 11002) else f"icmp status {status}"
+    except Exception:                                       # any surprise in the API: let ping.exe do it
+        return None
+
+
 def ping(host: str, timeout_s: float = 1.0) -> tuple[int, float, str]:
-    """One ICMP echo with the system's ping (no privileges needed). Returns (ok, ms, detail)."""
+    """One ICMP echo. Windows: iphlpapi, then ping.exe; elsewhere the system ping, then a datagram socket.
+    Returns (ok, ms, detail). ping output is parsed as bytes: the only language-independent token is 'TTL='."""
+    r = _icmp_windows(host, timeout_s)
+    if r is not None:
+        return r
     win = platform.system().lower().startswith("win")
     cmd = ["ping", "-n", "1", "-w", str(int(timeout_s * 1000)), host] if win else ["ping", "-c", "1", "-W", str(max(1, int(timeout_s))), host]
     t0 = time.perf_counter()
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s + 2).stdout
+        out = subprocess.run(cmd, capture_output=True, timeout=timeout_s + 2).stdout.lower()
     except FileNotFoundError:
         return _icmp_echo(host, timeout_s)                  # no ping binary (a bare container): try a datagram ICMP socket
     except Exception as exc:
         return 0, round((time.perf_counter() - t0) * 1000, 1), f"ping failed: {exc}"
-    low = out.lower()
-    if "ttl=" not in low:                                   # Windows prints "unreachable" replies with exit code 0
+    if b"ttl=" not in out:                                  # Windows prints "unreachable" replies with exit code 0
         return 0, round((time.perf_counter() - t0) * 1000, 1), "no reply"
-    m = re.search(r"time[=<]\s*([\d.]+)", low)
-    return 1, float(m.group(1)) if m else round((time.perf_counter() - t0) * 1000, 1), ""
+    m = re.search(rb"[=<]\s*(\d+(?:[.,]\d+)?)\s*ms", out)
+    return 1, float(m.group(1).replace(b",", b".")) if m else round((time.perf_counter() - t0) * 1000, 1), ""
 
 
-# ---- probe: which hosts answer on Modbus at all ---------------------------------------------------
+_MAC_RE = re.compile(rb"((?:[0-9a-f]{2}[-:]){5}[0-9a-f]{2})")
+
+
+def arp_lookup(host: str) -> str | None:
+    """The MAC in the PC's ARP table for host: '' when there is no entry, None when there is no arp command."""
+    win = platform.system().lower().startswith("win")
+    cmd = ["arp", "-a", host] if win else ["ip", "neigh", "show", host]
+    try:
+        out = subprocess.run(cmd, capture_output=True, timeout=5).stdout.lower()
+    except FileNotFoundError:
+        if win:
+            return None
+        try:
+            out = subprocess.run(["arp", "-n", host], capture_output=True, timeout=5).stdout.lower()
+        except Exception:
+            return None
+    except Exception:
+        return ""
+    macs = [m.decode().replace("-", ":") for m in _MAC_RE.findall(out)]
+    macs = [m for m in macs if m not in ("ff:ff:ff:ff:ff:ff", "00:00:00:00:00:00")]
+    return macs[0] if macs else ""
+
+
 def _icmp_echo(host: str, timeout_s: float) -> tuple[int, float, str]:
     """ICMP echo through an unprivileged datagram socket (Linux with ping_group_range open). No raw socket."""
     import struct as _struct

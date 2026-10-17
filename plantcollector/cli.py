@@ -353,7 +353,7 @@ def main(argv=None) -> int:
     ss.add_argument("--phase1-min", type=float, default=30.0, help="minutes of master-only trace before the SAU is polled")
     ss.add_argument("--sau-s", type=float, default=5.0, help="SAU read interval in the session")
     ss.add_argument("--watch-s", type=float, default=1.0, help="stall catcher interval on the SAU in phase 2 and the long run (0 = off)")
-    ss.add_argument("--zip-hour", type=int, default=7, help="UTC hour of the daily report and bundle in the long run")
+    ss.add_argument("--zip-hour", type=int, default=2, help="UTC hour of the daily report and bundle in the long run")
     ss.add_argument("--no-long", action="store_true", help="stop after the session instead of continuing with the long run")
     ss.add_argument("--bundles", help="folder for the zips (default: bundles/ next to data/)")
     ss.set_defaults(fn=cmd_session)

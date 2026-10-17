@@ -58,9 +58,13 @@ changes. The sister repository `qs-ai-hybird` is not to be touched.
   register set at +1 or one definition is off by one. **Open, measured by the trace, not to be discussed
   outside until measured.** The SAU allows five Modbus TCP links in all.
 - Comm fails: 133 "PV Logger group 1/2 Comm Fail" warnings in the history 29 Sep - 14 Oct, up to 33 a day
-  (9 Oct); on 14 Oct 20 between 08:52 and 09:58 in 5 bursts, mostly both sessions within seconds. The
-  previous integrator says the SAU fails to respond for 6-9 s and proposes the root-cause route (pause
-  before request, longer timeout). We agree the root cause comes first.
+  (9 Oct); on 14 Oct 20 between 08:52 and 09:58 in 5 bursts, mostly both sessions within seconds. Tabulated:
+  29 episodes (gap > 2 min); inside a burst a session's fails repeat every 33 s (median, min 7 s), which is a
+  cycle, not unrelated stalls; at the first fail of 23 of 29 episodes the request is still > 0 (the bit rises
+  before the request collapses); `pv_max_kw` (group 2's Max Available) is already invalid at 99 of 133 fail
+  instants; 4 of 133 fell on the grid; one-session fails exist (5 Oct, long group-2-only runs). The previous
+  integrator's "the SAU fails to respond for 6-9 s" is timeout-times-retries arithmetic, not a measurement;
+  the one measured stall was 2.5 s and the flag rose at about 2.6 s.
 - Climb-back after the PV goes to zero: about 300 kW/min, measured on 14 Oct after two PV breaker closes
   (0 -> 685 kW in about 2.5 min). After a comm-fail zero it may be faster; the per-fail loss is between a dip
   and about five minutes and is **not measured** yet.
@@ -146,22 +150,41 @@ Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this
 
 ### What the files from the chat show (read 17 Oct; analysis tool `tools/pcap_modbus.py`)
 
-- **The 8 Sep capture (105 s at the SAU, 09:08:08-09:09:52 plant time) is the mechanism on film.** The master's
-  group 1 (one TCP session) does every 1 s: read 1000 x6, write FC6 1007 = 0, write FC16 2100 x2 (AP Set,
-  0.1 kW), write FC16 2102 x2 (RP Set = 0), write coil 4002 ON. Group 2 (second session) every 2 s: seven reads
-  (1000 x99, 1017, 1019, 1021, 1187, 1189, 1195) and **no writes at all** in 105 s, so the 2100/2101 overlap
-  did not show; downgrade it to "verify on a longer trace". **Every FC6 write to 1007 is refused with
-  exception 06 (104 of 104, in 1 ms)**: the master never sets that register and lives with one error reply per
-  cycle; the SAU reads 1007 = 1. At 09:08:30.05 the SAU answered nobody for 2.5 s (both sessions and the
-  Sineng engineer's own Modbus Poll on ETH1 waited 2.5-2.7 s; TCP ACKs came at once, the application was
-  silent) while it **prepared a 5 MB log export** that then streamed 09:08:32-33. The reply arrived under the
-  3,000 ms timeout and yet the master's request fell 2,583.6 -> 1,233.6 -> **0.0 kW at 09:08:34** (the 1,500
-  kW/s down-ramp), the PV fell 2,484 -> 153 kW in 14 s, then the request climbed from 0 at 25 kW/s capped at
-  actual + 100 kW (about 12 kW/s net). So a stall shorter than the timeout zeroes the solar: either the ECU
-  fail bit fires below 3 s or the invalid-value path (negative request) does. **Raising the timeout alone would
-  not have saved this event; the hold (v3) keyed on the same PV comm fail signal would have.** Which path it
-  was is exactly kill criterion 1's measurement. The SAU's ETH1 ARPs for 192.168.1.50 every 1.3 s (configured,
-  absent host). Another device, 192.168.0.129, ARPs the ComAp IPs (probably the router's ping monitor).
+- **The 8 Sep capture (105 s, 09:08:08-09:09:52 plant time; a capture on the Sineng engineer's laptop on
+  ETH1's subnet with the master's traffic mirrored into it) shows one stall and, more important, how the master
+  reacts to it.** The master's group 1 (one TCP session) does every 1 s: read 1000 x6, write FC6 1007 = 0,
+  write FC16 2100 x2 (AP Set, 0.1 kW), write FC16 2102 x2 (RP Set = 0), write coil 4002 ON. Group 2 (second
+  session) every 2 s: seven reads (1000 x99, 1017, 1019, 1021, 1187, 1189, 1195) and **no writes at all** in
+  105 s: the 2100/2101 overlap is not a live issue (the ECU 3 write items are most likely not wired).
+  **Every FC6 write to 1007 is refused with exception 06 (104 of 104, in 1 ms)**; it raises no fail by itself.
+  The stall: at 09:08:30.05 the SAU's application went silent for 2.5 s (its kernel ACKed within 34 ms; the
+  HTTP server and the engineer's own Modbus Poll on ETH1 waited too) while it **prepared a 5 MB log export**
+  (GET .../downloadRunTimeUrl at 29.25) that then streamed 32-33 s. Outside that event the SAU answered 1,278
+  transactions, median 1.2 ms, p99 13 ms. Verified frame by frame (`tools/pcap_modbus.py`, scratch dump):
+  1. **The master did not wait 3,000 ms.** At 31.970 / 31.973, 1.92 s after the unanswered requests, both
+     sessions sent their next item at the same instant with the old request still open: one scheduler event in
+     the master, not two timers. Whatever "Response timeout 3,000 ms" governs, it did not govern this.
+  2. **The master pairs replies by arrival order, not by transaction id.** The late reply to tid 634 arrived at
+     32.564; 6 ms later the master sent tid 636 although tid 635's reply only came at 32.575. From then on each
+     reply was consumed as the answer to the following request (an exception frame as the answer to the AP read,
+     a read frame as the answer to a write, the 99-register block as the answer to a 2-register read) until an
+     unsolicited reply arrived while the master was idle (32.732). This is why history rows show PV = 0.0 at the
+     instant of a fail with a request of 800-1,400 kW: the AP read was "answered" by a stale exception frame.
+  3. **The zero was declared when the stall ended, not when a timeout ran out.** Setpoint 2,583.6 at 32.570,
+     1,233.6 at 33.571, 0.0 at 34.573 (the 1,500 kW/s down-ramp): the ramp's input went to 0 at about 32.67,
+     100 ms after the mispaired frames, 2.6 s after the abandoned request. The flag cleared about 2 s later. For
+     a stall of this kind the zero always reaches the SAU, because the link is back when the flag rises; the PV
+     fell 2,484 -> 153 kW in 14 s and climbed back at about 12 kW/s (ramp 25 kW/s capped at actual + 100 kW).
+  Consequences: "raise the timeout 3 -> 5 s" rests on an untested assumption about what the setting does and
+  would not have helped here; **the hold (v3) with any N above about 3 s rides through this event completely**;
+  the one-session idea (no lockstep cross-trigger, fewer transactions, one link less on the SAU) is the only
+  root-cause setting with a mechanism behind it; deleting the refused 1007 write shortens the cycle and removes
+  the frame that gets mispaired first. The exact rule (what the master abandons at ~1.9 s, how an exception
+  reply counts, how many bad transactions raise the bit) must be read from the ECU module help in InteliConfig
+  on the archive copy, offline, before anything is proposed. Also in the capture: the SAU's ETH1 ARPs for
+  192.168.1.50 every 1.3 s (a configured, absent host); the laptop on ETH1's subnet received 192.168.0.x
+  broadcasts, so the two subnets shared one switch domain that day; 192.168.0.129 is an Intel NIC sending
+  Windows-style LLDP and ARPing the genset controllers: an unknown PC, not the router (inventory gap).
 - **`SauGuard.txt` shows no watchdog restart of the application.** It holds 10 cold starts of the guard
   (box reboots: 18 Jun, 22 Jul, 30 Jul x2, 13 Aug x2, 19 Aug x2, 31 Aug, 1 Sep) and three SIGTERM stop/start
   pairs (22 Jun 14:02; **6 Sep 09:36:28 and 09:49:33**). The two on 6 Sep match, to the minute, the Sineng
@@ -194,12 +217,15 @@ Read on 17 Oct. Roles only, no numbers or credentials from the chat go into this
   plant is today in Remote scheduling (the master writes). This is a second, local layer worth studying for
   the one-genset stage; it is not a quick fix and needs meters the SAU can read.
 - SAU diagnostics page (Device Monitor > Communication diagnostic > Network Connections): the two master
-  sessions at :502 showed **send queues of 21 and 207 bytes** = exactly one group-1 reply (21 B) and one group-2
-  99-register reply (207 B) waiting unacknowledged; the 22,487 seen on 10 Oct is about a hundred replies
-  queued. A full send queue means the SAU produced the answer and the master's ACK did not come back: loss in
-  the SAU -> master direction (SAU port, duplex, media converters, fibre, switch) is a second mechanism beside
-  the application stall. The page's "Network interface" tab (errors, dropped, collisions, duplex) and the
-  router/switch port counters decide it. Listening ports seen: 21, 22, 111, 502, 1888, 2404 (IEC 104), 8080.
+  sessions at :502 showed send queues of 21 and 207 bytes = exactly one group-1 reply (21 B) and one group-2
+  99-register reply (207 B). **That is normal**: the master acknowledges on a 500 ms clock (ACKs at x.227 /
+  x.727 in the capture, median 96 ms after the data), so one reply sits in the queue about a quarter of the
+  time. Only a *growing* queue means loss; the 22,487 of 10 Oct was on a 127.0.0.1 socket (one SAU process not
+  reading another's output: an internal stall, not the network). Loss in the SAU -> master direction stays a
+  hypothesis until the "Network interface" counters (errors, dropped, collisions, duplex) and the router/switch
+  port counters say so. Two failure modes are in the evidence and must not be mixed: the application silent
+  with the kernel alive (8 Sep, 5-6 Sep) and the box not answering pings (31 Aug, 7 Sep 19:33, 10 Oct), which
+  is kernel or path. Listening ports seen: 21, 22, 111, 502, 1888, 2404 (IEC 104), 8080.
 
 ## 4. What the model says (tools/plant_model.py; *model*, calibrated only on 14 Oct)
 

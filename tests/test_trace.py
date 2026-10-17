@@ -154,7 +154,7 @@ def test_watch_pings_and_reads_one_register_on_the_same_connection(plant, tmp_pa
     reads = [r for r in rows if r["kind"] == "read"]
     pings = [r for r in rows if r["kind"] == "ping"]
     assert len(reads) >= 4 and all(r["ok"] == "1" for r in reads) and all(float(r["ms"]) < 1000 for r in reads)
-    assert reads[0]["detail"] == "0"                     # the first mapped register of the SAU profile (1000, value 0)
+    assert reads[0]["detail"] == "0;11000"               # the setpoint words 2100-2101 as the fake SAU holds them
     assert (len(pings) >= 4 and all(r["ok"] == "1" for r in pings)) or (not pings and tr._ping_off)   # no ping in a bare container
     assert tr.watch_rows == len(rows) and tr.stalls == 0
     # the master's rows kept their cadence while the SAU was watched
@@ -170,3 +170,20 @@ def test_watch_marks_a_silent_sau(tmp_path):
     rows = [r for r in csv.DictReader(open(glob.glob(str(tmp_path / "watch_*.csv"))[0])) if r["kind"] == "read"]
     assert rows and all(r["ok"] == "0" for r in rows) and tr.stalls == len(rows)
     assert all(r["detail"].startswith(("timeout", "error")) for r in rows)
+
+
+def test_ping_parses_windows_output_as_bytes(monkeypatch):
+    """A Turkish Windows prints the reply in the OEM code page; only 'TTL=' is language independent."""
+    import subprocess as sp
+    from plantcollector import trace as tr
+    line = "Yanıt 192.168.0.128: bayt=32 süre<1ms TTL=64\r\n".encode("cp857")
+
+    class R:
+        stdout = line
+    monkeypatch.setattr(tr, "_icmp_windows", lambda host, t: None)
+    monkeypatch.setattr(sp, "run", lambda *a, **k: R())
+    ok, ms, detail = tr.ping("192.168.0.128")
+    assert ok == 1 and ms == 1.0 and detail == ""
+    R.stdout = "Hedef ana bilgisayara ulaşılamıyor.\r\n".encode("cp857")
+    ok, ms, detail = tr.ping("192.168.0.128")
+    assert ok == 0 and detail == "no reply"

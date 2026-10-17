@@ -47,7 +47,10 @@ def shared_client(host: str, port: int, timeout: float) -> ModbusTcpClient:
     with _POOL_LOCK:
         key = (host, port)
         if key not in _POOL:
-            _POOL[key] = ModbusTcpClient(host=host, port=port, timeout=timeout)
+            # retries=0: one request, one answer or one timeout. The library's default re-sends a timed-out
+            # request three times, which quadruples our load on a stalled gateway at the worst moment and
+            # hides the stall's real length.
+            _POOL[key] = ModbusTcpClient(host=host, port=port, timeout=timeout, retries=0)
             _CONN_LOCKS[key] = threading.RLock()
         return _POOL[key]
 
@@ -97,6 +100,7 @@ class ModbusTcpAdapter(Adapter):
         self.last_ok_blocks = 0                 # statistics of the last read(), for the trace
         self.last_failed_blocks = 0
         self.last_ms = 0.0
+        self.last_wait_ms = 0.0
 
     @staticmethod
     def _plan_blocks(points: list[PointDefinition]) -> list[tuple[str, int, int, list[PointDefinition]]]:
@@ -125,38 +129,56 @@ class ModbusTcpAdapter(Adapter):
         return self._client.connect()
 
     def close(self) -> None:
-        self._client.close()
+        with self._lock:
+            self._client.close()
 
     def read(self) -> dict[str, Reading]:
+        t0 = time.perf_counter()
         with self._lock:                    # one request at a time on this connection; other hosts are not held up
+            self.last_wait_ms = round((time.perf_counter() - t0) * 1000, 1)   # time spent behind another request
             return self._read()
 
-    def ping_read(self) -> tuple[str, float, int | None]:
-        """One read of one register (the first mapped one) on the shared connection: the stall catcher.
-        Returns (status, ms, value): status is 'ok', 'exception <n>', 'timeout' or 'error <text>'."""
+    def watch_default(self) -> tuple[str, int, int] | None:
+        """Where the stall catcher reads by default: the setpoint words at 2100-2101 when the profile maps them
+        (shows the second the master's value lands), otherwise the first mapped register."""
         if not self._blocks:
-            return "error no register mapping", 0.0, None
+            return None
+        for fn, start, count, _pts in self._blocks:
+            if fn == "holding" and start <= 2100 < start + count:
+                return "holding", 2100, 2
         fn, start, _count, _pts = self._blocks[0]
+        return fn, start, 1
+
+    def ping_read(self, target: tuple[str, int, int] | None = None) -> tuple[str, float, list[int] | None, datetime]:
+        """One small read on the shared connection: the stall catcher. target = (fn, address, count).
+        Returns (status, ms, values, time of the request): status is 'ok', 'exception <n>', 'timeout' or
+        'error <text>'. The request time is taken inside the connection lock, so a row never carries the time
+        the thread started waiting for the lock."""
+        target = target or self.watch_default()
+        if target is None:
+            return "error no register mapping", 0.0, None, datetime.now(timezone.utc)
+        fn, address, count = target
         call = {"input": self._client.read_input_registers, "coil": self._client.read_coils,
                 "discrete": self._client.read_discrete_inputs}.get(fn, self._client.read_holding_registers)
         with self._lock:
+            t_req = datetime.now(timezone.utc)
             t0 = time.perf_counter()
             try:
                 if not self._client.connected:
                     self._client.connect()
-                rr = call(address=start + self.address_offset, count=1, device_id=self.unit_id)
+                rr = call(address=address + self.address_offset, count=count, device_id=self.unit_id)
                 ms = round((time.perf_counter() - t0) * 1000, 1)
                 if rr is None:
-                    return "timeout", ms, None
+                    return "timeout", ms, None, t_req
                 if rr.isError():
                     code = getattr(rr, "exception_code", None)
-                    return f"exception {code if code is not None else rr}", ms, None
-                regs = rr.bits if fn in ("coil", "discrete") else rr.registers
-                return "ok", ms, int(regs[0])
+                    return f"exception {code if code is not None else rr}", ms, None, t_req
+                regs = rr.bits[:count] if fn in ("coil", "discrete") else rr.registers[:count]
+                return "ok", ms, [int(v) for v in regs], t_req
             except Exception as exc:
                 ms = round((time.perf_counter() - t0) * 1000, 1)
                 text = str(exc).lower()
-                return ("timeout" if "timeout" in text or "timed out" in text or "no response" in text else f"error {exc}"), ms, None
+                return ("timeout" if "timeout" in text or "timed out" in text or "no response" in text else f"error {exc}"), ms, None, t_req
 
     def _read(self) -> dict[str, Reading]:
         t0 = time.perf_counter()
