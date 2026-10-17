@@ -258,6 +258,9 @@ def summarize(trace_dir: str, date: str) -> str:
         if fails:
             verdicts = collections.Counter()
             lines = []
+            all_gaps = [(_ts(b["ts"]) - _ts(a["ts"])).total_seconds() for a, b in zip(reads, reads[1:])]
+            normal_gap = statistics.median(all_gaps) if all_gaps else 1.0
+            sau_rows = _read(os.path.join(trace_dir, f"pv-array_{date}.csv"))
             for f in fails:
                 lo = f["start"] - timedelta(seconds=12)
                 hi = f["end"] or f["start"] + timedelta(seconds=30)
@@ -270,12 +273,19 @@ def summarize(trace_dir: str, date: str) -> str:
                     excs = [r for r in win_r if r.get("ok") != "1" and str(r.get("detail", "")).startswith("exception")]
                     worst = max((_num(r["ms"]) or 0) for r in win_r)
                     gaps = [(_ts(b["ts"]) - _ts(a["ts"])).total_seconds() for a, b in zip(win_r, win_r[1:])]
-                    queued = max(gaps) if gaps else 0                      # a hole in our 1-s reads = our request was stuck behind a stalled one
+                    hole = max(gaps) if gaps else 0                         # a hole in our reads = our request stuck behind a stalled one
+                    queued = hole - normal_gap if hole >= normal_gap + 1.5 else 0
+                    for r in sau_rows:                                      # our 5-s poll may be the request that met the stall
+                        if lo <= _ts(r["ts"]) <= hi:
+                            if r.get("ok_blocks") == "0":
+                                timeouts.append(r)
+                            elif (_num(r.get("ms")) or 0) >= 2000:
+                                worst = max(worst, _num(r["ms"]))
                     p_bad = sum(1 for r in win_p if r.get("ok") != "1")
                     ping_txt = "no pings" if not win_p else ("ping failed too" if p_bad else "ping ok")
                     if timeouts and p_bad:
                         v = f"SAU unreachable ({ping_txt}): the box or the network to it"
-                    elif timeouts or worst >= 2000 or queued >= 3:
+                    elif timeouts or worst >= 2000 or queued >= 2:
                         v = f"SAU alive ({ping_txt}) but its application answered nobody for {max(worst, queued * 1000) / 1000:.1f} s: a stall inside the SAU"
                     elif excs:
                         slow_exc = max((_num(r["ms"]) or 0) for r in excs)

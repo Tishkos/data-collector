@@ -79,10 +79,11 @@ def test_frozen_sau_is_caught_and_called_a_stall_inside_the_sau(tmp_path):
     gaps = [(report._ts(b["ts"]) - report._ts(a["ts"])).total_seconds() for a, b in zip(rows, rows[1:])]
     assert max(gaps) < 1.3                                    # the master is never held up by the SAU
     reads = [r for r in csv.DictReader(open(glob.glob(str(tmp_path / "watch_*.csv"))[0])) if r["kind"] == "read"]
-    slow = [r for r in reads if float(r["ms"]) >= 2000]
-    assert len(slow) == 1 and 2300 <= float(slow[0]["ms"]) <= 2700
+    sau_rows = list(csv.DictReader(open(glob.glob(str(tmp_path / "pv-array_*.csv"))[0])))
+    slow = [float(r["ms"]) for r in reads + sau_rows if float(r["ms"]) >= 2000]   # whichever request met the stall
+    assert len(slow) == 1 and 2300 <= slow[0] <= 2700
     assert sau.requests / 17 < 2.0                            # our load on the SAU stays small
     date = os.path.basename(glob.glob(str(tmp_path / "neo-01_*.csv"))[0])[7:17]
     text = report.summarize(str(tmp_path), date)
-    assert "2 fails" in text and "answered nobody for 2.5 s: a stall inside the SAU" in text
+    assert "2 fails" in text and "answered nobody for 2.5 s: a stall inside the SAU" in text, text
     assert "comm fail -> zero setpoint" in text
