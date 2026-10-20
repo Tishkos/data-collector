@@ -18,7 +18,7 @@ CFG = os.path.join(ROOT, "config", "site.yaml")
 
 @pytest.fixture(scope="module")
 def collector(tmp_path_factory):
-    return Collector(CFG, str(tmp_path_factory.mktemp("data")), seed_hours=30, fresh=True)
+    return Collector(CFG, str(tmp_path_factory.mktemp("data")), seed_hours=50, fresh=True)   # 50 h: yesterday (UTC) is always whole, sun included
 
 
 @pytest.fixture(scope="module")
