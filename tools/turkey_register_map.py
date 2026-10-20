@@ -6,7 +6,7 @@ Writes the Modbus register map for the DT Turkey / CCI platform:
   docs/turkey/Solar_Inverter_Tag_List_Rev.1.2.xlsx
   docs/turkey/Solar_Modbus_Register_Map_Rev.1.0.xlsx   the map as a workbook (Connection + Tags)
 
-Run from the repository root:  python tools/turkey_register_map.py [--host <plant-pc-vpn-ip>]
+Run from the repository root:  python tools/turkey_register_map.py [--host <plant-pc-ip>]
 The addresses come from plantcollector.publish.build_map, so they are the same ones the
 running server uses. Run it again whenever profiles/tag_catalog.yaml changes.
 """
@@ -42,7 +42,7 @@ def write_map_workbook(path: str, tags: list[dict], host: str, port: int, unit: 
     rows = [
         ("Erbil solar plant - Modbus TCP register map for the CCI monitoring platform", None, None), (None, None, None),
         ("Server", "Plant data collector on the plant PC (read-only Modbus TCP server)", None),
-        ("IP address", host if not host.startswith("<") else "to be provided once the connection method (VPN) is agreed", None),
+        ("IP address", host if not host.startswith("<") else "to be provided with the test date (an address on the plant network, reserved with the plant team)", None),
         ("Port", str(port), None), ("Unit ID", str(unit), None),
         ("Function codes", "03 Read Holding Registers (04 returns the same registers). Writes are refused.", None),
         ("Addressing", "0-based protocol addresses (address 100 = holding register 40101 in 1-based notation)", None),
@@ -173,7 +173,7 @@ def fill_workbook(path: str, by_name: dict[str, dict], host: str, port: int, uni
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="<plant-pc-vpn-ip>")
+    ap.add_argument("--host", default="<plant-pc-ip>")
     ap.add_argument("--port", type=int, default=502)
     ap.add_argument("--unit", type=int, default=1)
     ap.add_argument("--config", default="config/site.plant.yaml", help="plant config, for the per-tag readiness column")

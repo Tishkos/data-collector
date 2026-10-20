@@ -36,19 +36,18 @@ devices:
     connection: {host: 192.168.0.112, port: 502, unit_id: 1, timeout: 3}
 
   # --- Sineng inverters through the SAU-100 -------------------------------------------------------
-  # Unit ids 1-10 = the RS485 addresses (winding 1 INV#1-5 = 1-5, winding 2 INV#1-5 = 6-10) -
-  # the SAU answers unit 1 but the register map (its Modbus TCP point table) is still unknown, so the
-  # profile has no addresses yet and these devices show "registers pending" until it arrives.
-  - {id: inv-01, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 1,  timeout: 5}}
-  - {id: inv-02, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 2,  timeout: 5}}
-  - {id: inv-03, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 3,  timeout: 5}}
-  - {id: inv-04, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 4,  timeout: 5}}
-  - {id: inv-05, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 5,  timeout: 5}}
-  - {id: inv-06, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 6,  timeout: 5}}
-  - {id: inv-07, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 7,  timeout: 5}}
-  - {id: inv-08, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 8,  timeout: 5}}
-  - {id: inv-09, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 9,  timeout: 5}}
-  - {id: inv-10, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 10, timeout: 5}}
+  # Unit ids = the SAU's TCP device ids from Sineng's TCP protocol document (sheet Explain):
+  # winding 1 INV#1-5 = 3-7, winding 2 INV#1-5 = 8-12. Registers in profiles/inverter_sineng.yaml.
+  - {id: inv-01, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 3,  timeout: 5}}
+  - {id: inv-02, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 4,  timeout: 5}}
+  - {id: inv-03, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 5,  timeout: 5}}
+  - {id: inv-04, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 6,  timeout: 5}}
+  - {id: inv-05, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 7,  timeout: 5}}
+  - {id: inv-06, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 8,  timeout: 5}}
+  - {id: inv-07, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 9,  timeout: 5}}
+  - {id: inv-08, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 10,  timeout: 5}}
+  - {id: inv-09, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 11,  timeout: 5}}
+  - {id: inv-10, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 192.168.0.128, port: 502, unit_id: 12, timeout: 5}}
 
   # --- the whole PV array as the SAU's virtual device (unit 245) ------------------------------------
   # Registers taken from the InteliNeo's own Modbus-master definition (archive of 2026-10-14): PV power,

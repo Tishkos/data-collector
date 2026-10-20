@@ -167,7 +167,7 @@ def test_coils_and_pv_array_profile(neo_server):
     assert out["power_kw"].quality == Quality.GOOD
     pv = reg.devices["pv-array"].model_copy(update={"connection": {"host": "127.0.0.1", "port": NEO_PORT, "unit_id": 1, "timeout": 1}})
     ad = ModbusTcpAdapter(pv)
-    assert [(s, n) for _, s, n, _ in ad._blocks] == [(1000, 99), (1187, 10), (2100, 7)]   # the third block reads back the setpoint words
+    assert [(s, n) for _, s, n, _ in ad._blocks] == [(1000, 98), (1180, 16), (2100, 7)]   # the third block reads back the setpoint words
     out = ad.read()
     assert all(r.quality == Quality.GOOD for r in out.values())
     assert out["max_power_kw"].value == 0.0 and out["comm_error"].value is False
@@ -208,3 +208,25 @@ def test_a_refused_block_is_read_as_contiguous_runs():
         ad.close()
     finally:
         loop.call_soon_threadsafe(lambda: asyncio.ensure_future(holder["srv"].shutdown()))
+
+
+def test_inverter_profile_follows_the_sineng_document():
+    """Spot checks against Sineng's TCP protocol document (sheet INV) and the unit ids of sheet Explain."""
+    from plantcollector.registry import load_registry
+    reg = load_registry("config/site.plant.yaml")
+    assert [reg.devices[f"inv-{n:02d}"].connection["unit_id"] for n in range(1, 11)] == list(range(3, 13))
+    pts = {p.id: p.raw for p in reg.devices["inv-01"].points}
+    assert pts["ac_power_kw"] == {"address": 1002, "kind": "uint16", "scale": 0.01}
+    assert pts["frequency_hz"]["address"] == 1008 and pts["frequency_hz"]["kind"] == "uint32"
+    assert pts["energy_today_kwh"]["address"] == 1100 and pts["energy_total_kwh"] == {"address": 1101, "kind": "uint32"}
+    assert pts["string_current_1_a"]["address"] == 1013 and pts["string_current_17_a"]["address"] == 1029
+    assert pts["string_voltage_1_v"]["address"] == 1046 and pts["string_voltage_12_v"]["address"] == 1057
+    assert pts["grid_connected"] == {"address": 1990, "kind": "uint16", "bit": 0}
+    # the words read on site on 2026-10-20 decode to plausible values at the document's PV array addresses
+    pv = {p.id: p.raw for p in reg.devices["pv-array"].points}
+    words = {1008: 0, 1009: 41694, 1010: 96, 1011: 40780, 1016: 0, 1017: 10, 1062: 0, 1063: 35200}
+    def at(pid):
+        r = pv[pid]
+        return _decode([words[r["address"]], words[r["address"] + 1]], r["kind"], float(r.get("scale", 1)), "big")
+    assert at("energy_today_kwh") == pytest.approx(4169.4) and at("energy_total_kwh") == 6332236
+    assert at("inverters_total") == 10 and at("max_power_kw") == pytest.approx(3520.0)

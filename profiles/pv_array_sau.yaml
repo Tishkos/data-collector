@@ -7,17 +7,20 @@
 # The Neo also WRITES to this unit (AP Set 2100/2101, RP Set 2102/2103, PF Set 2105, percentage sets
 # 2018/2020, mode 1007/1008, coil 4002/4003 inverter ON/OFF) - the collector never touches those.
 #
-# Scaling to verify on the first CHECK against the SAU dashboard: the Neo shows 635,283.7 kWh for
-# "Daily yield" (register 1009, int32 x0.1) and 3,010 for "Total yield" (1011) - not plausible for a
-# 3.2 MW plant, so one of them is misaligned or in other units. The inverters' own counters
-# (SAU export: ~600 kWh/day each) are the reference.
+# Addresses checked against Sineng's TCP protocol document for this plant (sheet SAU, received
+# 2026-10-20): AP/RP/PF at 1000/1002/1004 as the Neo has them; every other value sits one register
+# lower than in the Neo definition (Daily Generation 1008, Total Generation 1010, inverter numbers
+# 1016/1018/1020, ...). The CHECK of 2026-10-20 agrees: read at the document's addresses the words give
+# 10 inverters, 3,520 kW maximum active power and a plausible daily / total generation.
+# The document gives TCP device id 251 for the array; the SAU on site answers it at 245 (the Neo's id),
+# which is what the CHECK used and what matches the Neo's PV power.
 
 kind: pv
 vendor: Sineng
 model: "SAU-100 virtual array (10 x SP-320K-H, 3.2 MW)"
-profile_revision: 1
-profile_status: mapped (from the Neo definition)
-source_document: "InteliNeo archive 2026-10-14, Modbus master datapoints 'PV Logger group 1/2'"
+profile_revision: 2
+profile_status: mapped (Sineng TCP protocol document)
+source_document: "Sineng TCP protocol document (sheet SAU); InteliNeo archive 2026-10-14 for the read-back words"
 
 limits: {rated_kw: 3200}
 
@@ -25,21 +28,23 @@ points:
   - {id: ac_power_kw,          unit: kW,   raw: {address: 1000, kind: int32,  scale: 0.1},   description: "AP (Active Power) of the array"}
   - {id: reactive_kvar,        unit: kVAr, raw: {address: 1002, kind: int32,  scale: 0.1},   description: "RP (Reactive Power)"}
   - {id: power_factor,         unit: "",   raw: {address: 1004, kind: int32,  scale: 0.001}, description: "PF"}
-  - {id: energy_today_kwh,     unit: kWh,  raw: {address: 1009, kind: int32,  scale: 0.1},   description: "Daily yield - VERIFY scaling/alignment"}
-  - {id: energy_total_kwh,     unit: kWh,  raw: {address: 1011, kind: int32},               description: "Total yield - VERIFY units"}
-  - {id: inverters_total,      unit: "",   raw: {address: 1017, kind: int32}}
-  - {id: inverters_online,     unit: "",   raw: {address: 1019, kind: int32}}
-  - {id: inverters_working,    unit: "",   raw: {address: 1021, kind: int32}}
-  - {id: max_power_kw,         unit: kW,   raw: {address: 1063, kind: uint32, scale: 0.1},   description: "Maximum Active Power (10 x 352 kW = 3,520)"}
-  - {id: max_reactive_kvar,    unit: kVAr, raw: {address: 1065, kind: uint32, scale: 0.1}}
-  - {id: min_reactive_kvar,    unit: kVAr, raw: {address: 1067, kind: int32,  scale: 0.1}}
-  - {id: available_kw,         unit: kW,   raw: {address: 1093, kind: uint32, scale: 0.1},   description: "Maximum Active Power Available = what the sun allows now (before curtailment)"}
-  - {id: available_reactive_kvar, unit: kVAr, raw: {address: 1095, kind: uint32, scale: 0.1}}
-  - {id: min_reactive_available_kvar, unit: kVAr, raw: {address: 1097, kind: int32, scale: 0.1}}
-  - {id: inverters_stopped,    unit: "",   raw: {address: 1187, kind: int32}}
-  - {id: inverters_standby,    unit: "",   raw: {address: 1189, kind: int32}}
-  - {id: inverters_faulty,     unit: "",   raw: {address: 1193, kind: int32}}
-  - {id: inverters_alarm,      unit: "",   raw: {address: 1195, kind: int32}}
+  - {id: energy_today_kwh,     unit: kWh,  raw: {address: 1008, kind: int32,  scale: 0.1},   description: "Daily Generation"}
+  - {id: energy_total_kwh,     unit: kWh,  raw: {address: 1010, kind: int32},               description: "Total Generation"}
+  - {id: inverters_total,      unit: "",   raw: {address: 1016, kind: int32}}
+  - {id: inverters_online,     unit: "",   raw: {address: 1018, kind: int32}}
+  - {id: inverters_working,    unit: "",   raw: {address: 1020, kind: int32}}
+  - {id: max_power_kw,         unit: kW,   raw: {address: 1062, kind: uint32, scale: 0.1},   description: "Maximum Active Power (10 x 352 kW = 3,520)"}
+  - {id: max_reactive_kvar,    unit: kVAr, raw: {address: 1064, kind: uint32, scale: 0.1}}
+  - {id: min_reactive_kvar,    unit: kVAr, raw: {address: 1066, kind: int32,  scale: 0.1}}
+  - {id: available_kw,         unit: kW,   raw: {address: 1092, kind: uint32, scale: 0.1},   description: "Maximum Active Power Available = what the sun allows now (before curtailment)"}
+  - {id: available_reactive_kvar, unit: kVAr, raw: {address: 1094, kind: uint32, scale: 0.1}}
+  - {id: min_reactive_available_kvar, unit: kVAr, raw: {address: 1096, kind: int32, scale: 0.1}}
+  - {id: inverters_stopped,    unit: "",   raw: {address: 1186, kind: uint32}}
+  - {id: inverters_standby,    unit: "",   raw: {address: 1188, kind: uint32}}
+  - {id: inverters_faulty,     unit: "",   raw: {address: 1192, kind: uint32}}
+  - {id: inverters_alarm,      unit: "",   raw: {address: 1194, kind: uint32}}
+  - {id: rated_capacity_kva,   unit: kVA,  raw: {address: 1030, kind: int32,  scale: 0.1},   description: "Rated Capacity"}
+  - {id: frequency_hz,         unit: Hz,   raw: {address: 1180, kind: int32,  scale: 0.1},   description: "Frequency"}
   # Read-back of the registers the Neo writes (FC03 on the same addresses; nothing is written). Each
   # register is read as its own 16-bit word so the layout shows as it is: the Neo's group 1 session writes
   # "AP Set" as a 32-bit value at 2100-2101 every second, its group 2 session writes the same datapoint at
