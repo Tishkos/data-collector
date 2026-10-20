@@ -91,7 +91,11 @@ What it does, logged to `data\session_<date>.log`:
 - **the SAU is never read and never connected to** by this program (the probe skips it, there is no check);
 - when Wireshark is installed on the PC: Wireshark's own `dumpcap` writes the SAU's traffic (filter
   `host 192.168.0.128`) into a ring in `data\capture\`, one file per hour, two days kept, on the adapter that leads
-  to the SAU (found by itself; `--capture-if "Ethernet 3"` to force one). Around every comm fail the files are
+  to the SAU (found by itself; `--capture-if "Ethernet 3"` to force one). **Before it starts, a self-test**: 30 s of
+  capture while the SAU is pinged five times; the adapter is used only if the SAU's packets are in it (otherwise the
+  next adapter is tried), the log says "capture test PASSED on ..." and whether the master's traffic (the mirror) was
+  seen, and the test capture is kept as `data\evidence\selftest\selftest_<time>_<adapter>.pcapng` (it goes with the
+  first zip). Around every comm fail the files are
   copied to `data\evidence\<date>\` so the ring never overwrites them. Capturing only listens;
 - after the first hour, then every day at 05:00 plant time: `data\trace\report_<date>.md` and a zip in `bundles\`
   with the files, the report and the kept capture files. The report has, per comm fail: whether the SAU answered

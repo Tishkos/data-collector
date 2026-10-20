@@ -106,6 +106,57 @@ def pick_interface(dumpcap: str, host: str, wanted: str | None = None) -> tuple[
     return None, f"adapter {alias} ({ip}) is not in dumpcap's list (is Npcap installed with Wireshark?)"
 
 
+def list_interfaces(dumpcap: str) -> list[tuple[str, str]]:
+    """(number, label) of every interface dumpcap offers, loopback and event tracing left out."""
+    out = []
+    for line in _run([dumpcap, "-D"]).splitlines():
+        m = re.match(r"\s*(\d+)\.\s+(\S+)(?:\s+\((.*)\))?", line)
+        if m:
+            label = m.group(3) or m.group(2)
+            if not re.search(r"loopback|etw|event tracing|bluetooth|^lo$|^any$", label, re.I):
+                out.append((m.group(1), label))
+    return out
+
+
+def self_test(dumpcap: str, iface: str, host: str, master: str | None, work_dir: str, pinger,
+              seconds: int = 30, tshark: str | None = None) -> dict:
+    """A short capture on one interface while the host is pinged five times: does this card see the SAU?
+    The capture is kept as a Wireshark file (selftest_<time>_<adapter>.pcapng in work_dir) whatever the result.
+    Returns ok (5 packets or more with the host), packets, mirror (the master's Modbus requests to the host were
+    in it too: True / False / None when tshark is missing) and the file."""
+    os.makedirs(work_dir, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(work_dir, f"selftest_{stamp}_{re.sub(r'[^0-9A-Za-z]+', '_', str(iface)).strip('_')}.pcapng")
+    kw = {"creationflags": 0x08000000} if _WIN else {}
+    try:
+        proc = subprocess.Popen([dumpcap, "-i", str(iface), "-f", f"host {host}", "-a", f"duration:{int(seconds)}", "-w", path],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kw)
+    except OSError as exc:
+        return dict(ok=False, packets=0, mirror=None, path=path, detail=f"dumpcap did not start: {exc}")
+    import time as _t
+    _t.sleep(1.5)                                            # dumpcap needs a moment before it listens
+    for _ in range(5):
+        try:
+            pinger(host)
+        except Exception:
+            pass
+        _t.sleep(0.8)
+    try:
+        _, err = proc.communicate(timeout=seconds + 20)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        _, err = proc.communicate()
+    text = (err or b"").decode("utf-8", "replace")
+    m = re.search(r"Packets captured:\s*(\d+)", text)
+    packets = int(m.group(1)) if m else 0
+    mirror = None
+    if tshark and os.path.exists(path) and master:
+        rows = _tshark_rows(tshark, path, f"ip.src=={master} && ip.dst=={host} && tcp.dstport==502", ["frame.time_epoch"])
+        mirror = bool(rows)
+    detail = text.strip().splitlines()[-1] if text.strip() else ""
+    return dict(ok=packets >= 5, packets=packets, mirror=mirror, path=path, detail=detail)
+
+
 class Capture:
     """dumpcap in the background, writing a ring of files for one host. Restarted by the session if it dies."""
 

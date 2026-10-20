@@ -182,10 +182,10 @@ def test_dumpcap_command_is_a_ring_filtered_to_the_sau(tmp_path):
 class _Counter:
     """A TCP listener standing in for the SAU: counts every connection anyone opens to it."""
 
-    def __init__(self):
+    def __init__(self, host="127.0.0.1"):
         self.sock = socket.socket()
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("127.0.0.1", 0))
+        self.sock.bind((host, 0))
         self.sock.listen(8)
         self.port = self.sock.getsockname()[1]
         self.accepts = 0
@@ -239,3 +239,57 @@ probe:
     assert "From the capture" in text and "No capture files kept" in text
     watch = [n for n in names if n.startswith("trace/watch_")]
     assert watch and "pv-array,ping" in zipfile.ZipFile(zp).read(watch[0]).decode()
+
+
+DUMPCAP = cap.find_tool("dumpcap")
+
+
+def _can_capture():
+    if not DUMPCAP:
+        return False
+    out = cap._run([DUMPCAP, "-D"])
+    return "lo" in out
+
+
+@pytest.mark.skipif(not _can_capture(), reason="dumpcap cannot capture here")
+def test_session_tests_the_adapter_before_monitoring(tmp_path, monkeypatch):
+    srv = _Counter("127.0.0.2")                              # stands for the SAU; the 'ping' is a TCP connect
+
+    def pinger(host):
+        s = socket.create_connection((host, srv.port), timeout=1)
+        s.close()
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(f"""site: {{site_id: t, name: test, poll_interval_s: 3600}}
+devices:
+  - {{id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.1, port: {NEO_PORT}, unit_id: 1, timeout: 1}}}}
+  - {{id: pv-array, profile: pv_array_sau.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.2, port: 502, unit_id: 245, timeout: 1}}}}
+""")
+    s = Session(str(cfg), str(tmp_path / "data"), hours=0.001, long_run=False, mode="passive", capture_if="lo")
+    monkeypatch.setattr(s, "_pinger", pinger)
+    s.selftest_s = 8
+    s._start_capture()
+    try:
+        log = "\n".join(s.notes)
+        assert "capture test PASSED on Loopback" in log and "Mirror: not yet" in log and "capture: monitoring on" in log
+        assert s.cap is not None and s.cap.alive()
+        kept = os.listdir(tmp_path / "data" / "evidence" / "selftest")
+        assert len(kept) == 1 and kept[0].startswith("selftest_") and kept[0].endswith(".pcapng") and kept[0] in log
+    finally:
+        if s.cap:
+            s.cap.stop()
+
+
+@pytest.mark.skipif(not _can_capture(), reason="dumpcap cannot capture here")
+def test_session_refuses_an_adapter_that_does_not_see_the_sau(tmp_path, monkeypatch):
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(f"""site: {{site_id: t, name: test, poll_interval_s: 3600}}
+devices:
+  - {{id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.1, port: {NEO_PORT}, unit_id: 1, timeout: 1}}}}
+  - {{id: pv-array, profile: pv_array_sau.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.2, port: 502, unit_id: 245, timeout: 1}}}}
+""")
+    s = Session(str(cfg), str(tmp_path / "data"), hours=0.001, long_run=False, mode="passive", capture_if="lo")
+    monkeypatch.setattr(s, "_pinger", lambda host: None)   # nothing goes to the SAU: the test must fail
+    s.selftest_s = 6
+    s._start_capture()
+    log = "\n".join(s.notes)
+    assert "capture test FAILED" in log and s.cap is None

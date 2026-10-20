@@ -32,6 +32,10 @@ no load to it and can run for weeks:
     daily report reads them with tshark: per fail, whether the SAU's TCP acknowledged the master's requests and how
     late its Modbus answers came, or with which exception. With the SAU's switch port mirrored to the PC this is the
     proof; without a mirror the files hold only this PC's own traffic and the report says so,
+  - before the ring starts, a self-test: 30 s of capture while the SAU is pinged five times, on the adapter towards
+    the SAU first and then on the others, until one sees the SAU; the test capture is kept as a Wireshark file in
+    data/evidence/selftest/ and goes with the first bundle; the log says whether the master's traffic (the mirror)
+    was in it,
   - a report and a bundle after the first hour, then every day at --zip-hour; the probe skips the SAU, no check.
 """
 
@@ -81,6 +85,8 @@ class Session:
         self.cap: cap.Capture | None = None
         self.tshark = cap.find_tool("tshark")
         self._kept: dict[tuple, bool] = {}                  # (session, start) -> evidence complete
+        self.selftest_s = 30
+        self._selftest_files: list[str] = []                # the self-test captures, kept and sent with the first bundle
         self._last_cap_start = 0.0
         sau = self.registry.devices.get("pv-array")
         neo = self.registry.devices.get("neo-01")
@@ -225,6 +231,11 @@ class Session:
             for name, text in (extra_texts or {}).items():
                 z.writestr(name, text)
             budget = 300e6                                  # the evidence goes along while the zip stays mailable
+            for p in self._selftest_files:
+                if os.path.exists(p) and os.path.getsize(p) <= budget:
+                    z.write(p, f"evidence/selftest/{os.path.basename(p)}")
+                    budget -= os.path.getsize(p)
+            self._selftest_files = []                       # once, with the first bundle
             for p in ev_files:
                 if os.path.getsize(p) <= budget:
                     z.write(p, f"evidence/{os.path.basename(p)}")
@@ -291,15 +302,40 @@ class Session:
             return
         cap.stop_stale(self.ring_dir, log=self.log)
         iface, why = cap.pick_interface(dumpcap, self.sau_host, self.capture_if)
-        if not iface:
-            self.log(f"capture: no interface ({why}); start again with --capture-if <name from dumpcap -D>")
+        # the self-test: a short capture while the SAU is pinged five times. The adapter towards the SAU first, then
+        # every other one, until one sees the SAU. Only that one is used for the ring.
+        candidates = ([(iface, why)] if iface else []) + [(n, label) for n, label in cap.list_interfaces(dumpcap) if n != iface]
+        if self.capture_if:
+            candidates = candidates[:1]
+        chosen = None
+        for n, label in candidates[:8]:
+            res = cap.self_test(dumpcap, n, self.sau_host, self.master_host, os.path.join(self.evidence_dir, "selftest"),
+                                self._pinger, seconds=self.selftest_s, tshark=self.tshark)
+            if os.path.exists(res["path"]):
+                self._selftest_files.append(res["path"])
+            if res["ok"]:
+                mirror = ("yes: the master's requests to the SAU are in it" if res["mirror"] else
+                          "not yet: only this PC's own traffic with the SAU (mirror the SAU's switch port to this PC for the Modbus timing)"
+                          if res["mirror"] is False else "unknown (tshark not found)")
+                self.log(f"capture test PASSED on {label}: {res['packets']} packets with {self.sau_host} in {self.selftest_s} s while pinging it. "
+                         f"Mirror: {mirror}. Test file: {res['path']}")
+                chosen = (n, label)
+                break
+            self.log(f"capture test on {label}: {res['packets']} packets with {self.sau_host} - not this adapter" + (f" ({res['detail']})" if res["packets"] == 0 and res["detail"] else ""))
+        if not chosen:
+            self.log("capture test FAILED on every adapter: no capture. The master and the pings go on. "
+                     "Check that Wireshark/Npcap is installed and this PC is on the plant network, then start again.")
             return
-        self.cap = cap.Capture(dumpcap, iface, self.sau_host, self.ring_dir, file_s=self.ring_file_s,
+        self.cap = cap.Capture(dumpcap, chosen[0], self.sau_host, self.ring_dir, file_s=self.ring_file_s,
                                files=self.ring_files, log=self.log)
         if self.cap.start():
             self._last_cap_start = time.monotonic()
-            self.log(f"capture: dumpcap on {why}, filter host {self.sau_host}, a new file every {self.ring_file_s / 3600:g} h, "
+            self.log(f"capture: monitoring on {chosen[1]}, filter host {self.sau_host}, a new file every {self.ring_file_s / 3600:g} h, "
                      f"{self.ring_files} kept, in {self.ring_dir}" + ("" if self.tshark else "; tshark not found, the files will be kept but not read"))
+
+    def _pinger(self, host: str) -> None:
+        from . import trace
+        trace.ping(host)
 
     def keep_evidence(self, now: datetime | None = None, margin_s: float = 60.0) -> int:
         """Copy the ring files around every comm fail of today and yesterday into evidence/<date>/. Returns the
