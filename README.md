@@ -79,7 +79,21 @@ window, until the window is closed.
 
 Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, never more often, saved in `data\settings.json`), or `poll_interval_s` in `config\site.plant.yaml`. "Read devices now" in the top bar reads everything once, at any time.
 
-## The measuring session, one click (passive: no load on the SAU)
+## QS Collector, SAU watch: SESSION.bat (passive: no load on the SAU)
+
+Runs until its window is closed (and starts again by itself if it ever crashes). A live page opens in the
+browser at `http://localhost:8070`: what is happening now in plain words, the master, the SAU and this PC with
+their links, the plant values from the master, the last hour, every comm fail with **why it happened** (SAU busy,
+SAU slow, SAU unreachable, no answer, or the master's own side, with what else was talking to the SAU at that
+moment), the traffic with the SAU per client (requests per minute, typical and worst answer, late, Busy, no
+answer), the console and the evidence files. Closing the browser stops nothing. Every issue is also written in the
+window as it happens, in colour. All times are Erbil time.
+
+With Wireshark installed, tshark reads the capture as it happens (it only listens): with the SAU's switch port
+mirrored to this PC it follows every request of the master and every answer of the SAU, so a busy SAU is named
+the moment it answers late, even when the master does not declare a fail.
+
+### Details
 
 `SESSION.bat` is for us, to catch the SAU's stalls whenever they happen, for as long as it runs, without adding
 anything to the SAU's load. `CHECK-PLANT.bat` / `START-PLANT.bat` are the collector for the Turkey platform; they

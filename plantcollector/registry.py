@@ -78,6 +78,8 @@ def _yaml(path: str) -> dict:
 def load_registry(site_config_path: str) -> Registry:
     cfg = _yaml(site_config_path)
     site = SiteConfig(**{k: v for k, v in cfg["site"].items() if k in SiteConfig.model_fields})
+    from . import sitetime
+    sitetime.set_zone(site.timezone)                     # the plant's time for everything a person reads
     reg = Registry(site=site, extra={k: v for k, v in cfg.items() if k not in ("site", "devices")})
     for entry in cfg.get("devices", []):
         prof_path = entry["profile"]

@@ -282,6 +282,8 @@ def cmd_session(a) -> int:
     s = Session(a.config, a.data, hours=a.hours, phase1_min=a.phase1_min, sau_s=a.sau_s, long_run=not a.no_long, zip_hour=a.zip_hour, watch_s=a.watch_s,
                 bundles_dir=a.bundles, mode=a.mode, capture=not a.no_capture, capture_if=a.capture_if,
                 ring_files=a.ring_files, ring_file_s=int(a.ring_hours * 3600))
+    s.monitor_on = not a.no_monitor
+    s.open_browser = not a.no_browser
     try:
         s.run()
     except KeyboardInterrupt:
@@ -294,14 +296,18 @@ def cmd_bundle(a) -> int:
     """Report and zip one day's trace files (what the session does by itself every day)."""
     from .session import Session
     s = Session(a.config, a.data, bundles_dir=a.bundles, long_run=False)
-    date = a.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    from . import sitetime
+    date = a.date or sitetime.day(datetime.now(timezone.utc))
     print(s.step_report_and_bundle(date=date))
     return 0
 
 
 def cmd_report_trace(a) -> int:
     from .report import summarize
-    date = a.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    from .registry import load_registry
+    from . import sitetime
+    load_registry(a.config)                                  # sets the plant's time zone
+    date = a.date or sitetime.day(datetime.now(timezone.utc))
     print(summarize(a.trace_dir or os.path.join(a.data, "trace"), date))
     return 0
 
@@ -354,7 +360,7 @@ def main(argv=None) -> int:
     ss.add_argument("--phase1-min", type=float, default=30.0, help="minutes of master-only trace before the SAU is polled")
     ss.add_argument("--sau-s", type=float, default=5.0, help="SAU read interval in the session")
     ss.add_argument("--watch-s", type=float, default=1.0, help="stall catcher interval on the SAU in phase 2 and the long run (0 = off)")
-    ss.add_argument("--zip-hour", type=int, default=2, help="UTC hour of the daily report and bundle in the long run")
+    ss.add_argument("--zip-hour", type=int, default=5, help="hour (Erbil time) of the daily report and bundle in the long run")
     ss.add_argument("--no-long", action="store_true", help="stop after the session instead of continuing with the long run")
     ss.add_argument("--bundles", help="folder for the zips (default: bundles/ next to data/)")
     ss.add_argument("--mode", choices=["passive", "active"], default="passive",
@@ -363,6 +369,8 @@ def main(argv=None) -> int:
     ss.add_argument("--capture-if", help="passive: the capture interface (a number or name from 'dumpcap -D'); default: the adapter towards the SAU")
     ss.add_argument("--ring-files", type=int, default=48, help="passive: capture files kept in the ring")
     ss.add_argument("--ring-hours", type=float, default=1.0, help="passive: hours per capture file")
+    ss.add_argument("--no-monitor", action="store_true", help="passive: no live page")
+    ss.add_argument("--no-browser", action="store_true", help="passive: start the live page but do not open a browser")
     ss.set_defaults(fn=cmd_session)
 
     bd = sub.add_parser("bundle", help="report and zip one day's trace files")

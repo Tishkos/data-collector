@@ -124,10 +124,15 @@ if ($Probe) {
     exit $LASTEXITCODE
 }
 if ($Session) {
-    Say "Session running in this window, passive: the master every second, the SAU and the master pinged every second, the SAU never read (no load on it). With Wireshark installed its traffic is captured too and kept around every comm fail in data\evidence. First report and zip in bundles\ after 1 h, then one every day. Closing the window stops it."
-    Say "Do not click inside this window (a click pauses the program until Enter is pressed); scroll with the wheel only."
-    & $venvPy -m plantcollector.cli --config $cfg --data data session --hours 1 --phase1-min 5
-    exit $LASTEXITCODE
+    Say "SAU watch: runs until this window is closed. The master every second, the master and the SAU pinged every second, the SAU never read. Every comm fail is written here in red as it happens, its Wireshark capture is kept in data\evidence, and a live page opens in the browser. A report and a zip every day at 05:00 Erbil time."
+    $host.UI.RawUI.WindowTitle = "QS Collector - SAU watch (keep this window open)"
+    while ($true) {
+        & $venvPy -m plantcollector.cli --config $cfg --data data session
+        if ($LASTEXITCODE -eq 0) { break }            # stopped on purpose (Ctrl+C)
+        Warn "The session stopped unexpectedly (code $LASTEXITCODE); starting it again in 10 seconds. Close this window to stop."
+        Start-Sleep -Seconds 10
+    }
+    exit 0
 }
 if ($Trace) {
     Say "Trace running in this window: 1 s master, 5 s SAU, files in data\trace. Ctrl+C stops it."

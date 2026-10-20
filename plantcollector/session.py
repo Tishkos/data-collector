@@ -18,7 +18,7 @@ Steps, logged to data/session_<date>.log and printed:
      (bundles/plant_<date>_<HHMM>.zip with the trace files, the report, the probe and check output, the log)
   6. then the long run: master every 1 s (it costs the SAU nothing and gives the fail lengths), SAU every 30 s,
      the watch read every 3 s, pings every 1 s, the same guard, until the window is closed; every day at
-     --zip-hour (UTC, default 02:00 = 05:00 plant time) the previous day's files are reported and bundled
+     --zip-hour (Erbil time, default 05:00) the previous day's files are reported and bundled
 
 Everything is read-only; the trace, the probe and the collector have no write function.
 
@@ -51,6 +51,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 
 from . import capture as cap
+from . import sitetime
 from .registry import load_registry
 from .report import fails_from_events, summarize, _read
 from .trace import Trace, probe
@@ -58,7 +59,7 @@ from .trace import Trace, probe
 
 class Session:
     def __init__(self, config: str, data_dir: str, hours: float = 2.0, phase1_min: float = 30.0, sau_s: float = 5.0,
-                 long_run: bool = True, zip_hour: int = 2, bundles_dir: str | None = None, log=print, clock=None,
+                 long_run: bool = True, zip_hour: int = 5, bundles_dir: str | None = None, log=print, clock=None,
                  watch_s: float = 1.0, guard_window_s: float = 600.0, mode: str = "active",
                  capture: bool = True, capture_if: str | None = None, ring_files: int = 48, ring_file_s: int = 3600):
         self.config, self.data_dir = config, data_dir
@@ -73,7 +74,7 @@ class Session:
         self.registry = load_registry(config)
         self._print = log
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        self.log_path = os.path.join(data_dir, f"session_{self.clock().strftime('%Y-%m-%d')}.log")
+        self.log_path = os.path.join(data_dir, f"session_{sitetime.day(self.clock())}.log")
         self.notes: list[str] = []
         self.sau_dropped = False
         self.stop = threading.Event()
@@ -85,23 +86,45 @@ class Session:
         self.cap: cap.Capture | None = None
         self.tshark = cap.find_tool("tshark")
         self._kept: dict[tuple, bool] = {}                  # (session, start) -> evidence complete
+        self._announced: set[str] = set()                   # evidence files already named in the log
         self.selftest_s = 30
+        self.live = None                                     # livecap.LiveCapture: the capture read as it happens
+        self.live_on = True
+        self.open_browser = True
         self.evidence_margin_s = 60.0                       # capture kept around a fail: this much before and after
         self.keeper_s = 30.0                                # how often the keeper looks for new fails
         self._selftest_files: list[str] = []                # the self-test captures, kept and sent with the first bundle
         self._last_cap_start = 0.0
+        self._cap_down = False
         sau = self.registry.devices.get("pv-array")
         neo = self.registry.devices.get("neo-01")
+        self.monitor = None                                  # the live page (monitor.py), passive mode only
+        self.monitor_on = False
+        self._colour = False
         self.sau_host = sau.connection.get("host") if sau else None
         self.master_host = neo.connection.get("host") if neo else None
 
     # ---- helpers -----------------------------------------------------------------------------------
-    def log(self, text: str) -> None:
-        line = f"{self.clock().strftime('%H:%M:%S')} {text}"
+    _COLOURS = {"alert": "\033[91m", "warn": "\033[93m", "ok": "\033[92m", "info": ""}
+    _MARKS = {"alert": "[!!]", "warn": "[! ]", "ok": "[ok]", "info": "    "}
+
+    def log(self, text: str, level: str = "info") -> None:
+        """One line to the window, the session log file and the live page. level: info, ok, warn, alert."""
+        line = f"{sitetime.hms(self.clock())} {text}"
         self.notes.append(line)
-        self._print(line)
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        if self._colour and level != "info":
+            self._print(f"{self._COLOURS[level]}{sitetime.hms(self.clock())} {self._MARKS[level]} {text}\033[0m")
+        elif self._colour:
+            self._print(f"{sitetime.hms(self.clock())}      {text}")
+        else:
+            self._print(line)
+        try:
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(f"{sitetime.hms(self.clock())} {self._MARKS[level].strip() or '-'} {text}\n")
+        except OSError:
+            pass
+        if self.monitor is not None:
+            self.monitor.add(level, text)
 
     def _capture(self, fn, *a, **k) -> str:
         buf = io.StringIO()
@@ -112,7 +135,7 @@ class Session:
     def fail_count(self, since: datetime, until: datetime | None = None) -> int:
         until = until or self.clock()
         ev = []
-        for d in sorted({since.strftime("%Y-%m-%d"), until.strftime("%Y-%m-%d")}):   # a window across UTC midnight
+        for d in sorted({sitetime.day(since), sitetime.day(until)}):   # a window across Erbil midnight
             ev += _read(os.path.join(self.trace_dir, f"events_{d}.csv"))
         fails = fails_from_events(ev)
         return sum(1 for f in fails if since <= f["start"] <= until)
@@ -210,7 +233,7 @@ class Session:
             self._trace({"neo-01": 1.0, "pv-array": self.sau_s}, remaining, "phase 2")
 
     def step_report_and_bundle(self, date: str | None = None, extra_texts: dict | None = None) -> str:
-        date = date or self.clock().strftime("%Y-%m-%d")
+        date = date or sitetime.day(self.clock())
         report = summarize(self.trace_dir, date)
         ev_files = sorted(glob.glob(os.path.join(self.evidence_dir, date, "*.pcap*")))
         if self.mode == "passive" or ev_files:
@@ -224,7 +247,7 @@ class Session:
         rp = os.path.join(self.trace_dir, f"report_{date}.md")
         with open(rp, "w", encoding="utf-8") as f:
             f.write(report)
-        stamp = self.clock().strftime("%Y-%m-%d_%H%M")
+        stamp = sitetime.local(self.clock()).strftime("%Y-%m-%d_%H%M")
         zp = os.path.join(self.bundles_dir, f"plant_{date}_{stamp[-4:]}.zip")
         with zipfile.ZipFile(zp + ".part", "w", zipfile.ZIP_DEFLATED) as z:
             for name in sorted(os.listdir(self.trace_dir)):
@@ -249,6 +272,14 @@ class Session:
         return zp
 
     # ---- the whole thing --------------------------------------------------------------------------------
+    def _until_zip(self, now: datetime) -> float:
+        """Seconds until the next daily report, at zip_hour o'clock plant time (Erbil)."""
+        loc = sitetime.local(now)
+        nxt = loc.replace(hour=self.zip_hour, minute=0, second=0, microsecond=0)
+        if nxt <= loc:
+            nxt += timedelta(days=1)
+        return (nxt - loc).total_seconds()
+
     def _single_instance(self) -> bool:
         """One session per data folder: a second window (a double click, the autostart and a click by hand) would
         write the same files twice and start a second capture. The lock is released when the process ends."""
@@ -299,16 +330,13 @@ class Session:
         """After the session: the master at 1 s (free for the SAU), the SAU every 30 s, the watch read every 3 s,
         pings every 1 s, the same guard; a report and a bundle every day at zip_hour."""
         every = {"neo-01": 1.0, "pv-array": 30.0}
-        self.log("long run: " + ", ".join(f"{d} every {s:g} s" for d, s in every.items()) + f", watch read every 3 s, pings every 1 s; a bundle every day at {self.zip_hour:02d}:00 UTC. Close the window to stop.")
+        self.log("long run: " + ", ".join(f"{d} every {s:g} s" for d, s in every.items()) + f", watch read every 3 s, pings every 1 s; a bundle every day at {self.zip_hour:02d}:00 {sitetime.label()}. Close the window to stop.")
         while not self.stop.is_set():
             now = self.clock()
-            nxt = now.replace(hour=self.zip_hour, minute=0, second=0, microsecond=0)
-            if nxt <= now:
-                nxt += timedelta(days=1)
-            self._trace(every, (nxt - now).total_seconds(), "long run", connect_test_s=600.0, watch_s=3.0)
+            self._trace(every, self._until_zip(now), "long run", connect_test_s=600.0, watch_s=3.0)
             if self.stop.is_set():
                 break
-            yesterday = (self.clock() - timedelta(hours=self.zip_hour + 1)).strftime("%Y-%m-%d")
+            yesterday = sitetime.day(self.clock() - timedelta(hours=self.zip_hour + 1))
             self.notes = []
             try:
                 self.step_report_and_bundle(date=yesterday)
@@ -322,7 +350,7 @@ class Session:
             return
         dumpcap = cap.find_tool("dumpcap")
         if not dumpcap:
-            self.log("capture: Wireshark (dumpcap) not found on this PC; the master and the pings run without it")
+            self.log("capture: Wireshark (dumpcap) not found on this PC; the master and the pings run without it", "warn")
             return
         cap.stop_stale(self.ring_dir, log=self.log)
         iface, why = cap.pick_interface(dumpcap, self.sau_host, self.capture_if)
@@ -342,16 +370,24 @@ class Session:
                           "not yet: only this PC's own traffic with the SAU (mirror the SAU's switch port to this PC for the Modbus timing)"
                           if res["mirror"] is False else "unknown (tshark not found)")
                 self.log(f"capture test PASSED on {label}: {res['packets']} packets with {self.sau_host} in {self.selftest_s} s while pinging it. "
-                         f"Mirror: {mirror}. Test file: {res['path']}")
+                         f"Mirror: {mirror}. Test file: {res['path']}", "ok")
+                if self.monitor is not None:
+                    self.monitor.selftest = {"label": label, "file": res["path"], "packets": res["packets"],
+                                             "mirror": "yes" if res["mirror"] else "no" if res["mirror"] is False else "unknown"}
                 chosen = (n, label)
                 break
-            self.log(f"capture test on {label}: {res['packets']} packets with {self.sau_host} - not this adapter" + (f" ({res['detail']})" if res["packets"] == 0 and res["detail"] else ""))
+            self.log(f"capture test on {label}: {res['packets']} packets with {self.sau_host} - not this adapter" + (f" ({res['detail']})" if res["packets"] == 0 and res["detail"] else ""), "warn")
         if not chosen:
             self.log("capture test FAILED on every adapter: no capture. The master and the pings go on. "
-                     "Check that Wireshark/Npcap is installed and this PC is on the plant network, then start again.")
+                     "Check that Wireshark/Npcap is installed and this PC is on the plant network, then start again.", "alert")
             return
         self.cap = cap.Capture(dumpcap, chosen[0], self.sau_host, self.ring_dir, file_s=self.ring_file_s,
                                files=self.ring_files, log=self.log)
+        if self.tshark and self.live_on:
+            from .livecap import LiveCapture
+            self.live = LiveCapture(self.tshark, chosen[0], self.sau_host, self.master_host, cap.local_ip_for(self.sau_host), log=self.log)
+            self.live.start()
+            self.log("live traffic view on: every Modbus answer of the SAU, its delays, Busy replies, resets and other visitors are followed as they happen")
         if self.cap.start():
             self._last_cap_start = time.monotonic()
             self.log(f"capture: monitoring on {chosen[1]}, filter host {self.sau_host}, a new file every {self.ring_file_s / 3600:g} h, "
@@ -369,7 +405,7 @@ class Session:
         if not os.path.isdir(self.ring_dir):
             return 0
         ev = []
-        for d in sorted({(now - timedelta(days=1)).strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d")}):
+        for d in sorted({sitetime.day(now - timedelta(days=1)), sitetime.day(now)}):
             ev += _read(os.path.join(self.trace_dir, f"events_{d}.csv"))
         done = 0
         for f in fails_from_events(ev):
@@ -377,13 +413,20 @@ class Session:
             if self._kept.get(key):
                 done += 1
                 continue
+            if f["end"] is None and now - f["start"] < timedelta(minutes=10):
+                continue                                    # still going: kept when it ends (or after 10 min)
             end = f["end"] or now
             if f["end"] is not None and now < end + timedelta(seconds=margin_s + 5):
                 continue                                    # wait for the minute after the fail
-            copied, complete = cap.keep(self.ring_dir, os.path.join(self.evidence_dir, f["start"].strftime("%Y-%m-%d")),
+            copied, complete = cap.keep(self.ring_dir, os.path.join(self.evidence_dir, sitetime.day(f["start"])),
                                         f["start"], end, margin_s)
-            if copied:
-                self.log(f"evidence: {len(copied)} capture file(s) kept for the {f['session']} fail at {f['start'].strftime('%H:%M:%S')} UTC")
+            new = [c for c in copied if c not in self._announced]
+            if new:
+                self._announced.update(new)
+                self.log(f"evidence: {', '.join(os.path.basename(c) for c in new)} kept for the {f['session']} fail at "
+                         f"{sitetime.hms(f['start'])}", "ok")
+            if copied and self.monitor is not None:
+                self.monitor.evidence_for(f["start"], copied)
             if complete or now - end > timedelta(hours=2):
                 self._kept[key] = True
                 done += 1
@@ -392,61 +435,179 @@ class Session:
     def _keeper(self) -> None:
         while not self.stop.wait(self.keeper_s):
             try:
-                if self.cap is not None and not self.cap.alive() and time.monotonic() - self._last_cap_start > 300:
-                    self.log("capture: dumpcap stopped; starting it again")
-                    if self.cap.start():
+                if self.cap is not None and not self.cap.alive():
+                    if not self._cap_down:
+                        self._cap_down = True
+                        self.log("capture: Wireshark's capture stopped; starting it again", "alert")
+                    if time.monotonic() - self._last_cap_start > 30:      # not faster than every 30 s if it keeps dying
                         self._last_cap_start = time.monotonic()
+                        if self.cap.start():
+                            time.sleep(2)
+                            if self.cap.alive():
+                                self._cap_down = False
+                                self.log("capture: recording again", "ok")
                 self.keep_evidence()
             except Exception as exc:                        # the keeper must outlive one bad file
-                self.log(f"evidence: {exc}")
+                self.log(f"evidence: {exc}", "warn")
 
     def _passive_trace(self, seconds: float, label: str) -> Trace:
         tr = Trace(self.registry, self.trace_dir, {"neo-01": 1.0}, connect_test_s=600.0, log=self.log, ping_s=1.0,
-                   ping_also=["pv-array"] if "pv-array" in self.registry.devices else [])
-        self.log(f"{label}: master every 1 s, pings of the master and the SAU every 1 s, no reads of the SAU, {seconds / 60:.0f} min")
+                   ping_also=["pv-array"] if "pv-array" in self.registry.devices else [], listener=_Watch(self))
+        self.log(f"{label}: master every 1 s, pings of the master and the SAU every 1 s, no reads of the SAU"
+                 + ("" if self.long_run else f", {seconds / 60:.0f} min"))
         th = threading.Thread(target=tr.run, kwargs=dict(duration_s=seconds, stop=self.stop, status_every_s=1e9), daemon=True)
         th.start()
-        th.join()
-        self.log(f"{label} done: master {tr.rows['neo-01']} rows, {tr.failed['neo-01']} unanswered, {tr.events_logged} events, "
-                 f"{tr.watch_rows} ping rows")
+        while th.is_alive():
+            th.join(0.5)                                     # short joins: Ctrl+C reaches the main thread at once
         return tr
 
     def run_passive(self) -> str:
-        self.log(f"session start, passive: the SAU is only pinged, never read; first report after {self.hours:g} h")
+        """Runs until the window is closed. Every comm fail is logged as it starts and ends, its capture is kept,
+        and every day at zip_hour (Erbil) the day before is reported and zipped. With long_run=False (tests,
+        a one-off check) it runs self.hours, reports and stops."""
+        _console_setup()
+        self._colour = _colour_ok()
+        self.log("QS Collector, SAU watch: the master every second, the master and the SAU pinged every second, the SAU never read (no load on it)", "ok")
+        if self.monitor_on:
+            from . import monitor as mon
+            self.monitor = mon.Monitor(self)
+            try:
+                url, _srv = mon.serve(self.monitor, open_browser=self.open_browser)
+                self.log(f"live page: {url} (opens by itself; any browser on this PC)", "ok")
+            except Exception as exc:
+                self.monitor = None
+                self.log(f"live page not started ({exc}); the session goes on in this window", "warn")
         extra = {}
         try:
             extra["probe.txt"] = self.step_probe(skip_hosts={self.sau_host} if self.sau_host else None)
         except Exception as exc:
-            self.log(f"probe failed: {exc}")
+            self.log(f"probe failed: {exc}", "warn")
         self._start_capture()
         keeper = threading.Thread(target=self._keeper, daemon=True, name="evidence")
         keeper.start()
         zp = ""
         try:
-            try:
-                self._passive_trace(self.hours * 3600, "first hours")
-            except KeyboardInterrupt:
-                self.stop.set()
-                self.log("stopped by hand; reporting and bundling what there is")
-            self.keep_evidence(now=self.clock() + timedelta(seconds=120))
-            zp = self.step_report_and_bundle(extra_texts=extra)
-            self.log("first report done. The session keeps going: close the window to stop.")
-            while self.long_run and not self.stop.is_set():
-                now = self.clock()
-                nxt = now.replace(hour=self.zip_hour, minute=0, second=0, microsecond=0)
-                if nxt <= now:
-                    nxt += timedelta(days=1)
-                self._passive_trace((nxt - now).total_seconds(), "long run")
+            if not self.long_run:                           # a fixed run: self.hours, then one report
+                try:
+                    self._passive_trace(self.hours * 3600, "run")
+                except KeyboardInterrupt:
+                    self.stop.set()
+                self.keep_evidence(now=self.clock() + timedelta(seconds=120))
+                return self.step_report_and_bundle(extra_texts=extra)
+            self.log(f"running until this window is closed; a report and a zip every day at {self.zip_hour:02d}:00 ({sitetime.label()}), "
+                     "or any time with 'Make report now' on the live page")
+            while not self.stop.is_set():
+                self._passive_trace(self._until_zip(self.clock()), "watching")
                 if self.stop.is_set():
                     break
-                yesterday = (self.clock() - timedelta(hours=self.zip_hour + 1)).strftime("%Y-%m-%d")
+                yesterday = sitetime.day(self.clock() - timedelta(hours=self.zip_hour + 1))
                 self.notes = []
                 try:
-                    self.step_report_and_bundle(date=yesterday)
+                    zp = self.step_report_and_bundle(date=yesterday)
+                    self.log(f"daily report for {yesterday} written: {zp}", "ok")
                 except Exception as exc:
-                    self.log(f"daily report failed: {exc}; the session goes on")
+                    self.log(f"daily report failed: {exc}; the session goes on", "warn")
+        except KeyboardInterrupt:
+            self.stop.set()
+            self.log("stopped by hand", "warn")
         finally:
             self.stop.set()
+            if self.live is not None:
+                self.live.close()
             if self.cap is not None:
                 self.cap.stop()
         return zp
+
+
+class _Watch:
+    """The trace's listener in passive mode: turns what changes into console lines and feeds the live page."""
+
+    GROUPS = {"ecu2_comm_fail": "group 1", "ecu3_comm_fail": "group 2"}
+    NAMES = {"neo-01": "the master", "pv-array": "the SAU"}
+
+    def __init__(self, session: "Session"):
+        self.s = session
+        self.m = session.monitor
+
+    def on_read(self, dev_id, ts, out, ms, ok):
+        if self.m is not None:
+            self.m.on_read(dev_id, ts, out, ms, ok)
+
+    def on_ping(self, dev_id, ts, ok, ms):
+        if self.m is not None:
+            self.m.on_ping(dev_id, ts, ok, ms)
+
+    def _sau_ping_ok(self):
+        if self.m is None:
+            return None
+        p = self.m.pings.get("pv-array")
+        return None if not p else p.get("ok")
+
+    def _diagnose(self, group, start, end):
+        from .diagnose import diagnose
+        try:
+            with self.m.lock:
+                pings, reads = list(self.m.ping_log), list(self.m.read_log)
+            d = diagnose(start.timestamp(), end.timestamp(), pings, self.s.live, reads,
+                         master=self.s.master_host, me=self.s.live.me if self.s.live else None)
+            self.m.set_diagnosis(group, start, d)
+            self.s.log(f"why the {group} fail at {sitetime.hms(start)}: {d['tag']}. {d['text']}", "warn")
+        except Exception as exc:
+            self.s.log(f"diagnosis of the {group} fail failed: {exc}", "warn")
+
+    def on_change(self, ts, dev_id, point, old, new):
+        s, name = self.s, self.NAMES.get(dev_id, dev_id)
+        if dev_id == "neo-01" and point in self.GROUPS:
+            g = self.GROUPS[point]
+            if new:
+                ping = self._sau_ping_ok()
+                if self.m is not None:
+                    self.m.fail_started(g, ts, ping)
+                s.log(f"COMM FAIL {g}: the master lost the SAU (PV logger {g})"
+                      + ("; the SAU still answers ping, so the box is up and its program is late" if ping else
+                         "; the SAU does not answer ping either" if ping is False else ""), "alert")
+            else:
+                secs = self.m.fail_ended(g, ts) if self.m is not None else None
+                s.log(f"comm fail {g} ended" + (f" after {secs:.0f} s" if secs is not None else "")
+                      + "; its capture is kept within the next two minutes", "ok")
+                if self.m is not None and secs is not None:
+                    start = ts - timedelta(seconds=secs)
+                    tm = threading.Timer(6.0, self._diagnose, args=(g, start, ts))      # let late answers arrive first
+                    tm.daemon = True
+                    tm.start()
+        elif point == "ping_ok":
+            if new:
+                s.log(f"{name} answers ping again", "ok")
+            else:
+                s.log(f"{name} does not answer ping", "warn")
+        elif point == "reachable" and dev_id == "neo-01":
+            s.log("the master answers our reads again" if new else "the master does not answer our reads", "ok" if new else "alert")
+        elif point == "mac":
+            s.log(f"the MAC address behind {name} changed from {old} to {new}: two devices may answer for one address", "alert")
+        elif dev_id == "neo-01" and point == "mode_auto":
+            s.log(f"the master is {'in AUTO' if new else 'no longer in AUTO'}", "info" if new else "warn")
+        elif dev_id == "neo-01" and point == "mains_available":
+            s.log("grid back" if new else "grid lost", "info" if new else "warn")
+
+
+def _console_setup() -> None:
+    """Windows console: no QuickEdit (a click in the window would pause everything until Enter), colours on."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h_in = k.GetStdHandle(-10)
+        mode = ctypes.c_uint32()
+        if k.GetConsoleMode(h_in, ctypes.byref(mode)):
+            k.SetConsoleMode(h_in, (mode.value & ~0x0040) | 0x0080)      # QuickEdit off, extended flags on
+        h_out = k.GetStdHandle(-11)
+        if k.GetConsoleMode(h_out, ctypes.byref(mode)):
+            k.SetConsoleMode(h_out, mode.value | 0x0004)                  # ANSI colours
+    except Exception:
+        pass
+
+
+def _colour_ok() -> bool:
+    import sys
+    return bool(getattr(sys.stdout, "isatty", lambda: False)())

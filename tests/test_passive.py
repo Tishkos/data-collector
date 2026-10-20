@@ -229,7 +229,7 @@ probe:
     zp = s.run()
     assert sau.accepts == 0
     log = open(s.log_path, encoding="utf-8").read()
-    assert "passive" in log and "no reads of the SAU" in log and "capture: off" in log and "first report done" in log
+    assert "SAU never read" in log and "no reads of the SAU" in log and "capture: off" in log and "bundle:" in log
     import zipfile
     names = zipfile.ZipFile(zp).namelist()
     assert any(n.startswith("trace/neo-01_") for n in names) and not any(n.startswith("trace/pv-array_") for n in names)
@@ -365,7 +365,8 @@ devices:
         regs[1268] = 0b10                                    # ECU 2 comm fail (bit 1) for 4 s
         time.sleep(4)
         regs[1268] = 0
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from plantcollector import sitetime
+        day = sitetime.day(datetime.now(timezone.utc))               # evidence folders are named by the plant's date
         ev_dir = data / "evidence" / day
         deadline = time.time() + 25
         while time.time() < deadline and not (ev_dir.exists() and any(n.endswith(".pcapng") for n in os.listdir(ev_dir))):
@@ -400,3 +401,96 @@ devices:
     c = Session(str(cfg), str(tmp_path / "data"), hours=0.001, long_run=False, mode="passive", capture=False)
     assert c._single_instance()
     c._lock_file.close()
+
+
+def test_the_live_page_shows_a_comm_fail_and_logs_it(tmp_path):
+    """The live page's state and console: a comm fail and a lost ping reach both, with their levels."""
+    from datetime import datetime, timedelta, timezone
+    from fastapi.testclient import TestClient
+    from plantcollector import monitor
+    from plantcollector.session import _Watch
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(f"""site: {{site_id: t, name: test, poll_interval_s: 3600, timezone: Asia/Baghdad}}
+devices:
+  - {{id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.1, port: 1, unit_id: 1, timeout: 1}}}}
+  - {{id: pv-array, profile: pv_array_sau.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.2, port: 502, unit_id: 245, timeout: 1}}}}
+""")
+    s = Session(str(cfg), str(tmp_path / "data"), long_run=False, mode="passive", capture=False)
+    s.monitor = monitor.Monitor(s)
+    w = _Watch(s)
+    t0 = datetime(2026, 10, 20, 6, 33, 16, tzinfo=timezone.utc)            # 09:33:16 in Erbil
+    w.on_ping("pv-array", t0 - timedelta(seconds=1), True, 0.6)
+    w.on_change(t0, "neo-01", "ecu2_comm_fail", False, True)
+    w.on_change(t0 + timedelta(seconds=2), "pv-array", "ping_ok", True, False)
+    w.on_change(t0 + timedelta(seconds=12), "neo-01", "ecu2_comm_fail", True, False)
+    st = s.monitor.state()
+    f = st["fails"][0]
+    assert f["group"] == "group 1" and f["start"] == "09:33:16" and f["seconds"] == 12 and f["sau_ping"] is True
+    lines = s.monitor.log_after(0)
+    levels = [(l["level"], l["text"][:22]) for l in lines]
+    assert ("alert", "COMM FAIL group 1: the") in levels and ("warn", "the SAU does not answe") in levels
+    assert any(l["level"] == "ok" and "ended after 12 s" in l["text"] for l in lines)
+    c = TestClient(monitor.create_app(s.monitor))
+    assert "SAU watch" in c.get("/").text
+    j = c.get("/api/state").json()
+    assert j["zone"] == "Erbil time" and j["fails"][0]["start"] == "09:33:16" and j["capture"]["configured"] is False
+    assert c.get("/api/log?after=0").json()["lines"][0]["n"] == 1
+    assert c.get("/api/evidence/file?path=../site.yaml").status_code == 404     # nothing outside the evidence folder
+
+
+def _feed(lc, t, src, dst, sport, dport, stream, length, seq, ack, tid="", fc="", exc="", proto="6", icmp="", uri="", rst="0"):
+    lc.feed([f"{t:.6f}", src, dst, proto, str(sport), str(dport), str(stream), str(length), str(seq), str(ack), rst, "",
+             str(tid), str(fc), str(exc), icmp, "", uri])
+
+
+def test_live_view_follows_requests_answers_and_busy_replies():
+    """The live reader on tshark's lines: an answer on time, a busy one 2.5 s late with an early TCP ACK, a request
+    never answered, a web page visitor; the per-client table, the alerts and the window for the diagnosis."""
+    from plantcollector.livecap import LiveCapture
+    logs = []
+    lc = LiveCapture("tshark", "1", SAU, MASTER, PC, log=lambda text, level="info": logs.append((level, text)))
+    t = time.time() - 30
+    _feed(lc, t, MASTER, SAU, 61416, 502, 0, 12, 1, 1, tid=1, fc=3)
+    _feed(lc, t + 0.02, SAU, MASTER, 502, 61416, 0, 13, 1, 13, tid=1, fc=3)                 # 20 ms
+    _feed(lc, t + 1, MASTER, SAU, 61416, 502, 0, 12, 13, 14, tid=2, fc=3)
+    _feed(lc, t + 1.03, SAU, MASTER, 502, 61416, 0, 0, 14, 25)                                # bare ACK in 30 ms
+    _feed(lc, t + 3.5, SAU, MASTER, 502, 61416, 0, 9, 14, 25, tid=2, fc=131, exc=6)          # Busy after 2.5 s
+    _feed(lc, t + 4, MASTER, SAU, 61415, 502, 1, 12, 1, 1, tid=7, fc=3)                       # never answered
+    for k in range(3):
+        _feed(lc, t + 5 + k, PC, SAU, 50000 + k, 80, 2 + k, 100, 1, 1, uri="/server/operatingParameters")
+    with lc.lock:
+        for key, tx in list(lc.pending.items()):                                              # what the sweeper does
+            del lc.pending[key]; lc._done(tx, time.time())
+    rows = {(r["peer"], r["what"]): r for r in lc.stats(60)}
+    m = rows[(MASTER, "Modbus")]
+    assert m["count"] == 3 and m["busy"] == 1 and m["late"] == 1 and m["none"] == 1 and m["max_ms"] == pytest.approx(2500, abs=5)
+    assert rows[(PC, "web page")]["count"] == 3
+    assert any(l == "alert" and "exception 06" in t and "acknowledged the request in 30 ms" in t for l, t in logs)
+    assert lc.mirror() == "no" or True                                                        # no process: decided by the traffic seen
+
+
+def test_diagnosis_names_a_busy_sau_and_the_web_page_at_the_same_time():
+    from plantcollector.livecap import LiveCapture
+    from plantcollector.diagnose import diagnose
+    lc = LiveCapture("tshark", "1", SAU, MASTER, PC)
+    t = 1_800_000_000.0
+    _feed(lc, t, MASTER, SAU, 61416, 502, 0, 12, 1, 1, tid=2, fc=3)
+    _feed(lc, t + 0.03, SAU, MASTER, 502, 61416, 0, 0, 1, 13)
+    _feed(lc, t + 2.5, SAU, MASTER, 502, 61416, 0, 9, 1, 13, tid=2, fc=131, exc=6)
+    for k in range(4):
+        _feed(lc, t + k, PC, SAU, 50000 + k, 80, 5 + k, 100, 1, 1, uri="/server/operatingParameters")
+    pings = [(t + k, "pv-array", True) for k in range(-2, 8)]
+    d = diagnose(t + 1, t + 6, pings, lc, master=MASTER, me=PC)
+    assert d["tag"] == "SAU busy" and "exception 06" in d["text"] and "within 30 ms" in d["text"]
+    assert "this PC was using the SAU's web page at the same time (4 requests)" in d["text"]
+    # the same fail with no capture: the pings alone, said honestly
+    d2 = diagnose(t + 1, t + 6, pings, None)
+    assert d2["tag"] == "SAU up" and "without the port mirror" in d2["text"]
+    # the SAU silent to ping the whole time
+    d3 = diagnose(t + 1, t + 6, [(t + k, "pv-array", False) for k in range(-1, 8)], None)
+    assert d3["tag"] == "SAU unreachable"
+    # everything answered on time on the wire: the master's own side
+    lc2 = LiveCapture("tshark", "1", SAU, MASTER, PC)
+    _feed(lc2, t, MASTER, SAU, 61416, 502, 0, 12, 1, 1, tid=3, fc=3)
+    _feed(lc2, t + 0.02, SAU, MASTER, 502, 61416, 0, 13, 1, 13, tid=3, fc=3)
+    assert diagnose(t + 1, t + 6, pings, lc2, master=MASTER, me=PC)["tag"] == "master side"

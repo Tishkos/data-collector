@@ -5,7 +5,7 @@ SAU takes to answer, what the master's comm-fail bits do, what the setpoint regi
 Separate from the hourly collector: own process, own files, nothing goes into the database. Connections
 stay open for the whole run (one per device host), so the trace costs the SAU one Modbus TCP link.
 
-Files in <out>/ (one set per day, UTC date in the name):
+Files in <out>/ (one set per day, the plant's date in the name, Erbil time; rows keep UTC timestamps with Z):
   <device>_<date>.csv   one row per read: ts, ms (response time), ok_blocks, failed_blocks, then every point
                         (booleans 0/1, a value that could not be read is left empty)
   events_<date>.csv     every change of a boolean point, of a point marked 'edge: true' in its profile, and of
@@ -37,6 +37,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from .adapters import build_adapter
+from . import sitetime
 from .registry import Quality, Registry
 
 
@@ -56,7 +57,7 @@ def _cell(reading) -> str:
 
 
 class _DailyCsv:
-    """A CSV file that starts a new file (with header) when the UTC date changes."""
+    """A CSV file that starts a new file (with header) when the plant's date changes (Erbil midnight)."""
 
     def __init__(self, out_dir: str, stem: str, header: list[str]):
         self.out_dir, self.stem, self.header = out_dir, stem, header
@@ -65,7 +66,7 @@ class _DailyCsv:
         self._w = None
 
     def write(self, ts: datetime, row: list) -> None:
-        d = ts.astimezone(timezone.utc).strftime("%Y-%m-%d")
+        d = sitetime.day(ts)
         if d != self._date:
             self.close()
             path = os.path.join(self.out_dir, f"{self.stem}_{d}.csv")
@@ -89,8 +90,9 @@ class Trace:
     def __init__(self, registry: Registry, out_dir: str, every: dict[str, float],
                  connect_test_s: float | None = 60.0, connect_hosts: list[tuple[str, int]] | None = None,
                  log=print, watch: dict[str, float] | None = None, ping_s: float | None = None,
-                 ping_also: list[str] | None = None):
+                 ping_also: list[str] | None = None, listener=None):
         os.makedirs(out_dir, exist_ok=True)
+        self.listener = listener                             # optional: gets every read, ping and change as it happens
         self.registry, self.out_dir, self.log = registry, out_dir, log
         self.every = {k: float(v) for k, v in every.items()}
         self.watch = {k: float(v) for k, v in (watch or {}).items()}
@@ -152,6 +154,11 @@ class Trace:
         self.rows[dev_id] += 1
         if ok == 0:
             self.failed[dev_id] += 1
+        if self.listener is not None:
+            try:
+                self.listener.on_read(dev_id, ts, out, ms, ok > 0)
+            except Exception:
+                pass
         self._edge(ts, dev_id, "reachable", ok > 0)
         for p in dev.points:
             r = out.get(p.id)
@@ -166,10 +173,16 @@ class Trace:
             old = self._last.get(key, None)
             if key in self._last and old == value:
                 return
-            if key in self._last:                           # the first value is a baseline, not a change
+            first = key not in self._last
+            if not first:                                   # the first value is a baseline, not a change
                 self.events.write(ts, [_iso(ts), dev_id, point, _plain(old), _plain(value)])
                 self.events_logged += 1
             self._last[key] = value
+        if self.listener is not None and not first:
+            try:
+                self.listener.on_change(ts, dev_id, point, old, value)
+            except Exception:
+                pass
 
     # ---- the stall catcher ----------------------------------------------------------------------
     def pause(self, dev_id: str) -> None:
@@ -243,6 +256,11 @@ class Trace:
         with self._lock:
             self.watch_file.write(ts, [_iso(ts), dev_id, "ping", ok, ms, detail])
             self.watch_rows += 1
+        if self.listener is not None:
+            try:
+                self.listener.on_ping(dev_id, ts, ok == 1, ms)
+            except Exception:
+                pass
         self._edge(ts, dev_id, "ping_ok", ok == 1)
 
     # ---- connection test ------------------------------------------------------------------------

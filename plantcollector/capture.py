@@ -28,6 +28,8 @@ import statistics
 import subprocess
 from datetime import datetime, timedelta, timezone
 
+from . import sitetime
+
 _WIN = platform.system() == "Windows"
 _NAME = re.compile(r"_(\d{5})_(\d{14})\.pcapng?$|_(\d{14})_(\d{5})\.pcapng?$")
 
@@ -125,7 +127,7 @@ def self_test(dumpcap: str, iface: str, host: str, master: str | None, work_dir:
     Returns ok (5 packets or more with the host), packets, mirror (the master's Modbus requests to the host were
     in it too: True / False / None when tshark is missing) and the file."""
     os.makedirs(work_dir, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = sitetime.now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(work_dir, f"selftest_{stamp}_{re.sub(r'[^0-9A-Za-z]+', '_', str(iface)).strip('_')}.pcapng")
     kw = {"creationflags": 0x08000000} if _WIN else {}
     try:
@@ -343,7 +345,7 @@ def window_verdict(txs: list[dict], start: datetime, end: datetime | None, maste
         return (f"{len(win)} master requests, all answered, slowest {worst:.0f} ms: the SAU was not late on the wire; "
                 "look at the master's own module")
     first = min(late + never + busy, key=lambda x: x["t"])
-    parts = [f"{len(win)} master requests; from {_utc(first['t']).strftime('%H:%M:%S.%f')[:-3]} UTC"]
+    parts = [f"{len(win)} master requests; from {sitetime.local(_utc(first['t'])).strftime('%H:%M:%S.%f')[:-3]} ({sitetime.label()})"]
     if late:
         parts.append(f"{len(late)} answered after 1 s or more (slowest {worst / 1000:.2f} s)")
     if busy:
@@ -397,7 +399,7 @@ def report_section(evidence_paths: list[str], fails: list[dict], sau: str, maste
         L.append("")
         L.append("Per master comm fail (the 12 s before it and during it):")
         for f in fails[:40]:
-            L.append(f"- {f['start'].strftime('%H:%M:%S')} {f['session']}: {window_verdict(txs, f['start'], f['end'], master)}")
+            L.append(f"- {sitetime.hms(f['start'])} {f['session']}: {window_verdict(txs, f['start'], f['end'], master)}")
             others = [o for o in oth if f["start"].timestamp() - 12 <= o["t"] <= (f["end"] or f["start"] + timedelta(seconds=30)).timestamp()]
             if others:
                 L.append("  also at that time: " + ", ".join(f"{p} {w} ({n})" for (p, w), n in collections.Counter((o['peer'], o['what']) for o in others).most_common(4)))

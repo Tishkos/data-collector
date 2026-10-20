@@ -12,6 +12,8 @@ import collections
 import csv
 import os
 import statistics
+
+from . import sitetime
 from datetime import datetime, timedelta
 
 
@@ -159,7 +161,7 @@ def _drop_catalogue(neo: list[dict], sau: list[dict], fails: list[dict], min_kw:
             else:
                 cause = "unexplained"
             verdicts[cause] += 1
-            events.append(f"- {t0.strftime('%H:%M:%S')} {pv0:.0f} -> {pv0 - fall:.0f} kW in {(tmin - t0).total_seconds():.0f} s: {cause}; {took}"
+            events.append(f"- {sitetime.hms(t0)} {pv0:.0f} -> {pv0 - fall:.0f} kW in {(tmin - t0).total_seconds():.0f} s: {cause}; {took}"
                           + (f"; {', '.join(tags)}" if tags else ""))
             i += len(window) + 60
         else:
@@ -181,10 +183,10 @@ def summarize(trace_dir: str, date: str) -> str:
     sau = _read(os.path.join(trace_dir, f"pv-array_{date}.csv"))
     ev = _read(os.path.join(trace_dir, f"events_{date}.csv"))
     con = _read(os.path.join(trace_dir, f"connect_{date}.csv"))
-    L = [f"# Trace of {date}", ""]
+    L = [f"# Trace of {date}", "", f"All times are {sitetime.label()} (the PC's clock; the master's own clock may differ).", ""]
     L.append(f"Rows: master {len(neo)}, SAU {len(sau)}, events {len(ev)}, connection tests {len(con)}.")
     if neo:
-        L.append(f"Master read from {neo[0]['ts'][11:19]} to {neo[-1]['ts'][11:19]} UTC; reads that got no answer at all: "
+        L.append(f"Master read from {sitetime.hms(_ts(neo[0]['ts']))} to {sitetime.hms(_ts(neo[-1]['ts']))} ({sitetime.label()}); reads that got no answer at all: "
                  f"{sum(1 for r in neo if r.get('ok_blocks') == '0')}.")
     L.append("")
 
@@ -208,11 +210,11 @@ def summarize(trace_dir: str, date: str) -> str:
         L.append(f"Both sessions within 5 s of each other: {both} of {len(by['group 1'])} group-1 fails "
                  f"(both silent = nothing we write reaches the SAU; one alive = the zero gets through the other).")
         L.append("")
-        L.append("| start (UTC) | session | seconds |")
+        L.append(f"| start ({sitetime.label()}) | session | seconds |")
         L.append("|---|---|---|")
         for f in fails[:40]:
             secs = "open" if f["seconds"] is None else f"{f['seconds']:.0f}"
-            L.append(f"| {f['start'].strftime('%H:%M:%S')} | {f['session']} | {secs} |")
+            L.append(f"| {sitetime.hms(f['start'])} | {f['session']} | {secs} |")
         if len(fails) > 40:
             L.append(f"| ... | {len(fails) - 40} more | |")
     L.append("")
@@ -259,7 +261,7 @@ def summarize(trace_dir: str, date: str) -> str:
                 p_win = [r for r in pings if t0 - timedelta(seconds=2) <= _ts(r["ts"]) <= t1 + timedelta(seconds=2)]
                 p_bad = sum(1 for r in p_win if r.get("ok") != "1")
                 with_fail = any(f["start"] - timedelta(seconds=15) <= t1 and (f["end"] or f["start"] + timedelta(seconds=600)) >= t0 for f in fails)
-                L.append(f"- {t0.strftime('%H:%M:%S')} for {(t1 - t0).total_seconds() + 1:.0f} s, worst {worst:.0f} ms, "
+                L.append(f"- {sitetime.hms(t0)} for {(t1 - t0).total_seconds() + 1:.0f} s, worst {worst:.0f} ms, "
                          f"{sum(1 for r in ep if r.get('ok') != '1')} unanswered; " + ("no pings" if not p_win else f"ping failed {p_bad}x" if p_bad else "ping fine") + "; "
                          f"master fail at the same time: {'yes' if with_fail else 'no'}")
             if len(eps) > 30:
@@ -308,7 +310,7 @@ def summarize(trace_dir: str, date: str) -> str:
                     else:
                         v = f"SAU answered us normally ({ping_txt}): the fail is not the SAU being silent; look at the path to the master or the master's own module"
                 verdicts[v] += 1
-                lines.append(f"- {f['start'].strftime('%H:%M:%S')} {f['session']}: {v}")
+                lines.append(f"- {sitetime.hms(f['start'])} {f['session']}: {v}")
             L.append("")
             L.append("Verdict per master comm fail (our reads and pings in the 12 s before and during it):")
             L.extend(lines[:40])
@@ -350,7 +352,7 @@ def summarize(trace_dir: str, date: str) -> str:
             vals = [v for _, v in pts]
             drops = [(t, v) for (t, v), (t0, v0) in zip(pts[1:], pts[:-1]) if v < v0]
             L.append(f"Online inverters: max {max(vals):.0f}, min {min(vals):.0f}; the count fell {len(drops)} times"
-                     + (": " + ", ".join(f"{t.strftime('%H:%M:%S')} to {v:.0f}" for t, v in drops[:12]) if drops else "") + ".")
+                     + (": " + ", ".join(f"{sitetime.hms(t)} to {v:.0f}" for t, v in drops[:12]) if drops else "") + ".")
             if fails:
                 near = 0
                 for f in fails:
@@ -392,7 +394,7 @@ def summarize(trace_dir: str, date: str) -> str:
             def m(rows, key):
                 v = [_num(r.get(key)) for r in rows if _num(r.get(key)) is not None]
                 return f"{statistics.mean(v):.1f}" if v else "-"
-            L.append(f"- {f['start'].strftime('%H:%M:%S')} {f['session']} {f['seconds']:.0f} s: curtailment % before/during/after "
+            L.append(f"- {sitetime.hms(f['start'])} {f['session']} {f['seconds']:.0f} s: curtailment % before/during/after "
                      f"{m(before, 'pv_curtailment_pct')} / {m(during, 'pv_curtailment_pct')} / {m(after, 'pv_curtailment_pct')}; "
                      f"PV kW {m(before, 'pv_prod_kw')} / {m(during, 'pv_prod_kw')} / {m(after, 'pv_prod_kw')}; "
                      f"gensets kW {m(before, 'power_kw')} / {m(during, 'power_kw')} / {m(after, 'power_kw')}.")
@@ -426,7 +428,7 @@ def summarize(trace_dir: str, date: str) -> str:
                 drops.append((t, v - min(w for _, w in window)))
         if drops:
             worst = max(drops, key=lambda d: d[1])
-            L.append(f"Largest fall within one minute: {worst[1]:.0f} kW at {worst[0].strftime('%H:%M:%S')}; "
+            L.append(f"Largest fall within one minute: {worst[1]:.0f} kW at {sitetime.hms(worst[0])}; "
                      f"p99 of one-minute falls: {_pct([d for _, d in drops], 0.99):.0f} kW. The reverse-power margin with three sets is about 788 kW.")
         L.append("")
     return "\n".join(L)
