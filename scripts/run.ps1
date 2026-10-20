@@ -124,7 +124,7 @@ if ($Probe) {
     exit $LASTEXITCODE
 }
 if ($Session) {
-    Say "SAU watch: runs until this window is closed. The master every second, the master and the SAU pinged every second, the SAU never read. Every comm fail is written here in red as it happens, its Wireshark capture is kept in data\evidence, and a live page opens in the browser. A report and a zip every day at 05:00 Erbil time."
+    Say "SAU watch: runs until this window is closed. The master every second, the master and the SAU pinged every second, the SAU never read. Every comm fail is written here in red as it happens, its Wireshark capture is kept in data\evidence, and a live page opens in the browser. A report and a zip every day at 16:00 Erbil time, for the day before and for today so far."
     $host.UI.RawUI.WindowTitle = "QS Collector - SAU watch (keep this window open)"
     while ($true) {
         & $venvPy -m plantcollector.cli --config $cfg --data data session

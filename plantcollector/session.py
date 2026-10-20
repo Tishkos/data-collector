@@ -18,7 +18,7 @@ Steps, logged to data/session_<date>.log and printed:
      (bundles/plant_<date>_<HHMM>.zip with the trace files, the report, the probe and check output, the log)
   6. then the long run: master every 1 s (it costs the SAU nothing and gives the fail lengths), SAU every 30 s,
      the watch read every 3 s, pings every 1 s, the same guard, until the window is closed; every day at
-     --zip-hour (Erbil time, default 05:00) the previous day's files are reported and bundled
+     --zip-hour (Erbil time, default 16:00) today so far and the whole day before are reported and bundled
 
 Everything is read-only; the trace, the probe and the collector have no write function.
 
@@ -59,7 +59,7 @@ from .trace import Trace, probe
 
 class Session:
     def __init__(self, config: str, data_dir: str, hours: float = 2.0, phase1_min: float = 30.0, sau_s: float = 5.0,
-                 long_run: bool = True, zip_hour: int = 5, bundles_dir: str | None = None, log=print, clock=None,
+                 long_run: bool = True, zip_hour: int = 16, bundles_dir: str | None = None, log=print, clock=None,
                  watch_s: float = 1.0, guard_window_s: float = 600.0, mode: str = "active",
                  capture: bool = True, capture_if: str | None = None, ring_files: int = 48, ring_file_s: int = 3600):
         self.config, self.data_dir = config, data_dir
@@ -87,6 +87,7 @@ class Session:
         self.tshark = cap.find_tool("tshark")
         self._kept: dict[tuple, bool] = {}                  # (session, start) -> evidence complete
         self._announced: set[str] = set()                   # evidence files already named in the log
+        self._incidents: list[dict] = []                    # other things whose capture is kept: late SAU answers, lost pings
         self.selftest_s = 30
         self.live = None                                     # livecap.LiveCapture: the capture read as it happens
         self.live_on = True
@@ -235,6 +236,17 @@ class Session:
     def step_report_and_bundle(self, date: str | None = None, extra_texts: dict | None = None) -> str:
         date = date or sitetime.day(self.clock())
         report = summarize(self.trace_dir, date)
+        diag = []
+        dpath = os.path.join(self.trace_dir, f"diagnosis_{date}.csv")
+        if os.path.exists(dpath):
+            import csv
+            with open(dpath, newline="", encoding="utf-8") as f:
+                diag = list(csv.DictReader(f))
+        if diag:
+            report += "\n## Why each comm fail happened (worked out a few seconds after it ended)\n\n"
+            for r in diag:
+                report += f"- {r['start'][11:19]} {r['group']}, {r['seconds']} s: **{r['tag']}**. {r['why']}\n"
+            report += "\n"
         ev_files = sorted(glob.glob(os.path.join(self.evidence_dir, date, "*.pcap*")))
         if self.mode == "passive" or ev_files:
             try:
@@ -386,6 +398,8 @@ class Session:
         if self.tshark and self.live_on:
             from .livecap import LiveCapture
             self.live = LiveCapture(self.tshark, chosen[0], self.sau_host, self.master_host, cap.local_ip_for(self.sau_host), log=self.log)
+            self.live.on_episode = lambda t0, t1, text: self.add_incident(
+                "the SAU answering the master late", datetime.fromtimestamp(t0, timezone.utc), datetime.fromtimestamp(t1, timezone.utc), text)
             self.live.start()
             self.log("live traffic view on: every Modbus answer of the SAU, its delays, Busy replies, resets and other visitors are followed as they happen")
         if self.cap.start():
@@ -432,6 +446,26 @@ class Session:
                 done += 1
         return done
 
+    def add_incident(self, kind: str, start: datetime, end: datetime, text: str = "") -> None:
+        """Anything else worth its capture: the SAU answering late without a declared fail, the SAU not answering ping."""
+        self._incidents.append({"kind": kind, "start": start, "end": end, "text": text, "done": False})
+
+    def keep_incidents(self, now: datetime | None = None) -> None:
+        now = now or self.clock()
+        margin = timedelta(seconds=self.evidence_margin_s + 5)
+        for inc in self._incidents:
+            if inc["done"] or now < inc["end"] + margin:
+                continue
+            copied, complete = cap.keep(self.ring_dir, os.path.join(self.evidence_dir, sitetime.day(inc["start"])),
+                                        inc["start"], inc["end"], self.evidence_margin_s)
+            new = [c for c in copied if c not in self._announced]
+            if new:
+                self._announced.update(new)
+                self.log(f"evidence: {', '.join(os.path.basename(c) for c in new)} kept for {inc['kind']} at {sitetime.hms(inc['start'])}", "ok")
+            if complete or now - inc["end"] > timedelta(hours=2):
+                inc["done"] = True
+        self._incidents = [i for i in self._incidents if not i["done"] or now - i["end"] < timedelta(hours=3)]
+
     def _keeper(self) -> None:
         while not self.stop.wait(self.keeper_s):
             try:
@@ -447,6 +481,8 @@ class Session:
                                 self._cap_down = False
                                 self.log("capture: recording again", "ok")
                 self.keep_evidence()
+                if os.path.isdir(self.ring_dir):
+                    self.keep_incidents()
             except Exception as exc:                        # the keeper must outlive one bad file
                 self.log(f"evidence: {exc}", "warn")
 
@@ -500,13 +536,15 @@ class Session:
                 self._passive_trace(self._until_zip(self.clock()), "watching")
                 if self.stop.is_set():
                     break
-                yesterday = sitetime.day(self.clock() - timedelta(hours=self.zip_hour + 1))
                 self.notes = []
-                try:
-                    zp = self.step_report_and_bundle(date=yesterday)
-                    self.log(f"daily report for {yesterday} written: {zp}", "ok")
-                except Exception as exc:
-                    self.log(f"daily report failed: {exc}; the session goes on", "warn")
+                now = self.clock()
+                for date in (sitetime.day(now - timedelta(days=1)), sitetime.day(now)):     # the whole day before, then today so far
+                    try:
+                        self.keep_evidence(now=now + timedelta(seconds=120))
+                        zp = self.step_report_and_bundle(date=date)
+                        self.log(f"daily report for {date} written: {zp}", "ok")
+                    except Exception as exc:
+                        self.log(f"daily report for {date} failed: {exc}; the session goes on", "warn")
         except KeyboardInterrupt:
             self.stop.set()
             self.log("stopped by hand", "warn")
@@ -528,6 +566,7 @@ class _Watch:
     def __init__(self, session: "Session"):
         self.s = session
         self.m = session.monitor
+        self._down: dict[str, datetime] = {}
 
     def on_read(self, dev_id, ts, out, ms, ok):
         if self.m is not None:
@@ -551,6 +590,15 @@ class _Watch:
             d = diagnose(start.timestamp(), end.timestamp(), pings, self.s.live, reads,
                          master=self.s.master_host, me=self.s.live.me if self.s.live else None)
             self.m.set_diagnosis(group, start, d)
+            path = os.path.join(self.s.trace_dir, f"diagnosis_{sitetime.day(start)}.csv")
+            new = not os.path.exists(path)
+            import csv
+            with open(path, "a", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                if new:
+                    w.writerow(["start", "end", "group", "seconds", "tag", "why"])
+                w.writerow([sitetime.local(start).isoformat(timespec="seconds"), sitetime.local(end).isoformat(timespec="seconds"), group,
+                            round((end - start).total_seconds()), d["tag"], d["text"]])
             self.s.log(f"why the {group} fail at {sitetime.hms(start)}: {d['tag']}. {d['text']}", "warn")
         except Exception as exc:
             self.s.log(f"diagnosis of the {group} fail failed: {exc}", "warn")
@@ -578,8 +626,12 @@ class _Watch:
         elif point == "ping_ok":
             if new:
                 s.log(f"{name} answers ping again", "ok")
+                down = self._down.pop(dev_id, None)
+                if dev_id == "pv-array" and down is not None:
+                    s.add_incident("the SAU not answering ping", down, ts)
             else:
                 s.log(f"{name} does not answer ping", "warn")
+                self._down[dev_id] = ts
         elif point == "reachable" and dev_id == "neo-01":
             s.log("the master answers our reads again" if new else "the master does not answer our reads", "ok" if new else "alert")
         elif point == "mac":

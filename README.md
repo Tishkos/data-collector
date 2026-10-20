@@ -114,7 +114,7 @@ What it does, logged to `data\session_<date>.log`:
   seen, and the test capture is kept as `data\evidence\selftest\selftest_<time>_<adapter>.pcapng` (it goes with the
   first zip). Around every comm fail the files are
   copied to `data\evidence\<date>\` so the ring never overwrites them. Capturing only listens;
-- after the first hour, then every day at 05:00 plant time: `data\trace\report_<date>.md` and a zip in `bundles\`
+- every day at 16:00 Erbil time, for the whole day before and for today so far (or any time with "Make report now"): `data\trace\report_<date>.md` and a zip in `bundles\`
   with the files, the report and the kept capture files. The report has, per comm fail: whether the SAU answered
   pings, and from the capture whether the SAU's TCP acknowledged the master's requests at once and how late its
   Modbus answers came, or with which exception (06 Server Device Busy). That is the evidence for Sineng.

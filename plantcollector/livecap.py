@@ -50,6 +50,7 @@ class LiveCapture:
         self.started = 0.0
         self.episode = None                                        # an open "SAU late" episode
         self.restarts = 0
+        self.on_episode = None                                     # callback(start, end, text) when a late episode closes
 
     # ---- the process ------------------------------------------------------------------------------------
     def command(self) -> list[str]:
@@ -215,6 +216,11 @@ class LiveCapture:
                     if ep["none"]:
                         parts.append(f"{ep['none']} never answered")
                     self.log(f"the SAU answers the master on time again ({', '.join(parts)})", "ok")
+                    if self.on_episode is not None:
+                        try:
+                            self.on_episode(ep["start"], ep["last"], ", ".join(parts))
+                        except Exception:
+                            pass
 
     # ---- what the page and the diagnosis read ------------------------------------------------------------------
     def name(self, ip: str) -> str:

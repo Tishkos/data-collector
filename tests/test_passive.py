@@ -494,3 +494,37 @@ def test_diagnosis_names_a_busy_sau_and_the_web_page_at_the_same_time():
     _feed(lc2, t, MASTER, SAU, 61416, 502, 0, 12, 1, 1, tid=3, fc=3)
     _feed(lc2, t + 0.02, SAU, MASTER, 502, 61416, 0, 13, 1, 13, tid=3, fc=3)
     assert diagnose(t + 1, t + 6, pings, lc2, master=MASTER, me=PC)["tag"] == "master side"
+
+
+def test_late_answers_and_lost_pings_are_kept_too_and_the_report_says_why(tmp_path):
+    """Not only declared comm fails: a late-answer episode and a lost ping keep their capture as well, and the
+    daily report carries the reason worked out for each fail."""
+    from datetime import datetime, timedelta, timezone
+    from plantcollector import sitetime
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(f"""site: {{site_id: t, name: test, poll_interval_s: 3600, timezone: Asia/Baghdad}}
+devices:
+  - {{id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.1, port: 1, unit_id: 1, timeout: 1}}}}
+""")
+    s = Session(str(cfg), str(tmp_path / "data"), long_run=False, mode="passive", capture=False, bundles_dir=str(tmp_path / "b"))
+    os.makedirs(s.ring_dir)
+    base = datetime.now().replace(microsecond=0) - timedelta(hours=2)
+    for k in range(3):
+        p = os.path.join(s.ring_dir, f"sau_{k + 1:05d}_{(base + timedelta(minutes=30 * k)).strftime('%Y%m%d%H%M%S')}.pcapng")
+        open(p, "wb").write(b"x" * 10)
+        end = (base + timedelta(minutes=30 * (k + 1))).astimezone().timestamp()
+        os.utime(p, (end, end))
+    t = (base + timedelta(minutes=40)).astimezone(timezone.utc)                     # inside the second file
+    s.add_incident("the SAU answering the master late", t, t + timedelta(seconds=9), "3 late answer(s)")
+    s.keep_incidents(now=t + timedelta(minutes=5))
+    kept = os.listdir(os.path.join(s.evidence_dir, sitetime.day(t)))
+    assert kept == [os.path.basename(sorted(os.listdir(s.ring_dir))[1])] and "kept for the SAU answering the master late" in "\n".join(s.notes)
+    day = sitetime.day(t)
+    os.makedirs(s.trace_dir, exist_ok=True)
+    with open(os.path.join(s.trace_dir, f"diagnosis_{day}.csv"), "w", encoding="utf-8") as f:
+        f.write("start,end,group,seconds,tag,why\n2026-10-21T09:33:16+03:00,2026-10-21T09:33:28+03:00,group 1,12,SAU busy,The SAU was busy.\n")
+    zp = s.step_report_and_bundle(date=day)
+    import zipfile
+    rep = zipfile.ZipFile(zp).read(f"trace/report_{day}.md").decode()
+    assert "Why each comm fail happened" in rep and "09:33:16 group 1, 12 s: **SAU busy**" in rep
+    assert any(n == f"trace/diagnosis_{day}.csv" for n in zipfile.ZipFile(zp).namelist())
