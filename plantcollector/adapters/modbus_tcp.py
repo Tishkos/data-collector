@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pymodbus.client import ModbusTcpClient
 
 logging.getLogger("pymodbus").setLevel(logging.CRITICAL)     # we report failures ourselves, per point
+log = logging.getLogger(__name__)
 
 from ..registry import Device, PointDefinition, Quality
 from ..store import Reading
@@ -125,6 +126,26 @@ class ModbusTcpAdapter(Adapter):
                 blocks.append((fn, start, end - start, cur))
         return blocks
 
+    @staticmethod
+    def _split_runs(fn: str, pts: list[PointDefinition]) -> list[tuple[str, int, int, list[PointDefinition]]]:
+        """The points of one block as runs of registers with no gap between them (overlaps join a run)."""
+        runs: list[tuple[str, int, int, list[PointDefinition]]] = []
+        cur: list[PointDefinition] = []
+        start = end = None
+        for p in sorted(pts, key=lambda p: int(p.raw["address"])):
+            a = int(p.raw["address"])
+            n = _size(p.raw.get("kind", "uint16"))
+            if cur and a > end:
+                runs.append((fn, start, end - start, cur))
+                cur, start, end = [], None, None
+            if start is None:
+                start = a
+            cur.append(p)
+            end = max(end or 0, a + n)
+        if cur:
+            runs.append((fn, start, end - start, cur))
+        return runs
+
     def connect(self) -> bool:
         return self._client.connect()
 
@@ -198,7 +219,10 @@ class ModbusTcpAdapter(Adapter):
                 else:
                     out[p.id] = reading(p, None, Quality.BAD, "no register mapping", now)
         ok_blocks = failed_blocks = 0
-        for fn, start, count, pts in self._blocks:
+        queue = list(self._blocks)
+        while queue:
+            block = queue.pop(0)
+            fn, start, count, pts = block
             call = {"input": self._client.read_input_registers, "coil": self._client.read_coils,
                     "discrete": self._client.read_discrete_inputs}.get(fn, self._client.read_holding_registers)
             try:
@@ -206,6 +230,17 @@ class ModbusTcpAdapter(Adapter):
                     self._client.connect()
                 rr = call(address=start + self.address_offset, count=count, device_id=self.unit_id)
                 if rr is None or rr.isError():
+                    code = getattr(rr, "exception_code", None)
+                    runs = self._split_runs(fn, pts)
+                    if code in (2, 3, 4) and len(runs) > 1:
+                        # the device refuses a block that spans registers it does not have (ComAp answers 4 when
+                        # a request crosses "Not Used" registers): read the contiguous runs instead, from now on
+                        i = self._blocks.index(block) if block in self._blocks else len(self._blocks)
+                        self._blocks[i:i + 1] = runs
+                        queue[0:0] = runs
+                        log.info("%s: block %d+%d refused (exception %s); reading it as %d contiguous blocks from now on",
+                                 self.device.id, start, count, code, len(runs))
+                        continue
                     raise RuntimeError(str(rr))
                 regs = [int(b) for b in rr.bits[:count]] if fn in ("coil", "discrete") else rr.registers   # a coil is a 0/1 "register"
                 ok_blocks += 1
