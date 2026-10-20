@@ -124,7 +124,7 @@ if ($Probe) {
     exit $LASTEXITCODE
 }
 if ($Session) {
-    Say "Session running in this window: probe, check, 5 min master only, then the SAU every 5 s with the stall catcher, 1 h in all, report and zip in bundles\, then the long run. Closing the window stops it."
+    Say "Session running in this window, passive: the master every second, the SAU and the master pinged every second, the SAU never read (no load on it). With Wireshark installed its traffic is captured too and kept around every comm fail in data\evidence. First report and zip in bundles\ after 1 h, then one every day. Closing the window stops it."
     Say "Do not click inside this window (a click pauses the program until Enter is pressed); scroll with the wheel only."
     & $venvPy -m plantcollector.cli --config $cfg --data data session --hours 1 --phase1-min 5
     exit $LASTEXITCODE

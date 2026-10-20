@@ -88,16 +88,20 @@ class _DailyCsv:
 class Trace:
     def __init__(self, registry: Registry, out_dir: str, every: dict[str, float],
                  connect_test_s: float | None = 60.0, connect_hosts: list[tuple[str, int]] | None = None,
-                 log=print, watch: dict[str, float] | None = None, ping_s: float | None = None):
+                 log=print, watch: dict[str, float] | None = None, ping_s: float | None = None,
+                 ping_also: list[str] | None = None):
         os.makedirs(out_dir, exist_ok=True)
         self.registry, self.out_dir, self.log = registry, out_dir, log
         self.every = {k: float(v) for k, v in every.items()}
         self.watch = {k: float(v) for k, v in (watch or {}).items()}
         self.ping_s = float(ping_s) if ping_s else (1.0 if self.watch else None)
+        self.ping_also = [d for d in (ping_also or []) if d not in self.every]   # pinged (and ARP-watched), never read
+        if self.ping_also and not self.ping_s:
+            self.ping_s = 1.0
         self._paused: set[str] = set()                       # devices whose reads are paused (pings go on)
         self._watch_target: dict[str, tuple] = {}
         self._watch_refused: dict[str, int] = {}
-        for dev_id in list(self.every) + list(self.watch):
+        for dev_id in list(self.every) + list(self.watch) + self.ping_also:
             if dev_id not in registry.devices:
                 raise ValueError(f"unknown device '{dev_id}' (config has: {', '.join(registry.devices)})")
         for dev_id in self.watch:
@@ -234,7 +238,7 @@ class Trace:
         ok, ms, detail = ping(host)
         if detail.startswith("ping unavailable"):           # no ping on this machine: say so once, stop trying
             self._ping_off = True
-            self.log(f"[trace] {detail}; the stall catcher keeps the reads only")
+            self.log(f"[trace] {detail}; no pings from this machine (reads go on)")
             return
         with self._lock:
             self.watch_file.write(ts, [_iso(ts), dev_id, "ping", ok, ms, detail])
@@ -300,6 +304,7 @@ class Trace:
         self.log(f"[trace] {', '.join(f'{d} every {s:g} s' for d, s in self.every.items())}"
                  + (f"; watch read {', '.join(f'{d} every {s:g} s' for d, s in self.watch.items())}" if self.watch else "")
                  + (f"; ping every {self.ping_s:g} s" if self.ping_s else "")
+                 + (f" (also {', '.join(self.ping_also)}, ping only, no reads)" if self.ping_also else "")
                  + (f"; connection test every {self.connect_test_s:g} s" if self.connect_test_s else "")
                  + f"; files in {self.out_dir}")
         threads = [threading.Thread(target=self._device_loop, args=(d, end, stop), daemon=True, name=f"trace-{d}") for d in self.every]
@@ -307,7 +312,7 @@ class Trace:
             threads.append(threading.Thread(target=self._watch_loop, args=(d, self.watch_read, end, stop, period), daemon=True, name=f"watch-{d}"))
         if self.ping_s:
             hosts_done = set()
-            for d in self.every:
+            for d in list(self.every) + self.ping_also:
                 host = self.registry.devices[d].connection.get("host")
                 if host and host not in hosts_done:               # one ping per host, the master as a control
                     hosts_done.add(host)

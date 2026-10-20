@@ -21,10 +21,23 @@ Steps, logged to data/session_<date>.log and printed:
      --zip-hour (UTC, default 02:00 = 05:00 plant time) the previous day's files are reported and bundled
 
 Everything is read-only; the trace, the probe and the collector have no write function.
+
+Passive mode (the default of SESSION.bat): the SAU is never read and never connected to by us, so the session adds
+no load to it and can run for weeks:
+  - the master every 1 s (its comm-fail bits give every fail to the second),
+  - a ping of the SAU and of the master every 1 s (the box alive or not; an ICMP echo is answered by the SAU's
+    network stack, not by its Modbus program), the MAC behind each address every 10 s,
+  - Wireshark's dumpcap, when installed, writing a ring of files of the SAU's traffic (one per hour, two days kept);
+    around every comm fail the files are copied to data/evidence/<date>/ so the ring never overwrites them, and the
+    daily report reads them with tshark: per fail, whether the SAU's TCP acknowledged the master's requests and how
+    late its Modbus answers came, or with which exception. With the SAU's switch port mirrored to the PC this is the
+    proof; without a mirror the files hold only this PC's own traffic and the report says so,
+  - a report and a bundle after the first hour, then every day at --zip-hour; the probe skips the SAU, no check.
 """
 
 from __future__ import annotations
 
+import glob
 import io
 import os
 import threading
@@ -33,6 +46,7 @@ import zipfile
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 
+from . import capture as cap
 from .registry import load_registry
 from .report import fails_from_events, summarize, _read
 from .trace import Trace, probe
@@ -41,7 +55,8 @@ from .trace import Trace, probe
 class Session:
     def __init__(self, config: str, data_dir: str, hours: float = 2.0, phase1_min: float = 30.0, sau_s: float = 5.0,
                  long_run: bool = True, zip_hour: int = 2, bundles_dir: str | None = None, log=print, clock=None,
-                 watch_s: float = 1.0, guard_window_s: float = 600.0):
+                 watch_s: float = 1.0, guard_window_s: float = 600.0, mode: str = "active",
+                 capture: bool = True, capture_if: str | None = None, ring_files: int = 48, ring_file_s: int = 3600):
         self.config, self.data_dir = config, data_dir
         self.hours, self.phase1_min, self.sau_s = hours, phase1_min, sau_s
         self.watch_s = watch_s
@@ -58,6 +73,19 @@ class Session:
         self.notes: list[str] = []
         self.sau_dropped = False
         self.stop = threading.Event()
+        self.mode = mode
+        self.capture_on, self.capture_if = capture, capture_if
+        self.ring_files, self.ring_file_s = ring_files, ring_file_s
+        self.ring_dir = os.path.join(data_dir, "capture")
+        self.evidence_dir = os.path.join(data_dir, "evidence")
+        self.cap: cap.Capture | None = None
+        self.tshark = cap.find_tool("tshark")
+        self._kept: dict[tuple, bool] = {}                  # (session, start) -> evidence complete
+        self._last_cap_start = 0.0
+        sau = self.registry.devices.get("pv-array")
+        neo = self.registry.devices.get("neo-01")
+        self.sau_host = sau.connection.get("host") if sau else None
+        self.master_host = neo.connection.get("host") if neo else None
 
     # ---- helpers -----------------------------------------------------------------------------------
     def log(self, text: str) -> None:
@@ -82,19 +110,20 @@ class Session:
         return sum(1 for f in fails if since <= f["start"] <= until)
 
     # ---- steps ---------------------------------------------------------------------------------------
-    def step_probe(self) -> str:
+    def step_probe(self, skip_hosts: set | None = None) -> str:
         targets = []
         seen_hosts = set()
+        skip_hosts = skip_hosts or set()
         for d in self.registry.devices.values():            # one probe per host:port (the ten inverter unit ids
             c = d.connection                                 # behind the SAU would be eleven connections for nothing)
-            if d.adapter == "modbus_tcp" and "host" in c:
+            if d.adapter == "modbus_tcp" and "host" in c and c["host"] not in skip_hosts:
                 key = (c["host"], int(c.get("port", 502)))
                 if key in seen_hosts:
                     continue
                 seen_hosts.add(key)
                 targets.append((c["host"], key[1], int(c.get("unit_id", 1))))
         for h in (self.registry.extra.get("probe") or {}).get("hosts", []) or []:
-            if (str(h), 502, 1) not in targets:
+            if str(h) not in skip_hosts and (str(h), 502, 1) not in targets:
                 targets.append((str(h), 502, 1))
         rows = probe(targets, timeout=3.0)
         text = "\n".join(f"{r['host']}:{r['port']} unit {r['unit']}: tcp {r['tcp']}, {r['modbus']}" for r in rows)
@@ -175,6 +204,13 @@ class Session:
     def step_report_and_bundle(self, date: str | None = None, extra_texts: dict | None = None) -> str:
         date = date or self.clock().strftime("%Y-%m-%d")
         report = summarize(self.trace_dir, date)
+        ev_files = sorted(glob.glob(os.path.join(self.evidence_dir, date, "*.pcap*")))
+        if self.mode == "passive" or ev_files:
+            try:
+                fails = fails_from_events(_read(os.path.join(self.trace_dir, f"events_{date}.csv")))
+                report += "\n" + "\n".join(cap.report_section(ev_files, fails, self.sau_host or "", self.master_host or "", self.tshark)) + "\n"
+            except Exception as exc:                        # a bad capture file must not cost the report
+                report += f"\n## From the capture\n\nThe capture files could not be read: {exc}\n"
         if self.notes:
             report += "\n## Session log\n\n" + "\n".join(self.notes) + "\n"
         rp = os.path.join(self.trace_dir, f"report_{date}.md")
@@ -188,6 +224,11 @@ class Session:
                     z.write(os.path.join(self.trace_dir, name), f"trace/{name}")
             for name, text in (extra_texts or {}).items():
                 z.writestr(name, text)
+            budget = 300e6                                  # the evidence goes along while the zip stays mailable
+            for p in ev_files:
+                if os.path.getsize(p) <= budget:
+                    z.write(p, f"evidence/{os.path.basename(p)}")
+                    budget -= os.path.getsize(p)
             if os.path.exists(self.log_path):
                 z.write(self.log_path, os.path.basename(self.log_path))
         os.replace(zp + ".part", zp)                        # never a half-written zip
@@ -196,6 +237,8 @@ class Session:
 
     # ---- the whole thing --------------------------------------------------------------------------------
     def run(self) -> str:
+        if self.mode == "passive":
+            return self.run_passive()
         self.log(f"session start: {self.hours:g} h, phase 1 {self.phase1_min:g} min master only, then SAU every {self.sau_s:g} s")
         extra = {}
         try:
@@ -236,3 +279,113 @@ class Session:
                 self.step_report_and_bundle(date=yesterday)
             except Exception as exc:                        # a bad file must not end the long run
                 self.log(f"daily report failed: {exc}; the trace goes on")
+
+    # ---- passive: nothing to the SAU but pings ----------------------------------------------------------
+    def _start_capture(self) -> None:
+        if not self.capture_on or not self.sau_host:
+            self.log("capture: off")
+            return
+        dumpcap = cap.find_tool("dumpcap")
+        if not dumpcap:
+            self.log("capture: Wireshark (dumpcap) not found on this PC; the master and the pings run without it")
+            return
+        cap.stop_stale(self.ring_dir, log=self.log)
+        iface, why = cap.pick_interface(dumpcap, self.sau_host, self.capture_if)
+        if not iface:
+            self.log(f"capture: no interface ({why}); start again with --capture-if <name from dumpcap -D>")
+            return
+        self.cap = cap.Capture(dumpcap, iface, self.sau_host, self.ring_dir, file_s=self.ring_file_s,
+                               files=self.ring_files, log=self.log)
+        if self.cap.start():
+            self._last_cap_start = time.monotonic()
+            self.log(f"capture: dumpcap on {why}, filter host {self.sau_host}, a new file every {self.ring_file_s / 3600:g} h, "
+                     f"{self.ring_files} kept, in {self.ring_dir}" + ("" if self.tshark else "; tshark not found, the files will be kept but not read"))
+
+    def keep_evidence(self, now: datetime | None = None, margin_s: float = 60.0) -> int:
+        """Copy the ring files around every comm fail of today and yesterday into evidence/<date>/. Returns the
+        number of fails whose evidence is complete."""
+        now = now or self.clock()
+        if not os.path.isdir(self.ring_dir):
+            return 0
+        ev = []
+        for d in sorted({(now - timedelta(days=1)).strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d")}):
+            ev += _read(os.path.join(self.trace_dir, f"events_{d}.csv"))
+        done = 0
+        for f in fails_from_events(ev):
+            key = (f["session"], f["start"])
+            if self._kept.get(key):
+                done += 1
+                continue
+            end = f["end"] or now
+            if f["end"] is not None and now < end + timedelta(seconds=margin_s + 5):
+                continue                                    # wait for the minute after the fail
+            copied, complete = cap.keep(self.ring_dir, os.path.join(self.evidence_dir, f["start"].strftime("%Y-%m-%d")),
+                                        f["start"], end, margin_s)
+            if copied:
+                self.log(f"evidence: {len(copied)} capture file(s) kept for the {f['session']} fail at {f['start'].strftime('%H:%M:%S')} UTC")
+            if complete or now - end > timedelta(hours=2):
+                self._kept[key] = True
+                done += 1
+        return done
+
+    def _keeper(self) -> None:
+        while not self.stop.wait(30.0):
+            try:
+                if self.cap is not None and not self.cap.alive() and time.monotonic() - self._last_cap_start > 300:
+                    self.log("capture: dumpcap stopped; starting it again")
+                    if self.cap.start():
+                        self._last_cap_start = time.monotonic()
+                self.keep_evidence()
+            except Exception as exc:                        # the keeper must outlive one bad file
+                self.log(f"evidence: {exc}")
+
+    def _passive_trace(self, seconds: float, label: str) -> Trace:
+        tr = Trace(self.registry, self.trace_dir, {"neo-01": 1.0}, connect_test_s=600.0, log=self.log, ping_s=1.0,
+                   ping_also=["pv-array"] if "pv-array" in self.registry.devices else [])
+        self.log(f"{label}: master every 1 s, pings of the master and the SAU every 1 s, no reads of the SAU, {seconds / 60:.0f} min")
+        th = threading.Thread(target=tr.run, kwargs=dict(duration_s=seconds, stop=self.stop, status_every_s=1e9), daemon=True)
+        th.start()
+        th.join()
+        self.log(f"{label} done: master {tr.rows['neo-01']} rows, {tr.failed['neo-01']} unanswered, {tr.events_logged} events, "
+                 f"{tr.watch_rows} ping rows")
+        return tr
+
+    def run_passive(self) -> str:
+        self.log(f"session start, passive: the SAU is only pinged, never read; first report after {self.hours:g} h")
+        extra = {}
+        try:
+            extra["probe.txt"] = self.step_probe(skip_hosts={self.sau_host} if self.sau_host else None)
+        except Exception as exc:
+            self.log(f"probe failed: {exc}")
+        self._start_capture()
+        keeper = threading.Thread(target=self._keeper, daemon=True, name="evidence")
+        keeper.start()
+        zp = ""
+        try:
+            try:
+                self._passive_trace(self.hours * 3600, "first hours")
+            except KeyboardInterrupt:
+                self.stop.set()
+                self.log("stopped by hand; reporting and bundling what there is")
+            self.keep_evidence(now=self.clock() + timedelta(seconds=120))
+            zp = self.step_report_and_bundle(extra_texts=extra)
+            self.log("first report done. The session keeps going: close the window to stop.")
+            while self.long_run and not self.stop.is_set():
+                now = self.clock()
+                nxt = now.replace(hour=self.zip_hour, minute=0, second=0, microsecond=0)
+                if nxt <= now:
+                    nxt += timedelta(days=1)
+                self._passive_trace((nxt - now).total_seconds(), "long run")
+                if self.stop.is_set():
+                    break
+                yesterday = (self.clock() - timedelta(hours=self.zip_hour + 1)).strftime("%Y-%m-%d")
+                self.notes = []
+                try:
+                    self.step_report_and_bundle(date=yesterday)
+                except Exception as exc:
+                    self.log(f"daily report failed: {exc}; the session goes on")
+        finally:
+            self.stop.set()
+            if self.cap is not None:
+                self.cap.stop()
+        return zp

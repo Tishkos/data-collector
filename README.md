@@ -19,7 +19,7 @@ RUN-IN-WINDOW.bat    run in a console window instead of as a Windows task (shows
 PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of one register each)
 PLC-LAB.bat          the plant and the master's PLC program live in the browser (model only, touches nothing): http://localhost:8090
 TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 5 s SAU, response times, event log (Ctrl+C stops)
-SESSION.bat          the whole measuring session, one click: probe, check, 30 min master only, then the SAU, report, zip in bundles\, then the long run
+SESSION.bat          catches every SAU stall with no load on the SAU: master every second, SAU only pinged, Wireshark capture kept around every comm fail, report and zip in bundles\
 ```
 
 If port 8080 is taken by another program, the dashboard takes the next free port and writes its
@@ -76,20 +76,35 @@ window, until the window is closed.
 
 Changing the poll rate: the dashboard's **Settings** page (30 min / 1 h / 2 h, never more often, saved in `data\settings.json`), or `poll_interval_s` in `config\site.plant.yaml`. "Read devices now" in the top bar reads everything once, at any time.
 
-## The measuring session, one click
+## The measuring session, one click (passive: no load on the SAU)
 
-`SESSION.bat` does the two-hour session by itself, in the order a careful person would, and logs every step to
-`data\session_<date>.log`: the probe (who answers on Modbus), the check (every point, values to compare with the
-screens), 30 minutes of trace on the master only so the comm-fail rate is measured without touching the SAU, then
-the SAU added every 5 s for the rest of the two hours with the fail rate compared every 10 minutes: if it clearly
-rises while we poll the SAU, the SAU is dropped again and the fact is logged. At the end: a report
-(`data\trace\report_<date>.md`: fails per session with lengths, whether both fall together, the SAU's response
-times and our connection tests next to the master's fails, the setpoint words, the regulator through each fail,
-the largest load fall in a minute) and a zip in `bundles\` with the trace files, the report, the probe and check
-output and the log. Then it keeps running lighter (master every 10 s, SAU every 30 s) and makes the same report
-and zip every morning for the day before. Close the window to stop. `python -m plantcollector.cli --config
-config\site.plant.yaml --data data bundle --date 2026-10-17` makes a zip for any day by hand; `report-trace`
-prints the report.
+`SESSION.bat` is for us, to catch the SAU's stalls whenever they happen, for as long as it runs, without adding
+anything to the SAU's load. `CHECK-PLANT.bat` / `START-PLANT.bat` are the collector for the Turkey platform; they
+have nothing to do with this.
+
+What it does, logged to `data\session_<date>.log`:
+
+- the master (InteliNeo) every second: its PV logger comm-fail bits give every fail to the second, with its length;
+- a ping of the SAU and of the master every second, and the MAC behind each address every 10 s. A ping is
+  answered by the SAU's network stack, not by its Modbus program, so it costs the SAU nothing that matters and
+  tells "box alive, program late" apart from "box or network gone";
+- **the SAU is never read and never connected to** by this program (the probe skips it, there is no check);
+- when Wireshark is installed on the PC: Wireshark's own `dumpcap` writes the SAU's traffic (filter
+  `host 192.168.0.128`) into a ring in `data\capture\`, one file per hour, two days kept, on the adapter that leads
+  to the SAU (found by itself; `--capture-if "Ethernet 3"` to force one). Around every comm fail the files are
+  copied to `data\evidence\<date>\` so the ring never overwrites them. Capturing only listens;
+- after the first hour, then every day at 05:00 plant time: `data\trace\report_<date>.md` and a zip in `bundles\`
+  with the files, the report and the kept capture files. The report has, per comm fail: whether the SAU answered
+  pings, and from the capture whether the SAU's TCP acknowledged the master's requests at once and how late its
+  Modbus answers came, or with which exception (06 Server Device Busy). That is the evidence for Sineng.
+
+The capture sees the master's requests to the SAU only when the switch (or the MikroTik) **mirrors the SAU's port**
+to the PC's port. Without a mirror it sees this PC's own traffic to the SAU and the report says so; the master's
+fail times and the pings are still there. Do not run Wireshark's own window on the same capture at the same time
+for days: it keeps everything in memory.
+
+The older active session (it reads the SAU every 5 s with a guard) is still there for a short, supervised test:
+`python -m plantcollector.cli --config config\site.plant.yaml --data data session --mode active --hours 1`.
 
 ## Event studies: the trace
 

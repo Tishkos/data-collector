@@ -220,19 +220,28 @@ def summarize(trace_dir: str, date: str) -> str:
     # ---- the stall catcher
     watch = _read(os.path.join(trace_dir, f"watch_{date}.csv"))
     if watch:
-        L.append("## The stall catcher (one ping and one one-register read of the SAU every second)")
         reads = [r for r in watch if r.get("kind") == "read"]
-        pings = [r for r in watch if r.get("kind") == "ping"]
+        all_pings = [r for r in watch if r.get("kind") == "ping"]
+        pings = [r for r in all_pings if r.get("device") != "neo-01"]          # the SAU's; the master's are the control
+        master_pings = [r for r in all_pings if r.get("device") == "neo-01"]
+        if reads:
+            L.append("## The stall catcher (one ping and one one-register read of the SAU every second)")
+        else:
+            L.append("## The SAU, passive (pinged every second, never read by us: no load from this program)")
+            L.append(f"Pings of the SAU: {len(pings)}, failed {sum(1 for r in pings if r.get('ok') != '1')}; "
+                     f"pings of the master (the control): {len(master_pings)}, failed {sum(1 for r in master_pings if r.get('ok') != '1')}.")
         rms = [_num(r["ms"]) for r in reads if r.get("ok") == "1" and _num(r["ms"]) is not None]
         bad_reads = [r for r in reads if r.get("ok") != "1"]
         slow = [r for r in reads if r.get("ok") == "1" and (_num(r["ms"]) or 0) >= 1000]
         bad_pings = [r for r in pings if r.get("ok") != "1"]
-        if rms:
+        if not reads:
+            pass
+        elif rms:
             L.append(f"Reads: {len(reads)}, answered median {statistics.median(rms):.0f} ms, p95 {_pct(rms, 0.95):.0f} ms, max {max(rms):.0f} ms; "
                      f"unanswered {len(bad_reads)}, answered but slower than 1 s {len(slow)}. Pings: {len(pings)}, failed {len(bad_pings)}.")
         else:
             L.append(f"Reads: {len(reads)}, none answered. Pings: {len(pings)}, failed {len(bad_pings)}.")
-        macs = sorted({str(r.get("detail")) for r in watch if r.get("kind") == "arp" and r.get("ok") == "1"})
+        macs = sorted({str(r.get("detail")) for r in watch if r.get("kind") == "arp" and r.get("ok") == "1" and r.get("device") != "neo-01"})
         if macs:
             L.append(f"MAC address seen for the SAU: {', '.join(macs)}" + (" - MORE THAN ONE: two boxes answer for this address (ARP flux or an IP conflict)." if len(macs) > 1 else " (one, as it should be)."))
         stall_rows = sorted(bad_reads + slow, key=lambda r: r["ts"])
@@ -266,7 +275,11 @@ def summarize(trace_dir: str, date: str) -> str:
                 hi = f["end"] or f["start"] + timedelta(seconds=30)
                 win_r = [r for r in reads if lo <= _ts(r["ts"]) <= hi]
                 win_p = [r for r in pings if lo <= _ts(r["ts"]) <= hi]
-                if not win_r:
+                if not win_r and win_p:
+                    p_bad = sum(1 for r in win_p if r.get("ok") != "1")
+                    v = ("SAU did not answer pings either: the box or the network to it" if p_bad else
+                         "SAU answered every ping (the box was up); we do not read it, so its Modbus timing is in the capture section")
+                elif not win_r:
                     v = "no watch rows (SAU not watched then)"
                 else:
                     timeouts = [r for r in win_r if r.get("ok") != "1" and str(r.get("detail", "")).startswith(("timeout", "error"))]

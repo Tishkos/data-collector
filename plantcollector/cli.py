@@ -280,7 +280,8 @@ def cmd_session(a) -> int:
     """The whole measuring session, one click (see session.py)."""
     from .session import Session
     s = Session(a.config, a.data, hours=a.hours, phase1_min=a.phase1_min, sau_s=a.sau_s, long_run=not a.no_long, zip_hour=a.zip_hour, watch_s=a.watch_s,
-                bundles_dir=a.bundles)
+                bundles_dir=a.bundles, mode=a.mode, capture=not a.no_capture, capture_if=a.capture_if,
+                ring_files=a.ring_files, ring_file_s=int(a.ring_hours * 3600))
     try:
         s.run()
     except KeyboardInterrupt:
@@ -356,6 +357,12 @@ def main(argv=None) -> int:
     ss.add_argument("--zip-hour", type=int, default=2, help="UTC hour of the daily report and bundle in the long run")
     ss.add_argument("--no-long", action="store_true", help="stop after the session instead of continuing with the long run")
     ss.add_argument("--bundles", help="folder for the zips (default: bundles/ next to data/)")
+    ss.add_argument("--mode", choices=["passive", "active"], default="passive",
+                    help="passive (default): the SAU is only pinged and captured, never read - no load on it; active: the old phases with SAU reads")
+    ss.add_argument("--no-capture", action="store_true", help="passive: do not start Wireshark's dumpcap")
+    ss.add_argument("--capture-if", help="passive: the capture interface (a number or name from 'dumpcap -D'); default: the adapter towards the SAU")
+    ss.add_argument("--ring-files", type=int, default=48, help="passive: capture files kept in the ring")
+    ss.add_argument("--ring-hours", type=float, default=1.0, help="passive: hours per capture file")
     ss.set_defaults(fn=cmd_session)
 
     bd = sub.add_parser("bundle", help="report and zip one day's trace files")
