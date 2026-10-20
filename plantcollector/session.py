@@ -86,6 +86,8 @@ class Session:
         self.tshark = cap.find_tool("tshark")
         self._kept: dict[tuple, bool] = {}                  # (session, start) -> evidence complete
         self.selftest_s = 30
+        self.evidence_margin_s = 60.0                       # capture kept around a fail: this much before and after
+        self.keeper_s = 30.0                                # how often the keeper looks for new fails
         self._selftest_files: list[str] = []                # the self-test captures, kept and sent with the first bundle
         self._last_cap_start = 0.0
         sau = self.registry.devices.get("pv-array")
@@ -247,7 +249,29 @@ class Session:
         return zp
 
     # ---- the whole thing --------------------------------------------------------------------------------
+    def _single_instance(self) -> bool:
+        """One session per data folder: a second window (a double click, the autostart and a click by hand) would
+        write the same files twice and start a second capture. The lock is released when the process ends."""
+        path = os.path.join(self.data_dir, "session.lock")
+        f = open(path, "a+")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            f.close()
+            return False
+        self._lock_file = f
+        return True
+
     def run(self) -> str:
+        if not self._single_instance():
+            self.log("another session is already running on this PC (same data folder); this window does nothing and can be closed")
+            return ""
         if self.mode == "passive":
             return self.run_passive()
         self.log(f"session start: {self.hours:g} h, phase 1 {self.phase1_min:g} min master only, then SAU every {self.sau_s:g} s")
@@ -337,10 +361,11 @@ class Session:
         from . import trace
         trace.ping(host)
 
-    def keep_evidence(self, now: datetime | None = None, margin_s: float = 60.0) -> int:
+    def keep_evidence(self, now: datetime | None = None, margin_s: float | None = None) -> int:
         """Copy the ring files around every comm fail of today and yesterday into evidence/<date>/. Returns the
         number of fails whose evidence is complete."""
         now = now or self.clock()
+        margin_s = self.evidence_margin_s if margin_s is None else margin_s
         if not os.path.isdir(self.ring_dir):
             return 0
         ev = []
@@ -365,7 +390,7 @@ class Session:
         return done
 
     def _keeper(self) -> None:
-        while not self.stop.wait(30.0):
+        while not self.stop.wait(self.keeper_s):
             try:
                 if self.cap is not None and not self.cap.alive() and time.monotonic() - self._last_cap_start > 300:
                     self.log("capture: dumpcap stopped; starting it again")

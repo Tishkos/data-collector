@@ -293,3 +293,110 @@ devices:
     s._start_capture()
     log = "\n".join(s.notes)
     assert "capture test FAILED" in log and s.cap is None
+
+
+@pytest.mark.skipif(not _can_capture(), reason="dumpcap cannot capture here")
+def test_end_to_end_a_comm_fail_is_kept_as_pcapng(tmp_path, monkeypatch):
+    """The whole chain on a real capture: the session runs, the master raises a comm fail, the keeper copies the
+    ring files around it to evidence/<date>/ while the session is still running, and the report reads them."""
+    from datetime import datetime, timezone
+    regs = [0] * 1400
+    regs[1040] = 700
+    srv_sock = socket.socket()
+    srv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv_sock.bind(("127.0.0.1", 0))
+    srv_sock.listen(4)
+    port = srv_sock.getsockname()[1]
+
+    def serve_client(c):                                     # a minimal Modbus TCP server: FC03 from regs, live
+        with c:
+            while True:
+                hdr = c.recv(7)
+                if len(hdr) < 7:
+                    return
+                tid, _, length, unit = struct.unpack("!HHHB", hdr)
+                pdu = c.recv(length - 1)
+                fc, addr, qty = struct.unpack("!BHH", pdu[:5])
+                vals = regs[addr:addr + qty]
+                body = struct.pack("!BB", fc, 2 * qty) + struct.pack(f"!{qty}H", *vals)
+                c.sendall(struct.pack("!HHHB", tid, 0, len(body) + 1, unit) + body)
+
+    def accept():
+        while True:
+            try:
+                c, _ = srv_sock.accept()
+            except OSError:
+                return
+            threading.Thread(target=serve_client, args=(c,), daemon=True).start()
+    threading.Thread(target=accept, daemon=True).start()
+    sau = _Counter("127.0.0.2")
+    traffic = threading.Event()
+
+    def talk():                                              # traffic to the 'SAU' for the capture to hold
+        while not traffic.is_set():
+            try:
+                socket.create_connection(("127.0.0.2", sau.port), timeout=1).close()
+            except OSError:
+                pass
+            time.sleep(0.3)
+    threading.Thread(target=talk, daemon=True).start()
+    from plantcollector import trace
+    monkeypatch.setattr(trace, "ping", lambda host, timeout_s=1.0: (1, 0.3, ""))
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(f"""site: {{site_id: t, name: test, poll_interval_s: 3600}}
+devices:
+  - {{id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.1, port: {port}, unit_id: 1, timeout: 1}}}}
+  - {{id: pv-array, profile: pv_array_sau.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.2, port: 502, unit_id: 245, timeout: 1}}}}
+""")
+    data = tmp_path / "data"
+    s = Session(str(cfg), str(data), hours=0.009, long_run=False, mode="passive", capture_if="lo",
+                ring_file_s=5, bundles_dir=str(tmp_path / "bundles"))
+    s.selftest_s, s.evidence_margin_s, s.keeper_s = 4, 2.0, 1.0
+    monkeypatch.setattr(s, "_pinger", lambda host: socket.create_connection((host, sau.port), timeout=1).close())
+    result = {}
+    th = threading.Thread(target=lambda: result.setdefault("zip", s.run()), daemon=True)
+    th.start()
+    try:
+        deadline = time.time() + 30
+        while time.time() < deadline and not (s.cap and s.cap.alive() and os.path.exists(data / "trace")):
+            time.sleep(0.5)
+        assert s.cap is not None and s.cap.alive(), "\n".join(s.notes)
+        time.sleep(7)
+        regs[1268] = 0b10                                    # ECU 2 comm fail (bit 1) for 4 s
+        time.sleep(4)
+        regs[1268] = 0
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        ev_dir = data / "evidence" / day
+        deadline = time.time() + 25
+        while time.time() < deadline and not (ev_dir.exists() and any(n.endswith(".pcapng") for n in os.listdir(ev_dir))):
+            time.sleep(0.5)
+        kept = sorted(os.listdir(ev_dir)) if ev_dir.exists() else []
+        assert kept and all(n.startswith("sau_") and n.endswith(".pcapng") for n in kept), "\n".join(s.notes)
+        assert th.is_alive()                                 # kept while the session was still running
+        log = "\n".join(s.notes)
+        assert "evidence:" in log and "group 1 fail" in log
+    finally:
+        traffic.set()
+        th.join(timeout=60)
+        srv_sock.close()
+    import zipfile
+    names = zipfile.ZipFile(result["zip"]).namelist()
+    assert any(n.startswith("evidence/sau_") for n in names) and any(n.startswith("evidence/selftest/") for n in names)
+    rep = zipfile.ZipFile(result["zip"]).read([n for n in names if n.startswith("trace/report_")][0]).decode()
+    assert "From the capture" in rep and "group 1" in rep
+
+
+def test_a_second_session_on_the_same_data_folder_does_nothing(tmp_path):
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(f"""site: {{site_id: t, name: test, poll_interval_s: 3600}}
+devices:
+  - {{id: neo-01, profile: intelineo_master.yaml, adapter: modbus_tcp, connection: {{host: 127.0.0.1, port: 1, unit_id: 1, timeout: 1}}}}
+""")
+    a = Session(str(cfg), str(tmp_path / "data"), hours=0.001, long_run=False, mode="passive", capture=False)
+    assert a._single_instance()
+    b = Session(str(cfg), str(tmp_path / "data"), hours=0.001, long_run=False, mode="passive", capture=False)
+    assert b.run() == "" and "already running" in "\n".join(b.notes)
+    a._lock_file.close()                                   # the first one ends: the lock is free again
+    c = Session(str(cfg), str(tmp_path / "data"), hours=0.001, long_run=False, mode="passive", capture=False)
+    assert c._single_instance()
+    c._lock_file.close()

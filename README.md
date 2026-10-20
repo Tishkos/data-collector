@@ -20,6 +20,8 @@ PROBE-PLANT.bat      which controllers answer on Modbus TCP at all (one read of 
 PLC-LAB.bat          the plant and the master's PLC program live in the browser (model only, touches nothing): http://localhost:8090
 TRACE-PLANT.bat      fast read-only trace to data\trace: 1 s master, 5 s SAU, response times, event log (Ctrl+C stops)
 SESSION.bat          catches every SAU stall with no load on the SAU: master every second, SAU only pinged, Wireshark capture kept around every comm fail, report and zip in bundles\
+SESSION-AUTOSTART.bat      (Run as administrator, once) opens SESSION.bat by itself at every Windows logon; a second window stops at once
+SESSION-AUTOSTART-OFF.bat  removes that again
 ```
 
 If port 8080 is taken by another program, the dashboard takes the next free port and writes its
