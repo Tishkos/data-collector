@@ -315,6 +315,7 @@
 <script src="/static/chart.umd.js"></script>
 <script>
 const $ = id => document.getElementById(id);
+const pms = (ms) => ms == null ? "-" : ms < 1 ? "<1" : fmt(ms, 1);   // Windows reports whole ms: 0 means under 1 ms
 const fmt = (v, d = 0) => v == null || isNaN(v) ? "-" : Number(v).toLocaleString("en-US", {minimumFractionDigits: d, maximumFractionDigits: d});
 const dur = s => s == null ? "-" : s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s/60)} min ${Math.round(s%60)} s` : `${Math.floor(s/3600)} h ${Math.floor(s%3600/60)} min`;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -355,7 +356,7 @@ function render(s) {
   setLink("lnkPM", m.ok === false ? "bad" : m.ok ? "ok" : "unk", m.ok);
   $("lblPM").textContent = m.ok == null ? "-" : m.ok ? `reads ${fmt(m.ms)} ms` : "no answer";
   setLink("lnkPS", ps.ok === false ? "bad" : ps.ok ? "ok" : "unk", ps.ok);
-  $("lblPS").textContent = ps.ok == null ? "ping -" : ps.ok ? `ping ${fmt(ps.ms, 1)} ms` : "no ping reply";
+  $("lblPS").textContent = ps.ok == null ? "ping -" : ps.ok ? `ping ${pms(ps.ms)} ms` : "no ping reply";
   $("ledM").setAttribute("fill", failing ? css("--critical") : stale ? "#8b929b" : "#27a644");
   $("ledS").setAttribute("fill", ps.ok === false ? css("--critical") : ps.ok ? "#27a644" : "#8b929b");
   $("ledS2").setAttribute("fill", failing ? css("--warn") : "#27a644");
@@ -369,9 +370,9 @@ function render(s) {
   const lastFail = s.fails[0];
   $("dFails").textContent = failing ? `now, ${g1.fail ? "group 1 for " + dur(g1.for_s) : "group 2 for " + dur(g2.for_s)}` :
                             lastFail ? `last at ${lastFail.start}, ${lastFail.group}, ${dur(lastFail.seconds)}` : "none since the session started";
-  $("vPing").innerHTML = ps.ok ? `${fmt(ps.ms, 1)}<small>ms</small>` : ps.ok === false ? "no reply" : "-";
+  $("vPing").innerHTML = ps.ok ? `${pms(ps.ms)}<small>ms</small>` : ps.ok === false ? "no reply" : "-";
   $("tPing").className = "glass tile" + (ps.ok === false ? " bad" : ps.ok ? " ok" : "");
-  $("dPing").textContent = ps.loss_pct == null ? "waiting for the first ping" : `${fmt(ps.loss_pct, 2)} % lost in the last ${dur(ps.samples)}; master ping ${pm.ok ? fmt(pm.ms, 1) + " ms" : pm.ok === false ? "no reply" : "-"}`;
+  $("dPing").textContent = ps.loss_pct == null ? "waiting for the first ping" : `${fmt(ps.loss_pct, 2)} % lost in the last ${dur(ps.samples)}; master ping ${pm.ok ? pms(pm.ms) + " ms" : pm.ok === false ? "no reply" : "-"}`;
   const c = s.capture;
   $("vCap").textContent = c.running ? "Recording" : c.configured ? "Stopped" : "Off";
   $("tCap").className = "glass tile" + (c.running ? " ok" : c.configured ? " bad" : " warn");

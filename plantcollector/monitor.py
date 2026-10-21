@@ -317,7 +317,7 @@ def _summary(groups, master, pings, mirror, capturing, fails, traffic) -> str:
     else:
         parts.append("The master is talking to the SAU normally.")
         if sau.get("ok"):
-            parts.append(f"The SAU answers ping in {sau['ms']:.1f} ms.")
+            parts.append("The SAU answers ping in " + ("under 1 ms." if sau["ms"] < 1 else f"{sau['ms']:.1f} ms."))
         elif sau.get("ok") is False:
             parts.append(f"The SAU has not answered ping for {sau.get('down_s') or 0} s.")
     m = next((r for r in traffic if r["what"] == "Modbus" and r["label"].startswith("the master")), None)
