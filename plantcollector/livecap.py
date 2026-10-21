@@ -44,6 +44,7 @@ class LiveCapture:
         self.resets: collections.deque = collections.deque()       # (t, client)
         self.retrans: collections.deque = collections.deque()      # (t, src)
         self.peers_seen: dict[tuple, float] = {}                   # (peer, what) -> last time
+        self._dl_said: dict[str, float] = {}                       # peer -> time its last log download was reported
         self.last_master_seen = 0.0
         self.packets = 0
         self.proc: subprocess.Popen | None = None
@@ -111,6 +112,8 @@ class LiveCapture:
             return
         t = float(r[0])
         src, dst, proto = r[1], r[2], r[3]
+        if not proto or not (src or dst):                    # ARP and other frames without an IP header
+            return
         with self.lock:
             self.packets += 1
             if self.master and (src == self.master or dst == self.master):
@@ -126,7 +129,8 @@ class LiveCapture:
                 port = r[5] if src != self.sau else r[4]
                 what = {"80": "web page", "8080": "web page", "22": "ssh", "21": "ftp", "2404": "IEC 104"}.get(port, f"tcp {port}")
                 detail = r[17]
-                if detail and src != self.sau and "download" in detail.lower():
+                if detail and src != self.sau and "download" in detail.lower() and t - self._dl_said.get(peer, 0) > 60:
+                    self._dl_said[peer] = t                  # once per download burst, not once per request
                     self.log(f"{self.name(peer)} is downloading a log from the SAU's web page ({detail}): this is known to freeze the SAU for seconds", "alert")
             elif proto == "17":
                 what, detail = f"udp {r[16]}", ""
