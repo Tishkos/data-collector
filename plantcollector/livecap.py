@@ -22,6 +22,7 @@ import subprocess
 import threading
 import time
 
+from . import capture as _cap
 from .capture import _WIN
 
 FIELDS = ["frame.time_epoch", "ip.src", "ip.dst", "ip.proto", "tcp.srcport", "tcp.dstport", "tcp.stream", "tcp.len",
@@ -54,7 +55,7 @@ class LiveCapture:
 
     # ---- the process ------------------------------------------------------------------------------------
     def command(self) -> list[str]:
-        cmd = [self.tshark, "-l", "-n", "-i", str(self.interface), "-f", f"host {self.sau}",
+        cmd = [self.tshark, "-l", "-n", *_cap.decode_as(), "-i", str(self.interface), "-f", f"host {self.sau}",
                "-T", "fields", "-E", "separator=\t", "-E", "occurrence=a", "-E", "aggregator=|"]
         for f in FIELDS:
             cmd += ["-e", f]
@@ -114,7 +115,8 @@ class LiveCapture:
             self.packets += 1
             if self.master and (src == self.master or dst == self.master):
                 self.last_master_seen = t
-            if proto == "6" and "502" in (r[4], r[5]):
+            port = str(_cap.MODBUS_PORT)
+            if proto == "6" and port in (r[4], r[5]):
                 self._modbus(t, r)
                 return
             peer = dst if src == self.sau else src
@@ -144,7 +146,8 @@ class LiveCapture:
             self.resets.append((t, dst if src == self.sau else src))
         if r[11]:
             self.retrans.append((t, src))
-        if dst == self.sau and dport == "502":                     # a request
+        port = str(_cap.MODBUS_PORT)
+        if dst == self.sau and dport == port:                      # a request
             seq = int(r[8]) if r[8].isdigit() else None
             nxt = seq + int(r[7]) if seq is not None and r[7].isdigit() else None
             fcs = [x for x in r[13].split("|") if x]
@@ -153,7 +156,7 @@ class LiveCapture:
                 if key not in self.pending:
                     self.pending[key] = {"t": t, "client": src, "tid": tid, "fc": int(fcs[k]) if k < len(fcs) and fcs[k].isdigit() else None,
                                          "ack_ms": None, "ans_ms": None, "exc": None, "nxt": nxt}
-        elif src == self.sau and sport == "502":                   # from the SAU: an ACK and/or answers
+        elif src == self.sau and sport == port:                    # from the SAU: an ACK and/or answers
             ackn = int(r[9]) if r[9].isdigit() else None
             for (st, _tid), tx in self.pending.items():
                 if st == stream and tx["ack_ms"] is None and t >= tx["t"] and (ackn is None or tx["nxt"] is None or ackn >= tx["nxt"]):

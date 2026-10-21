@@ -292,6 +292,12 @@ def cmd_session(a) -> int:
     return 0
 
 
+def cmd_session_demo(a) -> int:
+    """DEMO-SESSION.bat: the SAU watch on a simulated plant (see demo_watch.py)."""
+    from .demo_watch import run
+    return run(os.path.dirname(os.path.abspath(a.data)), open_browser=not a.no_browser)
+
+
 def cmd_bundle(a) -> int:
     """Report and zip one day's trace files (what the session does by itself every day)."""
     from .session import Session
@@ -372,6 +378,10 @@ def main(argv=None) -> int:
     ss.add_argument("--no-monitor", action="store_true", help="passive: no live page")
     ss.add_argument("--no-browser", action="store_true", help="passive: start the live page but do not open a browser")
     ss.set_defaults(fn=cmd_session)
+
+    sd = sub.add_parser("session-demo", help="the SAU watch on a simulated plant: comm fails, a busy SAU, lost pings - nothing real is touched")
+    sd.add_argument("--no-browser", action="store_true")
+    sd.set_defaults(fn=cmd_session_demo)
 
     bd = sub.add_parser("bundle", help="report and zip one day's trace files")
     bd.add_argument("--date", help="YYYY-MM-DD (default: today, UTC)")

@@ -92,6 +92,7 @@ class Session:
         self.live = None                                     # livecap.LiveCapture: the capture read as it happens
         self.live_on = True
         self.open_browser = True
+        self.demo = False                                    # DEMO-SESSION.bat: a simulated plant
         self.evidence_margin_s = 60.0                       # capture kept around a fail: this much before and after
         self.keeper_s = 30.0                                # how often the keeper looks for new fails
         self._selftest_files: list[str] = []                # the self-test captures, kept and sent with the first bundle

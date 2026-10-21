@@ -20,6 +20,7 @@ param(
     [switch]$Trace,
     [switch]$Probe,
     [switch]$Session,
+    [switch]$SessionDemo,
     [switch]$Foreground,
     [switch]$NoBrowser,
     [switch]$Elevated,
@@ -118,14 +119,54 @@ if ($Check) {
     exit $LASTEXITCODE
 }
 
+# ---- Wireshark (dumpcap/tshark) and Npcap for the SAU watch: found, or installed when missing ---------------------
+function Find-Dumpcap {
+    $c = @("$env:ProgramFiles\Wireshark\dumpcap.exe", "${env:ProgramFiles(x86)}\Wireshark\dumpcap.exe")
+    foreach ($k in "HKLM:\SOFTWARE\Wireshark", "HKLM:\SOFTWARE\WOW6432Node\Wireshark") {
+        try { $d = (Get-ItemProperty -Path $k -ErrorAction Stop).InstallDir; if ($d) { $c += (Join-Path $d "dumpcap.exe") } } catch {}
+    }
+    foreach ($p in $c) { if ($p -and (Test-Path $p)) { return $p } }
+    $cmd = Get-Command dumpcap.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+function Ensure-Wireshark {
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if (-not (Find-Dumpcap)) {
+        if ($winget) {
+            Say "Wireshark is not installed on this PC: installing it now with winget (internet needed, about 80 MB; Windows may ask for permission)..."
+            & winget install --id WiresharkFoundation.Wireshark -e --accept-package-agreements --accept-source-agreements
+        }
+        if (-not (Find-Dumpcap)) {
+            Warn "Wireshark could not be installed automatically. Install it from the page that opens now (keep the defaults, including Npcap), then start this again. Until then the session runs without capture."
+            Start-Process "https://www.wireshark.org/download.html"
+            return
+        }
+        Say "Wireshark installed."
+    }
+    if (-not (Test-Path "$env:SystemRoot\System32\Npcap\wpcap.dll")) {
+        Warn "Npcap (the part of Wireshark that captures) is missing. Its installer opens now: keep the defaults and press Next."
+        if ($winget) { & winget install --id Insecure.Npcap -e --interactive --accept-package-agreements --accept-source-agreements }
+        if (-not (Test-Path "$env:SystemRoot\System32\Npcap\wpcap.dll")) { Start-Process "https://npcap.com/#download" }
+    }
+}
+
 # ---- 4a'. PROBE / TRACE: read-only tools, run in this window ----------------------------------
 if ($Probe) {
     & $venvPy -m plantcollector.cli --config $cfg --data data probe
     exit $LASTEXITCODE
 }
+if ($SessionDemo) {
+    $host.UI.RawUI.WindowTitle = "QS Collector - DEMO (simulated plant)"
+    Ensure-Wireshark
+    Say "DEMO: the SAU watch on a simulated plant on this PC. Every 5 minutes: a busy SAU, a fail on both groups with lost pings, a log download, a fail with the SAU on time, late answers. Nothing is sent to the real master or SAU. Files in data-demo\ and bundles-demo\. Close the window to stop."
+    & $venvPy -m plantcollector.cli --config config\site.yaml --data data-demo session-demo
+    exit 0
+}
 if ($Session) {
     Say "SAU watch: runs until this window is closed. The master every second, the master and the SAU pinged every second, the SAU never read. Every comm fail is written here in red as it happens, its Wireshark capture is kept in data\evidence, and a live page opens in the browser. A report and a zip every day at 16:00 Erbil time, for the day before and for today so far."
     $host.UI.RawUI.WindowTitle = "QS Collector - SAU watch (keep this window open)"
+    Ensure-Wireshark
     while ($true) {
         & $venvPy -m plantcollector.cli --config $cfg --data data session
         if ($LASTEXITCODE -eq 0) { break }            # stopped on purpose (Ctrl+C)

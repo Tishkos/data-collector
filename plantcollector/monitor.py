@@ -50,8 +50,15 @@ class Monitor:
         self.read_log: collections.deque = collections.deque(maxlen=3 * 3600)       # (epoch, ok) of our master reads
 
     # ---- the console log -----------------------------------------------------------------------
+    def shown(self, text):
+        """The demo shows the plant's addresses instead of its loopback ones; on site this changes nothing."""
+        for real, show in (getattr(self.s, "display_ips", None) or {}).items():
+            text = text.replace(real, show) if isinstance(text, str) else text
+        return text
+
     def add(self, level: str, text: str, ts: datetime | None = None) -> None:
         ts = ts or datetime.now(timezone.utc)
+        text = self.shown(text)
         with self.lock:
             self.n += 1
             self.log_lines.append({"n": self.n, "t": sitetime.hms(ts), "level": level, "text": text})
@@ -148,13 +155,16 @@ class Monitor:
         live = getattr(s, "live", None)
         mirror = live.mirror() if live is not None else self.selftest.get("mirror")
         traffic = live.stats(60) if live is not None else []
+        for r in traffic:
+            r["peer"], r["label"] = self.shown(r["peer"]), self.shown(r["label"])
         latency = live.master_latency(3600) if live is not None else []
         ring = sorted(glob.glob(os.path.join(s.ring_dir, "*.pcapng")))
         ev = sorted(glob.glob(os.path.join(s.evidence_dir, "*", "*.pcapng")))
         return {
+            "demo": bool(getattr(s, "demo", False)),
             "now": sitetime.local(now).strftime("%Y-%m-%d %H:%M:%S"), "zone": sitetime.label(), "tz": sitetime.zone_name(),
             "uptime_s": int((now - self.started).total_seconds()),
-            "hosts": {"master": s.master_host, "sau": s.sau_host, "pc": _pc_address(s.sau_host)},
+            "hosts": {k: self.shown(v) for k, v in {"master": s.master_host, "sau": s.sau_host, "pc": _pc_address(s.sau_host)}.items()},
             "master": master, "pings": pings, "groups": groups,
             "fails": fails, "fails_today": fails_today, "fails_total": len(self.fails),
             "capture": {"running": bool(cap and cap.alive()), "configured": cap is not None,
@@ -228,6 +238,24 @@ def create_app(mon: Monitor):
         if not full.startswith(base + os.sep) or not full.endswith(".pcapng") or not os.path.isfile(full):
             raise HTTPException(404)
         return FileResponse(full, filename=os.path.basename(full), media_type="application/octet-stream")
+
+    @app.post("/api/evidence/reveal")
+    def evidence_reveal(path: str = ""):
+        """Open File Explorer on the evidence folder, with the file selected (this PC only: the page listens on localhost)."""
+        base = os.path.realpath(mon.s.evidence_dir)
+        os.makedirs(base, exist_ok=True)
+        full = os.path.realpath(os.path.join(base, path)) if path else base
+        if not (full == base or full.startswith(base + os.sep)) or not os.path.exists(full):
+            raise HTTPException(404)
+        import subprocess
+        try:
+            if os.name == "nt":
+                subprocess.Popen(["explorer", "/select,", full] if os.path.isfile(full) else ["explorer", full])
+            else:
+                subprocess.Popen(["xdg-open", os.path.dirname(full) if os.path.isfile(full) else full])
+        except OSError as exc:
+            raise HTTPException(500, str(exc))
+        return {"opened": full}
 
     @app.post("/api/report")
     def report_now():

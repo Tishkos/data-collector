@@ -31,6 +31,12 @@ from datetime import datetime, timedelta, timezone
 from . import sitetime
 
 _WIN = platform.system() == "Windows"
+MODBUS_PORT = 502          # the SAU's Modbus TCP port; the demo uses another one, decoded as Modbus all the same
+
+
+def decode_as() -> list[str]:
+    """tshark decodes Modbus/TCP on 502 by itself; any other port has to be named."""
+    return [] if MODBUS_PORT == 502 else ["-d", f"tcp.port=={MODBUS_PORT},mbtcp"]
 _NAME = re.compile(r"_(\d{5})_(\d{14})\.pcapng?$|_(\d{14})_(\d{5})\.pcapng?$")
 
 
@@ -39,12 +45,29 @@ def find_tool(name: str) -> str | None:
     p = shutil.which(name) or shutil.which(name + ".exe")
     if p:
         return p
-    for env in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+    for env in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "LOCALAPPDATA"):
         base = os.environ.get(env)
         if base:
-            cand = os.path.join(base, "Wireshark", name + ".exe")
-            if os.path.exists(cand):
-                return cand
+            for sub in ("Wireshark", os.path.join("Programs", "Wireshark")):
+                cand = os.path.join(base, sub, name + ".exe")
+                if os.path.exists(cand):
+                    return cand
+    if _WIN:                                                  # installed somewhere else: Wireshark records where
+        try:
+            import winreg
+            for hive, key, value in ((winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Wireshark", "InstallDir"),
+                                     (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Wireshark.exe", "Path"),
+                                     (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Wireshark", "InstallDir")):
+                try:
+                    with winreg.OpenKey(hive, key) as k:
+                        d = winreg.QueryValueEx(k, value)[0]
+                    cand = os.path.join(d, name + ".exe")
+                    if os.path.exists(cand):
+                        return cand
+                except OSError:
+                    continue
+        except ImportError:
+            pass
     return None
 
 
@@ -108,6 +131,15 @@ def pick_interface(dumpcap: str, host: str, wanted: str | None = None) -> tuple[
     return None, f"adapter {alias} ({ip}) is not in dumpcap's list (is Npcap installed with Wireshark?)"
 
 
+def loopback_interface(dumpcap: str) -> str | None:
+    """The loopback capture adapter (Npcap's 'Adapter for loopback traffic capture', or lo): for the demo only."""
+    for line in _run([dumpcap, "-D"]).splitlines():
+        m = re.match(r"\s*(\d+)\.\s+(\S+)(?:\s+\((.*)\))?", line)
+        if m and (re.search(r"loopback", m.group(3) or "", re.I) or m.group(2) in ("lo", r"\Device\NPF_Loopback")):
+            return m.group(1)
+    return None
+
+
 def list_interfaces(dumpcap: str) -> list[tuple[str, str]]:
     """(number, label) of every interface dumpcap offers, loopback and event tracing left out."""
     out = []
@@ -153,7 +185,7 @@ def self_test(dumpcap: str, iface: str, host: str, master: str | None, work_dir:
     packets = int(m.group(1)) if m else 0
     mirror = None
     if tshark and os.path.exists(path) and master:
-        rows = _tshark_rows(tshark, path, f"ip.src=={master} && ip.dst=={host} && tcp.dstport==502", ["frame.time_epoch"])
+        rows = _tshark_rows(tshark, path, f"ip.src=={master} && ip.dst=={host} && tcp.dstport=={MODBUS_PORT}", ["frame.time_epoch"])
         mirror = bool(rows)
     detail = text.strip().splitlines()[-1] if text.strip() else ""
     return dict(ok=packets >= 5, packets=packets, mirror=mirror, path=path, detail=detail)
@@ -245,7 +277,7 @@ _OTHER_FIELDS = ["frame.time_epoch", "ip.src", "ip.dst", "ip.proto", "tcp.srcpor
 
 
 def _tshark_rows(tshark: str, path: str, display: str, fields: list[str]) -> list[list[str]]:
-    cmd = [tshark, "-n", "-r", path, "-Y", display, "-T", "fields", "-E", "separator=\t", "-E", "occurrence=a",
+    cmd = [tshark, "-n", *decode_as(), "-r", path, "-Y", display, "-T", "fields", "-E", "separator=\t", "-E", "occurrence=a",
            "-E", "aggregator=|"]
     for f in fields:
         cmd += ["-e", f]
@@ -266,7 +298,7 @@ def transactions(paths: list[str], sau: str, tshark: str) -> list[dict]:
     had it, whatever its Modbus program did next."""
     txs: list[dict] = []
     for i, path in enumerate(sorted(paths)):
-        rows = _tshark_rows(tshark, path, f"ip.addr=={sau} && tcp.port==502", _TX_FIELDS)
+        rows = _tshark_rows(tshark, path, f"ip.addr=={sau} && tcp.port=={MODBUS_PORT}", _TX_FIELDS)
         pending: dict[tuple, dict[str, dict]] = collections.defaultdict(dict)
         last_t = float(rows[-1][0]) if rows else 0.0
         for r in rows:
@@ -277,7 +309,7 @@ def transactions(paths: list[str], sau: str, tshark: str) -> list[dict]:
             excs = [x for x in r[9].split("|") if x]
             seq = int(r[10]) if r[10].isdigit() else None
             ackn = int(r[11]) if r[11].isdigit() else None
-            if dst == sau and dport == "502":
+            if dst == sau and dport == str(MODBUS_PORT):
                 nxt = seq + int(r[6]) if seq is not None and r[6].isdigit() else None
                 for k, tid in enumerate(tids):
                     if tid not in pending[stream]:                       # a retransmission keeps the first time
@@ -285,7 +317,7 @@ def transactions(paths: list[str], sau: str, tshark: str) -> list[dict]:
                                   ack_ms=None, ans_ms=None, exc=None, nxt=nxt)
                         pending[stream][tid] = tx
                         txs.append(tx)
-            elif src == sau and sport == "502":
+            elif src == sau and sport == str(MODBUS_PORT):
                 for tx in pending[stream].values():
                     covers = ackn is None or tx["nxt"] is None or ackn >= tx["nxt"]
                     if tx["ack_ms"] is None and t >= tx["t"] and covers:
@@ -307,7 +339,7 @@ def other_traffic(paths: list[str], sau: str, tshark: str) -> list[dict]:
     """Everything else to or from the SAU: ping, web page, other ports. t, peer, what."""
     out = []
     for path in sorted(paths):
-        for r in _tshark_rows(tshark, path, f"ip.addr=={sau} && !(tcp.port==502)", _OTHER_FIELDS):
+        for r in _tshark_rows(tshark, path, f"ip.addr=={sau} && !(tcp.port=={MODBUS_PORT})", _OTHER_FIELDS):
             t, src, dst, proto = float(r[0]), r[1], r[2], r[3]
             peer = dst if src == sau else src
             if proto == "1":

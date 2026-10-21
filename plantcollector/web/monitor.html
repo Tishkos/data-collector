@@ -77,6 +77,7 @@
   .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 22%, transparent); }
   .pill.bad { border-color: color-mix(in srgb, var(--critical) 60%, transparent); color: var(--critical); }
   .pill.bad .dot { background: var(--critical); box-shadow: 0 0 0 4px color-mix(in srgb, var(--critical) 25%, transparent); animation: pulse 1s infinite; }
+  .pill.demo { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
   .pill.stale { color: var(--warn); } .pill.stale .dot { background: var(--warn); box-shadow: none; }
   @keyframes pulse { 50% { opacity: .35; } }
   .clock { font-family: var(--mono); color: var(--ink-subtle); font-size: 12px; }
@@ -148,8 +149,12 @@
   .fail .when { font-family: var(--mono); font-weight: 500; }
   .fail .why { margin-top: 6px; color: var(--ink-muted); font-size: 12.5px; line-height: 1.5; }
   .fail .why.wait { color: var(--ink-subtle); font-style: italic; }
-  .files a { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--accent); text-decoration: none; }
-  .files a:hover { text-decoration: underline; }
+  .evrow { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; align-items: center; padding: 6px 0 8px; border-bottom: 1px solid var(--hairline); }
+  .evrow .hint { grid-column: 1 / -1; padding-left: 24px; }
+  .evname { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; padding: 2px 0; text-align: left;
+            font-family: var(--mono); font-size: 11.5px; color: var(--accent); cursor: pointer; overflow-wrap: anywhere; }
+  .evname:hover { text-decoration: underline; }
+  .evrow .dl { font-size: 11.5px; color: var(--ink-subtle); }
   .empty { color: var(--ink-subtle); padding: 18px 4px; }
   .scroll { max-height: 330px; overflow: auto; }
 
@@ -183,6 +188,7 @@
       <div><h1>QS Collector</h1><small>SAU watch, Erbil Coca-Cola hybrid plant, read-only</small></div>
     </div>
     <span id="state" class="pill"><span class="dot"></span><span id="stateText">Starting</span></span>
+    <span id="demoBadge" class="pill demo" hidden>DEMO: simulated plant, nothing real</span>
     <span class="grow"></span>
     <span class="clock" id="clock">-</span>
     <button class="btn" id="themeBtn" title="Light or dark"><svg class="i" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></button>
@@ -196,35 +202,53 @@
       <p class="now" id="summary">Starting.</p>
       <svg viewBox="0 0 700 300" role="img" aria-label="Network: the master, the SAU and this PC">
         <!-- master <-> SAU: the master's own Modbus link (its comm-fail bits) -->
-        <path id="lnkMS" class="link unk" d="M190 92 L510 92"/>
-        <text id="lblMS" class="lbl" x="350" y="80" text-anchor="middle">-</text>
+        <path id="lnkMS" class="link unk" d="M210 96 L490 96"/>
+        <text id="lblMS" class="lbl" x="350" y="84" text-anchor="middle">-</text>
         <!-- PC -> master: our reads every second -->
-        <path id="lnkPM" class="link dash unk" d="M300 232 C230 232 140 200 120 140"/>
-        <text id="lblPM" class="lbl" x="150" y="226" text-anchor="middle">-</text>
+        <path id="lnkPM" class="link dash unk" d="M262 240 C200 240 130 210 116 146"/>
+        <text id="lblPM" class="lbl" x="150" y="236" text-anchor="middle">-</text>
         <!-- PC -> SAU: ping only -->
-        <path id="lnkPS" class="link dash unk" d="M400 232 C470 232 560 200 580 140"/>
-        <text id="lblPS" class="lbl" x="552" y="226" text-anchor="middle">-</text>
+        <path id="lnkPS" class="link dash unk" d="M438 240 C500 240 570 210 584 146"/>
+        <text id="lblPS" class="lbl" x="552" y="236" text-anchor="middle">-</text>
 
-        <g class="node" transform="translate(40,44)">
-          <rect class="box" width="160" height="96" rx="14"/><rect id="ringM" class="ring" width="160" height="96" rx="14" stroke="var(--ink-tertiary)"/>
-          <g class="glyph" transform="translate(14,16)"><rect x="0" y="0" width="22" height="18" rx="3"/><path d="M5 23h12M11 18v5M5 6h12M5 11h7"/></g>
-          <text x="46" y="30" font-weight="600" font-size="14">Master</text>
-          <text class="sub" x="46" y="46">InteliNeo 5500</text>
-          <text class="ip" id="ipM" x="14" y="78">-</text>
+        <!-- the master: a controller face, its screen, LEDs and keys -->
+        <g class="node" transform="translate(30,42)">
+          <rect class="box" width="180" height="104" rx="14"/><rect id="ringM" class="ring" width="180" height="104" rx="14" stroke="var(--ink-tertiary)"/>
+          <g transform="translate(12,12)">
+            <rect width="54" height="80" rx="6" fill="#1b1d21" stroke="#41454c"/>
+            <rect x="0" y="0" width="54" height="5" rx="2" fill="#c8102e" opacity=".85"/>
+            <rect x="5" y="9" width="44" height="29" rx="2" fill="#0b2340" stroke="#2c6ab0"/>
+            <text id="neoMode" x="8" y="17" font-family="var(--mono)" font-size="5.5" fill="#8fc7ff">AUTO</text>
+            <text id="neoKw" x="8" y="31" font-family="var(--mono)" font-size="8" font-weight="500" fill="#e8f4ff">-</text>
+            <circle id="ledM" cx="9" cy="46" r="2.3" fill="#27a644"/><circle cx="17" cy="46" r="2.3" fill="#3a3d42"/><circle cx="25" cy="46" r="2.3" fill="#3a3d42"/>
+            <g fill="#2e3136" stroke="#4a4e55" stroke-width=".6"><rect x="6" y="53" width="8" height="6" rx="1.5"/><rect x="17" y="53" width="8" height="6" rx="1.5"/><rect x="28" y="53" width="8" height="6" rx="1.5"/><rect x="39" y="53" width="8" height="6" rx="1.5"/></g>
+            <circle cx="15" cy="69" r="4.2" fill="#1f7a3a" stroke="#2fb35a" stroke-width=".8"/><circle cx="39" cy="69" r="4.2" fill="#7a1f24" stroke="#d64550" stroke-width=".8"/>
+          </g>
+          <text x="80" y="34" font-weight="600" font-size="14">Master</text>
+          <text class="sub" x="80" y="50">InteliNeo 5500</text>
+          <text class="ip" id="ipM" x="80" y="86">-</text>
         </g>
-        <g class="node" transform="translate(500,44)">
-          <rect class="box" width="160" height="96" rx="14"/><rect id="ringS" class="ring" width="160" height="96" rx="14" stroke="var(--ink-tertiary)"/>
-          <g class="glyph" transform="translate(14,16)"><rect x="0" y="6" width="22" height="16" rx="3"/><path d="M6 6V2M16 6V2M5 14h3M11 14h6"/></g>
-          <text x="46" y="30" font-weight="600" font-size="14">SAU-100</text>
-          <text class="sub" x="46" y="46">10 inverters, 3.2 MW</text>
-          <text class="ip" id="ipS" x="14" y="78">-</text>
+        <!-- the SAU: a gateway box with its port LEDs -->
+        <g class="node" transform="translate(490,42)">
+          <rect class="box" width="180" height="104" rx="14"/><rect id="ringS" class="ring" width="180" height="104" rx="14" stroke="var(--ink-tertiary)"/>
+          <g transform="translate(12,20)">
+            <rect width="54" height="64" rx="6" fill="#d9dde3" stroke="#9aa1ab"/>
+            <rect x="5" y="6" width="44" height="10" rx="2" fill="#2a2e35"/>
+            <text x="9" y="13.6" font-family="var(--sans)" font-size="6" font-weight="600" fill="#e8ecf1">SAU</text>
+            <circle id="ledS" cx="11" cy="25" r="2.3" fill="#27a644"/><circle cx="19" cy="25" r="2.3" fill="#27a644" id="ledS2"/><circle cx="27" cy="25" r="2.3" fill="#8b929b"/>
+            <g fill="#3a3f47"><rect x="6" y="34" width="12" height="9" rx="1"/><rect x="21" y="34" width="12" height="9" rx="1"/><rect x="36" y="34" width="12" height="9" rx="1"/></g>
+            <g fill="#8b929b"><rect x="6" y="50" width="42" height="2" rx="1"/><rect x="6" y="55" width="30" height="2" rx="1"/></g>
+          </g>
+          <text x="80" y="34" font-weight="600" font-size="14">SAU-100</text>
+          <text class="sub" x="80" y="50">Sineng gateway</text>
+          <text class="ip" id="ipS" x="80" y="86">-</text>
         </g>
-        <g class="node" transform="translate(270,188)">
-          <rect class="box" width="160" height="96" rx="14"/><rect id="ringP" class="ring" width="160" height="96" rx="14" stroke="var(--ink-tertiary)"/>
-          <g class="glyph" transform="translate(14,16)"><rect x="0" y="0" width="22" height="15" rx="2"/><path d="M7 20h8M11 15v5"/></g>
-          <text x="46" y="30" font-weight="600" font-size="14">This PC</text>
-          <text class="sub" x="46" y="46" id="capSub">capture</text>
-          <text class="ip" id="ipP" x="14" y="78">-</text>
+        <g class="node" transform="translate(260,190)">
+          <rect class="box" width="180" height="96" rx="14"/><rect id="ringP" class="ring" width="180" height="96" rx="14" stroke="var(--ink-tertiary)"/>
+          <g class="glyph" transform="translate(16,18)"><rect x="0" y="0" width="30" height="20" rx="2"/><path d="M9 27h12M15 20v7"/></g>
+          <text x="62" y="32" font-weight="600" font-size="14">This PC</text>
+          <text class="sub" x="62" y="48" id="capSub">capture</text>
+          <text class="ip" id="ipP" x="62" y="78">-</text>
         </g>
       </svg>
     </section>
@@ -280,7 +304,9 @@
     </section>
 
     <section class="glass panel s5">
-      <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><path d="M4 7l2-3h12l2 3"/></svg>Evidence files<span class="grow"></span><span class="hint">opens in Wireshark</span></h2>
+      <h2><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><path d="M4 7l2-3h12l2 3"/></svg>Evidence files<span class="grow"></span>
+        <button class="btn" id="openFolder"><svg class="i" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Open folder</button></h2>
+      <p class="hint" style="margin:-4px 0 10px">Click a file to show it in File Explorer; double-click it there to open it in Wireshark.</p>
       <div class="scroll files" id="evidence"><div class="empty">Nothing kept yet. Files appear here about a minute after a comm fail ends.</div></div>
     </section>
   </div>
@@ -311,6 +337,7 @@ function render(s) {
   $("clock").textContent = `${s.now} (${s.zone})`;
   $("uptime").textContent = `running ${dur(s.uptime_s)}`;
   $("summary").textContent = s.summary || "";
+  $("demoBadge").hidden = !s.demo;
   $("ipM").textContent = s.hosts.master || "-"; $("ipS").textContent = s.hosts.sau || "-"; $("ipP").textContent = s.hosts.pc || "-";
   const g1 = s.groups["group 1"], g2 = s.groups["group 2"], failing = g1.fail || g2.fail;
   const m = s.master, ps = s.pings["pv-array"] || {}, pm = s.pings["neo-01"] || {};
@@ -331,6 +358,11 @@ function render(s) {
   $("lblPM").textContent = m.ok == null ? "-" : m.ok ? `reads ${fmt(m.ms)} ms` : "no answer";
   setLink("lnkPS", ps.ok === false ? "bad" : ps.ok ? "ok" : "unk", ps.ok);
   $("lblPS").textContent = ps.ok == null ? "ping -" : ps.ok ? `ping ${fmt(ps.ms, 1)} ms` : "no ping reply";
+  $("ledM").setAttribute("fill", failing ? css("--critical") : stale ? "#8b929b" : "#27a644");
+  $("ledS").setAttribute("fill", ps.ok === false ? css("--critical") : ps.ok ? "#27a644" : "#8b929b");
+  $("ledS2").setAttribute("fill", failing ? css("--warn") : "#27a644");
+  $("neoKw").textContent = m.values && m.values.load_kw != null ? `${Math.round(m.values.load_kw)} kW` : "-";
+  $("neoMode").textContent = m.values && m.values.mode_auto === false ? "MAN" : "AUTO";
   ring("ringM", stale ? null : !failing && m.ok !== false); ring("ringS", ps.ok == null ? null : ps.ok && !failing); ring("ringP", s.capture.running ? true : s.capture.configured ? false : null);
   $("capSub").textContent = s.capture.running ? "capturing" : s.capture.configured ? "capture stopped" : "no capture";
   // tiles
@@ -390,7 +422,7 @@ function base(unit) {
   return { animation: false, responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
     plugins: { legend: {labels: {color: css("--ink-muted"), boxWidth: 10, boxHeight: 10, font: {family: css("--sans")}}}, bands: {list: []},
                tooltip: {callbacks: {title: it => new Date(it[0].parsed.x).toLocaleTimeString("en-GB", {timeZone: TZ})}} },
-    scales: { x: {type: "linear", ticks: {color: css("--tick"), maxTicksLimit: 7, callback: v => new Date(v).toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit", timeZone: TZ})}, grid: {color: css("--grid-line")}},
+    scales: { x: {type: "linear", ticks: {color: css("--tick"), maxTicksLimit: 7, callback: function (v) { const span = this.max - this.min; return new Date(v).toLocaleTimeString("en-GB", span < 900000 ? {hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: TZ} : {hour: "2-digit", minute: "2-digit", timeZone: TZ}); }}, grid: {color: css("--grid-line")}},
               y: {ticks: {color: css("--tick"), callback: v => v + " " + unit}, grid: {color: css("--grid-line")}, beginAtZero: true} } };
 }
 function drawCharts(series, latency) {
@@ -442,9 +474,17 @@ async function pollState() {
 }
 async function pollEvidence() {
   try { const j = await (await fetch("/api/evidence")).json();
-    if (j.files.length) $("evidence").innerHTML = j.files.map(f => `<a href="/api/evidence/file?path=${encodeURIComponent(f.path)}">${f.path}</a><div class="hint" style="margin:-1px 0 8px">${f.time}, ${f.mb} MB</div>`).join("");
+    if (j.files.length) $("evidence").innerHTML = j.files.map(f => `<div class="evrow"><button class="evname" data-path="${encodeURIComponent(f.path)}" title="Show in File Explorer">
+        <svg class="i" viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>${f.path}</button>
+        <a class="dl" href="/api/evidence/file?path=${encodeURIComponent(f.path)}" title="Download a copy">copy</a><div class="hint">${f.time}, ${f.mb} MB</div></div>`).join("");
   } catch (e) {}
 }
+async function reveal(path) {
+  try { const r = await fetch(`/api/evidence/reveal?path=${path}`, {method: "POST"}); toast(r.ok ? "Opened in File Explorer on the plant PC" : "Could not open File Explorer"); }
+  catch (e) { toast("The session did not answer"); }
+}
+$("evidence").onclick = e => { const b = e.target.closest(".evname"); if (b) reveal(b.dataset.path); };
+$("openFolder").onclick = () => reveal("");
 $("reportBtn").onclick = async () => {
   const b = $("reportBtn"); b.disabled = true; b.lastChild.textContent = "Writing the report";
   try { const r = await fetch("/api/report", {method: "POST"}); const j = await r.json(); toast(r.ok ? `Report and zip written: ${j.zip}` : `Report failed: ${j.detail}`); }
