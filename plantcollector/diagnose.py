@@ -29,7 +29,14 @@ def diagnose(start: float, end: float, pings: list[tuple], live=None, master_rea
                 f"to it was down, not only its program.")
     elif sau_lost:
         notes.append(f"the SAU missed {sau_lost} of {len(sau_p)} pings at that moment")
-    if mas_p and all(not ok for ok in mas_p):
+    mas_lost = sum(1 for ok in mas_p if not ok)
+    if tag is None and mas_lost and sau_lost < len(sau_p or [1]):
+        tag = "master restart"
+        text = (f"The master itself stopped answering ping ({mas_lost} of {len(mas_p)}) while the SAU "
+                + ("answered every ping" if not sau_lost else f"answered {len(sau_p) - sau_lost} of {len(sau_p)} pings")
+                + ": the master restarted (a configuration write does that) or its own network dropped, and it flagged the "
+                "PV link as lost while it came back. Not the SAU.")
+    elif mas_p and all(not ok for ok in mas_p):
         notes.append("the master did not answer ping either, so this PC's own network link may have been down")
     if reads and all(not ok for ok in reads):
         notes.append("the master did not answer our reads either")

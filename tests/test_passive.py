@@ -528,3 +528,26 @@ devices:
     rep = zipfile.ZipFile(zp).read(f"trace/report_{day}.md").decode()
     assert "Why each comm fail happened" in rep and "09:33:16 group 1, 12 s: **SAU busy**" in rep
     assert any(n == f"trace/diagnosis_{day}.csv" for n in zipfile.ZipFile(zp).namelist())
+
+
+def test_diagnosis_names_a_master_restart():
+    """15:37 on 21 Oct: the master stopped answering ping for 4 s (a configuration write) and flagged both PV groups;
+    the SAU answered every ping. That is the master's side, not the SAU."""
+    from plantcollector.diagnose import diagnose
+    t0 = 1_000_000.0
+    pings = [(t0 + i, "pv-array", True) for i in range(-3, 8)]
+    pings += [(t0 + i, "neo-01", not (0 <= i <= 3)) for i in range(-3, 8)]
+    d = diagnose(t0, t0 + 5, pings)
+    assert d["tag"] == "master restart" and "Not the SAU" in d["text"]
+    d2 = diagnose(t0, t0 + 5, [p for p in pings if p[1] == "pv-array"] + [(t0 + i, "neo-01", True) for i in range(-3, 8)])
+    assert d2["tag"] == "SAU up"
+
+
+def test_livecap_reads_the_outer_header_of_an_icmp_error():
+    from plantcollector import livecap
+    lc = livecap.LiveCapture.__new__(livecap.LiveCapture)
+    livecap.LiveCapture.__init__(lc, None, "lo", "192.168.0.128", "192.168.0.112", "192.168.0.50", log=lambda *a, **k: None)
+    row = [""] * len(livecap.FIELDS)
+    row[0], row[1], row[2], row[3] = "1000.0", "192.168.0.128|192.168.0.50", "192.168.0.50|192.168.0.128", "1|17"
+    lc.feed(row)
+    assert lc.other and lc.other[-1][1] == "192.168.0.50" and lc.other[-1][2] == "ping"

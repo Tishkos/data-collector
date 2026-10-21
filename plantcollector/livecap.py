@@ -111,7 +111,8 @@ class LiveCapture:
         if len(r) < len(FIELDS) or not r[0][:1].isdigit():
             return
         t = float(r[0])
-        src, dst, proto = r[1], r[2], r[3]
+        # an ICMP error carries the packet it answers: tshark then lists both headers ("a|b"); the outer one counts
+        src, dst, proto = r[1].split("|")[0], r[2].split("|")[0], r[3].split("|")[0]
         if not proto or not (src or dst):                    # ARP and other frames without an IP header
             return
         with self.lock:

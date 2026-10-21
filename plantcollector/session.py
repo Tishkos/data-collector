@@ -578,9 +578,12 @@ class _Watch:
             self.m.on_ping(dev_id, ts, ok, ms)
 
     def _sau_ping_ok(self):
+        return self._ping_ok("pv-array")
+
+    def _ping_ok(self, dev):
         if self.m is None:
             return None
-        p = self.m.pings.get("pv-array")
+        p = self.m.pings.get(dev)
         return None if not p else p.get("ok")
 
     def _diagnose(self, group, start, end):
@@ -609,11 +612,13 @@ class _Watch:
         if dev_id == "neo-01" and point in self.GROUPS:
             g = self.GROUPS[point]
             if new:
-                ping = self._sau_ping_ok()
+                ping, mping = self._sau_ping_ok(), self._ping_ok("neo-01")
                 if self.m is not None:
                     self.m.fail_started(g, ts, ping)
                 s.log(f"COMM FAIL {g}: the master lost the SAU (PV logger {g})"
-                      + ("; the SAU still answers ping, so the box is up and its program is late" if ping else
+                      + ("; the master itself does not answer ping right now (restarting, or its network), so this is the master's side"
+                         if mping is False and ping is not False else
+                         "; the SAU still answers ping, so the box is up" if ping else
                          "; the SAU does not answer ping either" if ping is False else ""), "alert")
             else:
                 secs = self.m.fail_ended(g, ts) if self.m is not None else None
