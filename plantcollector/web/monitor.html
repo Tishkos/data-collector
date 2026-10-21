@@ -188,7 +188,6 @@
       <div><h1>QS Collector</h1><small>SAU watch, Erbil Coca-Cola hybrid plant, read-only</small></div>
     </div>
     <span id="state" class="pill"><span class="dot"></span><span id="stateText">Starting</span></span>
-    <span id="demoBadge" class="pill demo" hidden>DEMO: simulated plant, nothing real</span>
     <span class="grow"></span>
     <span class="clock" id="clock">-</span>
     <button class="btn" id="themeBtn" title="Light or dark"><svg class="i" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></button>
@@ -337,7 +336,6 @@ function render(s) {
   $("clock").textContent = `${s.now} (${s.zone})`;
   $("uptime").textContent = `running ${dur(s.uptime_s)}`;
   $("summary").textContent = s.summary || "";
-  $("demoBadge").hidden = !s.demo;
   $("ipM").textContent = s.hosts.master || "-"; $("ipS").textContent = s.hosts.sau || "-"; $("ipP").textContent = s.hosts.pc || "-";
   const g1 = s.groups["group 1"], g2 = s.groups["group 2"], failing = g1.fail || g2.fail;
   const m = s.master, ps = s.pings["pv-array"] || {}, pm = s.pings["neo-01"] || {};
@@ -346,7 +344,7 @@ function render(s) {
   const pill = $("state");
   pill.className = "pill" + (failing ? " bad" : stale ? " stale" : "");
   $("stateText").textContent = failing ? `Comm fail now: ${[g1.fail && "group 1", g2.fail && "group 2"].filter(Boolean).join(" and ")}`
-                              : stale ? "Waiting for the master" : "Watching, all quiet";
+                              : stale ? "Waiting for the master" : "Watching";
   document.body.classList.toggle("failing", failing);
   document.title = failing ? "COMM FAIL - QS Collector" : "QS Collector";
   favicon(failing);

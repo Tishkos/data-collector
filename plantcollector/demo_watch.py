@@ -175,16 +175,11 @@ class Plant:
             time.sleep(0.25)
 
     def ping(self, host: str, timeout_s: float = 1.0):
-        """The demo's ping: a connection to the simulated device; the SAU 'drops' it during the second fail."""
+        """The demo's ping: simulated, no traffic to the simulated devices; the SAU 'drops' it during the second fail."""
         if host == SAU and 121 <= self.el() < 124:
             time.sleep(0.2)
             return 0, 1000.0, "timeout (demo)"
-        t0 = time.perf_counter()
-        try:
-            socket.create_connection((host, self.ports["web"] if host == SAU else self.ports["master"]), timeout=timeout_s).close()
-        except OSError:
-            return 0, 1000.0, "timeout"
-        return 1, round((time.perf_counter() - t0) * 1000 + random.uniform(0.3, 0.9), 2), ""
+        return 1, round(random.uniform(0.4, 1.6), 2), ""
 
 
 def run(root: str, open_browser: bool = True) -> int:

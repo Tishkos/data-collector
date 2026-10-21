@@ -122,7 +122,7 @@ class Monitor:
         with self.lock:
             for f in self.fails:
                 if f["group"] == group and f["start"] == start:
-                    f["tag"], f["why"] = d.get("tag"), d.get("text")
+                    f["tag"], f["why"] = self.shown(d.get("tag")), self.shown(d.get("text"))
 
     def evidence_for(self, start: datetime, files: list[str]) -> None:
         with self.lock:
@@ -315,7 +315,7 @@ def _summary(groups, master, pings, mirror, capturing, fails, traffic) -> str:
     elif master.get("age_s") is None or master["age_s"] > 10:
         parts.append("Waiting for the master: our reads get no answer yet.")
     else:
-        parts.append("All quiet: the master is talking to the SAU normally.")
+        parts.append("The master is talking to the SAU normally.")
         if sau.get("ok"):
             parts.append(f"The SAU answers ping in {sau['ms']:.1f} ms.")
         elif sau.get("ok") is False:
