@@ -60,7 +60,7 @@ window, until the window is closed.
 | File | Use |
 |---|---|
 | `config\site.yaml` | **Demo.** Simulated grid + solar + 3 gensets + meter; government-grid outages included. No hardware, no network traffic. |
-| `config\site.eth1.yaml` | **A PC on the SAU's second port (ETH1, 192.168.1.x).** Inverters and PV array through 192.168.1.123 only; the master and the mains are not reachable from there. Copy it over `site.plant.yaml` on that PC. SESSION.bat needs the master: run it on the ComAp PC. |
+| `config\site.eth1.yaml` | **Not in use since 21 Oct 2026: ETH1 is unplugged on Sineng's advice, the SAU is only at 192.168.0.128.** Kept in case ETH1 is ever cabled again. **A PC on the SAU's second port (ETH1, 192.168.1.x).** Inverters and PV array through 192.168.1.123 only; the master and the mains are not reachable from there. Copy it over `site.plant.yaml` on that PC. SESSION.bat needs the master: run it on the ComAp PC. |
 | `config\site.plant.yaml` | **Real plant.** Read-only Modbus polling of the InteliNeo (192.168.0.112, unit 1 - mapped from the controller's own Modbus export) and the ten inverters through the SAU (192.168.0.128 - registers pending its point table), **once an hour** (`poll_interval_s: 3600`). |
 
 ### To go live

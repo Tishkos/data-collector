@@ -2,6 +2,7 @@
 # For a PC cabled to the SAU's ETH1 (192.168.1.x, e.g. the laptop at 192.168.1.50), which cannot reach
 # the ComAp network (192.168.0.x). Use it by copying this file over config\site.plant.yaml on that PC.
 #
+# NOT IN USE since 21 Oct 2026: ETH1 is unplugged, the SAU is only at 192.168.0.128 (use site.plant.yaml).
 # What it reads: the ten inverters and the PV array through the SAU's ETH1 address 192.168.1.123,
 # once an hour, read-only. What it cannot read from there: the InteliNeo master and the three mains
 # (192.168.0.x), so the plant-level Turkey tags that come from them stay "bad" on this PC, and the
