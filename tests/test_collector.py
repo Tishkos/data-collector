@@ -212,3 +212,29 @@ def test_modbus_publisher_serves_catalog_read_only(tmp_path):
         assert pub.status()["reads"] >= 6 and pub.status()["rejected_writes"] == 0   # refused by the library before our code
     finally:
         pub.stop()
+
+
+def test_modbus_publisher_catches_a_read_that_finished_while_it_started(tmp_path):
+    """The first site read can finish while the server starts; its values must be served, not 0 / 65535."""
+    from pymodbus.client import ModbusTcpClient
+    from plantcollector.adapters import reading
+    from plantcollector.publish import ModbusPublisher
+    from plantcollector.registry import PointDefinition
+
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text("site: {site_id: t, poll_interval_s: 3600}\ndevices:\n"
+                   "  - {id: inv-01, profile: inverter_sineng.yaml, adapter: modbus_tcp, connection: {host: 127.0.0.1, port: 15999, timeout: 1}}\n")
+    c = Collector(str(cfg), str(tmp_path), initial_poll=False)
+    pub = ModbusPublisher(c, bind="127.0.0.1", port=15032, unit_id=1)      # built before the read: header empty
+    c.store.ingest("inv-01", {"ac_power_kw": reading(PointDefinition(id="ac_power_kw", unit="kW"), 50.0)})
+    c.last_poll_at = datetime.now(timezone.utc)                              # the read ends before start()
+    pub.start()
+    try:
+        cl = ModbusTcpClient("127.0.0.1", port=15032); assert cl.connect()
+        hdr = cl.read_holding_registers(address=0, count=7, device_id=1).registers
+        assert (hdr[0] << 16 | hdr[1]) > 0 and hdr[2] == 0 and hdr[3] == 1 and hdr[6] == 1
+        pub.refresh()                                                        # no new read: heartbeat stays
+        assert cl.read_holding_registers(address=6, count=1, device_id=1).registers == [1]
+        cl.close()
+    finally:
+        pub.stop()

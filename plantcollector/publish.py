@@ -87,6 +87,7 @@ class ModbusPublisher:
         self.reads = 0
         self.rejected_writes = 0
         self.heartbeat = 0
+        self._hb_poll: datetime | None = None    # the site read the heartbeat last counted
         self.refresh()
 
     @classmethod
@@ -125,7 +126,9 @@ class ModbusPublisher:
         img[0], img[1] = (ts >> 16) & 0xFFFF, ts & 0xFFFF
         img[2] = min(65535, max(0, int((now - last).total_seconds() // 60))) if last else 65535
         img[3], img[4], img[5] = good, len(self.map), MAP_VERSION
-        self.heartbeat = (self.heartbeat + 1) & 0xFFFF
+        if last is not None and last != self._hb_poll:   # +1 per site read, not per refresh
+            self._hb_poll = last
+            self.heartbeat = (self.heartbeat + 1) & 0xFFFF
         img[6] = self.heartbeat
         img = [v & 0xFFFF for v in img]           # a value outside 0..65535 would make the server answer nothing
         with self._lock:
@@ -170,6 +173,17 @@ class ModbusPublisher:
             raise RuntimeError(f"Modbus publisher could not start on {self.bind}:{self.port}: {failure[0]}")
         self.started_at = datetime.now(timezone.utc)
         self.c.after_poll.append(self.refresh)
+        # a site read that finished while the server was starting would otherwise be missed until the next one
+        self.refresh()
+
+        def tick():                                # keeps 'minutes since the last read' and the stale flags current
+            while self._thread is not None and self._thread.is_alive():
+                time.sleep(60)
+                try:
+                    self.refresh()
+                except Exception:
+                    pass
+        threading.Thread(target=tick, daemon=True, name="modbus-publish-tick").start()
 
     def stop(self) -> None:
         if self.refresh in self.c.after_poll:
