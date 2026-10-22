@@ -551,3 +551,10 @@ def test_livecap_reads_the_outer_header_of_an_icmp_error():
     row[0], row[1], row[2], row[3] = "1000.0", "192.168.0.128|192.168.0.50", "192.168.0.50|192.168.0.128", "1|17"
     lc.feed(row)
     assert lc.other and lc.other[-1][1] == "192.168.0.50" and lc.other[-1][2] == "ping"
+
+
+def test_page_file_fetches_are_not_log_downloads():
+    """On site the SAU page calls /file/downloadByUrl for its own configuration XMLs on every page load."""
+    from plantcollector.livecap import is_log_download
+    assert not is_log_download("/file/downloadByUrl")
+    assert is_log_download("/deviceLog/downloadRunTimeUrl")

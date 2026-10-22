@@ -94,9 +94,10 @@ def diagnose(start: float, end: float, pings: list[tuple], live=None, master_rea
             k = (peer, what)
             others[k] = others.get(k, 0) + 1
         clients = {x["client"] for x in w["txs"] if x["client"] not in (master, me)}
-        downloads = [d for t, p, what, d in w["other"] if d and "download" in d.lower()]
+        from .livecap import is_log_download
+        downloads = [d for t, p, what, d in w["other"] if d and is_log_download(d)]
         if downloads:
-            notes.append("someone was downloading a log from the SAU's web page at that moment, which is known to freeze it")
+            notes.append("someone was downloading a log from the SAU's web page at that moment")
         for (peer, what), n in sorted(others.items(), key=lambda kv: -kv[1])[:3]:
             who = "this PC" if peer == me else peer
             notes.append(f"{who} was using the SAU's {what} at the same time ({n} requests), extra load on the SAU")

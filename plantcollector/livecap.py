@@ -7,7 +7,8 @@ one line per packet with the SAU. From those lines this module keeps, for every 
   - every Modbus request and its answer: how long the SAU took, whether its TCP acknowledged the request at once
     (the request reached the box), the exception code if any (06 = Server Device Busy), requests never answered;
   - connection resets and retransmissions;
-  - everything else with the SAU: web page requests (and log downloads, known to freeze it), ping, other ports.
+  - everything else with the SAU: web page requests (and log downloads), ping, other ports. The SAU page's own
+    /file/downloadByUrl calls only fetch its configuration files (seen on site, 22 Oct) and are not log downloads.
 
 With the SAU's switch port mirrored to this PC the master's requests are in it; without a mirror only this PC's
 own traffic is, and `mirror` says so. The ring files on disk stay the evidence; this is the live view and the
@@ -31,6 +32,13 @@ FIELDS = ["frame.time_epoch", "ip.src", "ip.dst", "ip.proto", "tcp.srcport", "tc
 LATE_MS = 1000          # an answer this late counts as late (the master gives up at about 1.9-3 s)
 NO_ANSWER_S = 4.0       # a request still open after this long counts as not answered
 KEEP_S = 3 * 3600       # transactions kept in memory for the diagnosis of past fails
+
+
+
+def is_log_download(uri: str) -> bool:
+    """A real log or record export, not the page fetching its own configuration files through /file/downloadByUrl."""
+    u = (uri or "").lower()
+    return "download" in u and "/file/downloadbyurl" not in u and ("log" in u or "record" in u or "export" in u)
 
 
 class LiveCapture:
@@ -130,9 +138,9 @@ class LiveCapture:
                 port = r[5] if src != self.sau else r[4]
                 what = {"80": "web page", "8080": "web page", "22": "ssh", "21": "ftp", "2404": "IEC 104"}.get(port, f"tcp {port}")
                 detail = r[17]
-                if detail and src != self.sau and "download" in detail.lower() and t - self._dl_said.get(peer, 0) > 60:
+                if detail and src != self.sau and is_log_download(detail) and t - self._dl_said.get(peer, 0) > 60:
                     self._dl_said[peer] = t                  # once per download burst, not once per request
-                    self.log(f"{self.name(peer)} is downloading a log from the SAU's web page ({detail}): this is known to freeze the SAU for seconds", "alert")
+                    self.log(f"{self.name(peer)} is downloading a log from the SAU's web page ({detail}), extra work for the SAU", "alert")
             elif proto == "17":
                 what, detail = f"udp {r[16]}", ""
             else:
